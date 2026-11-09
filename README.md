@@ -68,12 +68,12 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 
 | Sistema | Archivo | Cómo |
 | --- | --- | --- |
-| Windows 10/11 | `Mi Oficina MX Setup 0.1.0.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
+| Windows 10/11 | `Mi.Oficina.MX.Setup.0.1.0.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
 | macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.1.0-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
 | macOS Intel | `MiOficinaMX-0.1.0-x64.dmg` | Igual que el anterior. |
 | Ubuntu, Debian, Mint | `mi-oficina-mx_0.1.0_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.1.0_amd64.deb` |
 | Fedora, RHEL, openSUSE | `mi-oficina-mx-0.1.0.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.1.0.x86_64.rpm` |
-| Cualquier Linux | `Mi Oficina MX-0.1.0.AppImage` | `chmod +x "Mi Oficina MX-0.1.0.AppImage"` y ábrelo |
+| Cualquier Linux | `Mi.Oficina.MX-0.1.0.AppImage` | `chmod +x Mi.Oficina.MX-0.1.0.AppImage` y ábrelo |
 
 El instalador asocia los archivos `.docx`, `.xlsx`, `.csv`, `.pptx` y `.pdf`: con doble clic se abren en la app correcta.
 

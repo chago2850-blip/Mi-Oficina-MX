@@ -125,12 +125,12 @@ jobs:
 
             | Sistema | Archivo |
             | --- | --- |
-            | Windows 10/11 | `Mi Oficina MX Setup …exe` |
+            | Windows 10/11 | `Mi.Oficina.MX.Setup.…exe` |
             | macOS Apple Silicon (M1–M4) | `MiOficinaMX-…-arm64.dmg` |
             | macOS Intel | `MiOficinaMX-…-x64.dmg` |
             | Ubuntu / Debian / Mint | `mi-oficina-mx_…_amd64.deb` |
             | Fedora / RHEL / openSUSE | `mi-oficina-mx-….x86_64.rpm` |
-            | Cualquier Linux | `Mi Oficina MX-….AppImage` |
+            | Cualquier Linux | `Mi.Oficina.MX-….AppImage` |
 
             Incluye **Escribiente** (textos), **Calcula Datos** (hojas de cálculo), **Impresiona** (presentaciones) y **PapelPDF** (PDF), con el Launcher tipo dona.
 
