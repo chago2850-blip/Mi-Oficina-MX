@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3BE0AC"/><stop offset="1" stop-color="#077A5A"/></linearGradient><filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#000" flood-opacity="0.35"/></filter>
+<radialGradient id="glow" cx="0.28" cy="0.15" r="0.95"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/><stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+<linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#ECE9F5"/></linearGradient></defs>
+<rect x="64" y="64" width="896" height="896" rx="204" fill="url(#bg)"/>
+<rect x="64" y="64" width="896" height="896" rx="204" fill="url(#glow)"/>
+
+<g filter="url(#sh)">
+ <rect x="210" y="230" width="604" height="564" rx="48" fill="url(#paper)"/>
+ <rect x="210" y="230" width="604" height="96" rx="48" fill="#D7F5EA"/><rect x="210" y="290" width="604" height="36" fill="#D7F5EA"/>
+ <g stroke="#C8E9DD" stroke-width="8"><path d="M210 326 h604"/><path d="M210 438 h604"/><path d="M210 550 h604"/><path d="M210 662 h604"/><path d="M361 230 v564"/></g>
+ <rect x="410" y="560" width="78" height="170" rx="16" fill="#2ED3A0"/>
+ <rect x="530" y="470" width="78" height="260" rx="16" fill="#12B386"/>
+ <rect x="650" y="370" width="78" height="360" rx="16" fill="#0B8F6A"/>
+ <path d="M420 500 L 570 400 L 690 300" fill="none" stroke="#FFB547" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+ <circle cx="690" cy="300" r="26" fill="#FFB547"/>
+ <g fill="#9BCFBE"><rect x="252" y="370" width="70" height="26" rx="13"/><rect x="252" y="482" width="70" height="26" rx="13"/><rect x="252" y="594" width="70" height="26" rx="13"/><rect x="252" y="706" width="70" height="26" rx="13"/></g>
+</g>
+</svg>

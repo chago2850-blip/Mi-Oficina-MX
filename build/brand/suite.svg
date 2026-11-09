@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#262A3B"/><stop offset="1" stop-color="#0E1018"/></linearGradient>
+<radialGradient id="glow" cx="0.3" cy="0.18" r="0.9"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.12"/><stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+<radialGradient id="core" cx="0.4" cy="0.32" r="0.8"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6E1D6"/></radialGradient>
+<linearGradient id="gesc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C6CFF"/><stop offset="1" stop-color="#4B36D8"/></linearGradient><linearGradient id="gcal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2ED3A0"/><stop offset="1" stop-color="#0B8F6A"/></linearGradient><linearGradient id="gimp" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6B8B"/><stop offset="1" stop-color="#D62E5C"/></linearGradient><linearGradient id="gpdf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F5A05E"/><stop offset="1" stop-color="#C2511A"/></linearGradient>
+<filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity="0.45"/></filter>
+</defs>
+<rect x="64" y="64" width="896" height="896" rx="204" fill="url(#bg)"/>
+<rect x="64" y="64" width="896" height="896" rx="204" fill="url(#glow)"/>
+<g filter="url(#sh)"><path d="M542.7,161.3 A352,352 0 0 1 862.7,481.3 L749.1,491.3 A238,238 0 0 0 532.7,274.9 Z" fill="url(#gesc)"/><path d="M862.7,542.7 A352,352 0 0 1 542.7,862.7 L532.7,749.1 A238,238 0 0 0 749.1,532.7 Z" fill="url(#gcal)"/><path d="M481.3,862.7 A352,352 0 0 1 161.3,542.7 L274.9,532.7 A238,238 0 0 0 491.3,749.1 Z" fill="url(#gimp)"/><path d="M161.3,481.3 A352,352 0 0 1 481.3,161.3 L491.3,274.9 A238,238 0 0 0 274.9,491.3 Z" fill="url(#gpdf)"/></g>
+<circle cx="512" cy="512" r="176" fill="url(#core)" filter="url(#sh)"/>
+<g fill="none" stroke="#1B1E2B" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+<path d="M512 432 v70"/><path d="M462 462 a72 72 0 1 0 100 0"/>
+</g>
+</svg>

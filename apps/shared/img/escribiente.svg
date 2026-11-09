@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8E7FFF"/><stop offset="1" stop-color="#3F2BC4"/></linearGradient><filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#000" flood-opacity="0.35"/></filter>
+<radialGradient id="glow" cx="0.28" cy="0.15" r="0.95"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/><stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+<linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#ECE9F5"/></linearGradient><linearGradient id="quill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE7A8"/><stop offset="1" stop-color="#FFB547"/></linearGradient></defs>
+<rect x="64" y="64" width="896" height="896" rx="204" fill="url(#bg)"/>
+<rect x="64" y="64" width="896" height="896" rx="204" fill="url(#glow)"/>
+
+<g filter="url(#sh)">
+ <rect x="250" y="210" width="440" height="580" rx="44" fill="url(#paper)"/>
+ <g stroke="#B9B2E3" stroke-width="26" stroke-linecap="round">
+  <path d="M318 330 h300"/><path d="M318 410 h300"/><path d="M318 490 h220"/><path d="M318 570 h170"/>
+ </g>
+ <path d="M318 670 c40 -40 70 -40 100 0 s60 40 100 0" fill="none" stroke="#4B36D8" stroke-width="22" stroke-linecap="round"/>
+</g>
+<g filter="url(#sh)">
+ <path d="M800 200 C 690 230 590 330 540 470 L 520 560 L 590 500 C 720 440 800 330 800 200 Z" fill="url(#quill)"/>
+ <path d="M790 215 C 700 300 610 400 530 545" fill="none" stroke="#3F2BC4" stroke-width="12" stroke-linecap="round" opacity="0.55"/>
+ <path d="M520 560 l-18 54 l46 -34 z" fill="#2A1C8F"/>
+</g>
+</svg>

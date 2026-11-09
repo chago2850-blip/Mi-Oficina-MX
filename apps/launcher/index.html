@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' app:; img-src 'self' app: data:; style-src 'self' 'unsafe-inline'" />
+  <title>Mi Oficina MX</title>
+  <link rel="stylesheet" href="launcher.css" />
+</head>
+<body>
+  <main id="stage" class="closed" aria-label="Mi Oficina MX">
+    <svg id="dona" viewBox="0 0 400 400" role="group" aria-label="Aplicaciones de la suite">
+      <defs>
+        <linearGradient id="g-escribiente" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8E7FFF"/><stop offset="1" stop-color="#4330D2"/></linearGradient>
+        <linearGradient id="g-calcula" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3BE0AC"/><stop offset="1" stop-color="#0A8762"/></linearGradient>
+        <linearGradient id="g-impresiona" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF8AA2"/><stop offset="1" stop-color="#C9234F"/></linearGradient>
+        <linearGradient id="g-papelpdf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7AE6E"/><stop offset="1" stop-color="#B9481A"/></linearGradient>
+        <linearGradient id="g-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#343A52"/><stop offset="1" stop-color="#12141E"/></linearGradient>
+        <radialGradient id="g-core" cx="0.38" cy="0.3" r="0.85"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E4DFD3"/></radialGradient>
+        <radialGradient id="g-core-on" cx="0.38" cy="0.3" r="0.85"><stop offset="0" stop-color="#3A4060"/><stop offset="1" stop-color="#151827"/></radialGradient>
+        <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.45"/></filter>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <!-- Dona apagada -->
+      <g id="ring" filter="url(#shadow)">
+        <circle cx="200" cy="200" r="143" fill="none" stroke="url(#g-ring)" stroke-width="72" />
+        <circle cx="200" cy="200" r="143" fill="none" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="1" />
+        <g id="ring-ticks" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2">
+          <path d="M200 71 v40" /><path d="M329 200 h-40" /><path d="M200 329 v-40" /><path d="M71 200 h40" />
+        </g>
+      </g>
+      <!-- Sectores (se generan en launcher.js) -->
+      <g id="sectors"></g>
+      <!-- Botón central -->
+      <g id="core" tabindex="0" role="button" aria-label="Inicio" filter="url(#shadow)">
+        <circle id="core-disc" cx="200" cy="200" r="88" fill="url(#g-core)" />
+        <g id="core-power" fill="none" stroke="#1B1E2B" stroke-width="8" stroke-linecap="round">
+          <path d="M200 150 v26" /><path d="M184 160 a28 28 0 1 0 32 0" />
+        </g>
+        <text id="core-label" x="200" y="236" text-anchor="middle">Inicio</text>
+      </g>
+    </svg>
+
+    <div id="bar">
+      <button id="btn-menu" class="mini" title="Menú" aria-label="Menú">⋯</button>
+      <div id="title" title="Arrastra para mover">Mi Oficina <b>MX</b></div>
+      <button id="btn-min" class="mini" title="Minimizar" aria-label="Minimizar">–</button>
+      <button id="btn-quit" class="mini" title="Salir" aria-label="Salir">×</button>
+    </div>
+  </main>
+
+  <div id="about" hidden>
+    <div class="card" role="dialog" aria-labelledby="about-t">
+      <img src="../shared/img/suite.svg" alt="" width="72" height="72" />
+      <h1 id="about-t">Mi Oficina MX <span id="ver"></span></h1>
+      <p>Suite ofimática libre: <b>Escribiente</b>, <b>Calcula Datos</b>, <b>Impresiona</b> y <b>PapelPDF</b>.</p>
+      <p class="small">Software libre bajo la Licencia Pública General GNU versión 3 (GPL-3.0). Sin anuncios, sin cuentas, sin telemetría.</p>
+      <p class="small">Desarrollado por Santiago Miguel · 744 354 8848 · chago2850@gmail.com</p>
+      <button id="about-ok">Cerrar</button>
+    </div>
+  </div>
+  <script src="launcher.js"></script>
+</body>
+</html>

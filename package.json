@@ -1,0 +1,205 @@
+{
+  "name": "mi-oficina-mx",
+  "productName": "Mi Oficina MX",
+  "version": "0.1.0",
+  "description": "Suite ofimática libre y multiplataforma: Escribiente, Calcula Datos, Impresiona y PapelPDF.",
+  "main": "main.js",
+  "author": {
+    "name": "Santiago Miguel",
+    "email": "chago2850@gmail.com"
+  },
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "build:ui": "node scripts/build-ui.mjs",
+    "start": "npm run build:ui && electron .",
+    "test": "npm run build:ui && node test/formats.test.mjs && node test/e2e.mjs",
+    "test:formats": "node test/formats.test.mjs",
+    "test:e2e": "node test/e2e.mjs",
+    "icons": "bash scripts/make-icons.sh",
+    "dist": "npm run build:ui && electron-builder",
+    "dist:win": "npm run build:ui && electron-builder --win",
+    "dist:mac": "npm run build:ui && electron-builder --mac",
+    "dist:linux": "npm run build:ui && electron-builder --linux",
+    "dist:mac-on-linux": "npm run build:ui && bash scripts/build-mac-on-linux.sh",
+    "postinstall": "node scripts/prepare-ocr.mjs && node scripts/build-ui.mjs"
+  },
+  "dependencies": {
+    "@neslinesli93/qpdf-wasm": "0.3.1",
+    "docx": "9.5.1",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "4.10.38",
+    "tesseract.js": "7.0.0"
+  },
+  "devDependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/spa": "1.0.0",
+    "echarts": "6.1.0",
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "esbuild": "0.28.2",
+    "exceljs": "4.4.0",
+    "hyperformula": "3.5.0",
+    "mammoth": "1.13.0",
+    "pptxgenjs": "4.0.1",
+    "pptxtojson": "2.2.0"
+  },
+  "build": {
+    "appId": "mx.santiagomiguel.mioficina",
+    "productName": "Mi Oficina MX",
+    "copyright": "© 2026 Santiago Miguel · GPL-3.0",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "main/**/*",
+      "preload/**/*",
+      "apps/**/*",
+      "!apps/**/src/**",
+      "build/icon.png",
+      "build/apps/**/*",
+      "vendor/**/*",
+      "LICENSE",
+      "THIRD_PARTY.md",
+      "node_modules/**/*",
+      "!node_modules/pdfjs-dist/legacy/**",
+      "!node_modules/pdfjs-dist/web/**",
+      "!node_modules/pdfjs-dist/types/**",
+      "!node_modules/pdfjs-dist/image_decoders/**",
+      "!node_modules/@tesseract.js-data/**",
+      "!node_modules/tesseract.js/src/**",
+      "!node_modules/pdf-lib/es/**",
+      "!node_modules/pdf-lib/cjs/**",
+      "!node_modules/pdf-lib/src/**",
+      "!node_modules/docx/src/**",
+      "!**/*.map",
+      "!**/*.d.ts",
+      "!**/*.md"
+    ],
+    "asarUnpack": [
+      "node_modules/@neslinesli93/qpdf-wasm/**"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "docx",
+        "name": "Documento",
+        "description": "Documento de texto",
+        "role": "Editor",
+        "icon": "build/apps/escribiente"
+      },
+      {
+        "ext": "odt",
+        "name": "Documento ODF",
+        "description": "Documento de texto",
+        "role": "Viewer",
+        "icon": "build/apps/escribiente"
+      },
+      {
+        "ext": "xlsx",
+        "name": "Libro",
+        "description": "Libro de hojas de cálculo",
+        "role": "Editor",
+        "icon": "build/apps/calcula"
+      },
+      {
+        "ext": "csv",
+        "name": "CSV",
+        "description": "Valores separados por comas",
+        "role": "Editor",
+        "icon": "build/apps/calcula"
+      },
+      {
+        "ext": "pptx",
+        "name": "Presentación",
+        "description": "Presentación con diapositivas",
+        "role": "Editor",
+        "icon": "build/apps/impresiona"
+      },
+      {
+        "ext": "pdf",
+        "name": "Documento PDF",
+        "description": "Documento PDF",
+        "role": "Editor",
+        "icon": "build/apps/papelpdf"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Mi Oficina MX",
+      "language": "3082",
+      "license": "LICENSE",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "category": "Office",
+      "icon": "build/icons",
+      "executableName": "mi-oficina-mx",
+      "maintainer": "Santiago Miguel <chago2850@gmail.com>",
+      "synopsis": "Suite ofimática libre",
+      "desktop": {
+        "StartupWMClass": "Mi Oficina MX",
+        "Keywords": "oficina;office;documento;hoja;calculo;presentacion;pdf;"
+      }
+    },
+    "deb": {
+      "depends": [
+        "libnss3",
+        "libgtk-3-0",
+        "libxss1",
+        "libasound2 | libasound2t64"
+      ]
+    },
+    "publish": null
+  },
+  "homepage": "https://github.com/chago2850-blip/Mi-Oficina-MX"
+}

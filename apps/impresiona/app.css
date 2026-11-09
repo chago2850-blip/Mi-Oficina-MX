@@ -1,0 +1,104 @@
+/* Impresiona — presentaciones. GPL-3.0 */
+.workspace.pres { display: grid; grid-template-columns: 210px 1fr; }
+.thumbs { background: var(--chrome); border-right: 1px solid var(--line); overflow-y: auto; overflow-x: hidden; padding: 12px 10px 20px 4px; }
+.thumb { display: flex; gap: 6px; align-items: flex-start; padding: 6px 4px; border-radius: 8px; cursor: pointer; outline: none; }
+.thumb .n { width: 18px; text-align: right; font-size: 11.5px; color: var(--ink-3); padding-top: 2px; display: grid; gap: 2px; }
+.thumb .n .tr { font-style: normal; color: var(--accent); font-size: 10px; }
+.thumb .tframe { overflow: hidden; border-radius: 4px; box-shadow: 0 0 0 1px var(--line-2); background: #fff; flex: none; position: relative; }
+.thumb:hover .tframe { box-shadow: 0 0 0 2px var(--line-2); }
+.thumb.on .tframe { box-shadow: 0 0 0 2.5px var(--accent); }
+.thumb.on .n { color: var(--accent-2); font-weight: 600; }
+.thumb.over { box-shadow: 0 -3px 0 var(--accent); }
+.thumb.dragging { opacity: .4; }
+.addslide { margin: 8px 0 0 28px; width: 172px; border: 1.5px dashed var(--line-2); background: transparent; border-radius: 8px; padding: 10px; cursor: pointer; color: var(--ink-2); display: flex; align-items: center; justify-content: center; gap: 6px; }
+.addslide:hover { border-color: var(--accent); color: var(--accent-2); }
+
+.center { display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0; }
+.stagewrap { position: relative; overflow: auto; display: grid; place-items: center; background: var(--canvas); min-height: 0; padding: 24px 32px; }
+.stage { position: relative; box-shadow: 0 2px 4px rgba(20,22,40,.1), 0 10px 30px rgba(20,22,40,.12); flex: none; }
+.notesbar { border-top: 1px solid var(--line); background: #fff; }
+.notes { width: 100%; height: 76px; border: 0; resize: vertical; padding: 10px 16px; outline: none; font: 13px var(--font); color: var(--ink); background: #fff; }
+
+.slide { position: relative; overflow: hidden; font-family: Inter, sans-serif; }
+.slide .deco { position: absolute; left: 0; top: 0; bottom: 0; width: 10px; opacity: .9; }
+.obj { position: absolute; box-sizing: border-box; }
+.obj img { width: 100%; height: 100%; object-fit: fill; display: block; user-select: none; }
+.obj svg { position: absolute; inset: 0; display: block; overflow: visible; }
+.otxt { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 6px 10px; line-height: 1.2; overflow: visible; word-wrap: break-word; }
+.otxt.v-middle { justify-content: center; } .otxt.v-bottom { justify-content: flex-end; }
+.tin { outline: none; min-height: 1.2em; cursor: inherit; }
+.tin p { margin: 0 0 .25em; }
+.tin ul, .tin ol { margin: 0; padding-left: 1.2em; }
+.tin li { margin: 0 0 .35em; }
+.otxt.list .tin ul { list-style: disc; }
+.tin[contenteditable="true"] { cursor: text; }
+.m-edit .tin:empty::before { content: attr(data-ph); color: currentColor; opacity: .45; }
+.m-edit .tin:empty { min-width: 2px; }
+.m-edit .r-title, .m-edit .r-subtitle, .m-edit .r-body { outline: 1px dashed rgba(120,125,150,.35); outline-offset: -1px; }
+.m-edit .obj { cursor: move; }
+.stable { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; }
+.stable td, .stable th { border: 1px solid rgba(120,125,150,.5); padding: 4px 8px; text-align: left; vertical-align: middle; outline: none; }
+.stable td[contenteditable="true"]:focus, .stable th[contenteditable="true"]:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.sellayer { position: absolute; left: 0; top: 0; pointer-events: none; }
+.selbox { position: absolute; border: 1.5px solid var(--accent); pointer-events: none; }
+.selbox.editing { border-style: dashed; }
+.selbox .hd { position: absolute; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent); border-radius: 50%; pointer-events: auto; transform: translate(-50%, -50%); }
+.selbox .hd.nw { left: 0; top: 0; cursor: nwse-resize; } .selbox .hd.n { left: 50%; top: 0; cursor: ns-resize; } .selbox .hd.ne { left: 100%; top: 0; cursor: nesw-resize; }
+.selbox .hd.e { left: 100%; top: 50%; cursor: ew-resize; } .selbox .hd.se { left: 100%; top: 100%; cursor: nwse-resize; } .selbox .hd.s { left: 50%; top: 100%; cursor: ns-resize; }
+.selbox .hd.sw { left: 0; top: 100%; cursor: nesw-resize; } .selbox .hd.w { left: 0; top: 50%; cursor: ew-resize; }
+.selbox .rot { position: absolute; left: 50%; top: -28px; width: 14px; height: 14px; transform: translateX(-50%); border-radius: 50%; background: #fff; border: 1.5px solid var(--accent); pointer-events: auto; cursor: grab; }
+.selbox .rot::after { content: ""; position: absolute; left: 50%; top: 13px; height: 14px; border-left: 1.5px solid var(--accent); }
+.guide { position: absolute; background: #FF3D7F; }
+.guide.v { top: 0; bottom: 0; width: 1px; height: 100%; }
+.guide.h { left: 0; right: 0; height: 1px; width: 100%; }
+.band { position: absolute; border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+.themegal .gi { height: 58px; justify-content: center; gap: 3px; }
+
+/* presentación a pantalla completa */
+.show { position: fixed; inset: 0; z-index: 1000; background: #000; outline: none; cursor: none; }
+.show.moving { cursor: default; }
+.show.laser, .show.laser.moving { cursor: none; }
+.show-stage { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.show-layer { grid-area: 1 / 1; position: relative; overflow: hidden; }
+.show .anim-wait { visibility: hidden; }
+.show-ctrls { position: absolute; left: 18px; bottom: 18px; display: flex; gap: 6px; align-items: center; opacity: 0; transition: opacity .25s; background: rgba(20,20,28,.7); border-radius: 999px; padding: 4px 8px; color: #fff; }
+.show.moving .show-ctrls { opacity: 1; }
+.show-ctrls button { border: 0; background: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+.show-ctrls button:hover { background: rgba(255,255,255,.18); }
+.show-ctrls .cnt { font-size: 13px; padding: 0 6px; }
+.show.black .show-stage { visibility: hidden; }
+.show.white { background: #fff; } .show.white .show-stage { visibility: hidden; }
+.show-end { color: #ccc; font: 18px var(--font); }
+.laser-dot { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle, #ff3b3b 0 40%, rgba(255,59,59,.35) 60%, transparent 70%); pointer-events: none; display: none; }
+.show.laser .laser-dot { display: block; }
+.tr-fade { animation: trFade ease both; }
+@keyframes trFade { from { opacity: 0; } }
+.tr-push.fwd { animation: trPush cubic-bezier(.3,.7,.2,1) both; } .tr-push.rev { animation: trPushR cubic-bezier(.3,.7,.2,1) both; }
+@keyframes trPush { from { transform: translateX(100%); } } @keyframes trPushR { from { transform: translateX(-100%); } }
+.tr-wipe.fwd { animation: trWipe ease-in-out both; } .tr-wipe.rev { animation: trWipeR ease-in-out both; }
+@keyframes trWipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes trWipeR { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
+.tr-cover { animation: trCover cubic-bezier(.3,.7,.2,1) both; box-shadow: -20px 0 40px rgba(0,0,0,.5); }
+@keyframes trCover { from { transform: translateY(100%); } }
+.tr-zoom { animation: trZoom cubic-bezier(.2,.8,.2,1) both; }
+@keyframes trZoom { from { transform: scale(.6); opacity: 0; } }
+.an-appear { animation: none; }
+.an-fade { animation: anFade .6s ease both; }
+.an-fly { animation: anFly .6s cubic-bezier(.2,.8,.2,1) both; }
+.an-zoom { animation: anZoom .55s cubic-bezier(.2,.8,.2,1.2) both; }
+.an-wipe { animation: anWipe .6s ease both; }
+@keyframes anFade { from { opacity: 0; } }
+@keyframes anFly { from { transform: translateY(80px); opacity: 0; } }
+@keyframes anZoom { from { transform: scale(.4); opacity: 0; } }
+@keyframes anWipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+
+/* impresión */
+#printRoot { display: none; }
+body.printing .workspace.pres > :not(#printRoot) { display: none; }
+body.printing #printRoot { display: block; }
+@media print { .thumbs, .center { display: none !important; } #printRoot { display: block !important; } }
+#printRoot .ppage { overflow: hidden; break-after: page; page-break-after: always; }
+#printRoot .ppage:last-child { break-after: auto; page-break-after: auto; }
+.m-print .tin.ph-hidden, .m-thumb .tin.ph-hidden, .m-show .tin.ph-hidden { display: none; }

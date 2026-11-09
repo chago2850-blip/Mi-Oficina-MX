@@ -1,58 +1,58 @@
 feature,area,priority,original,clone,notes
-Launcher dona con botón central Inicio,suite,must,no,no,pedido propio; ventana transparente sin marco
-Dona se enciende y se divide en 4 sectores con las apps,suite,must,no,no,animación de apertura
-Dona se minimiza al abrir una app,suite,must,no,no,
-Dona se restaura al cerrar la última app,suite,must,no,no,no restaurar si quedan apps abiertas
-Un solo instalador para toda la suite (exe dmg deb rpm AppImage),suite,must,yes,no,reusar CI de PapelPDF
-PapelPDF integrado y lanzable desde la dona,suite,must,no,no,repo PapelPDF v1.2.0
-Logos originales de la suite y de cada app,suite,must,yes,no,familia visual común con PapelPDF
-Asociación de archivos docx xlsx pptx odt ods odp pdf,suite,must,yes,no,doble clic abre la app correcta
-Acerca de con licencia GPL-3.0 y créditos de terceros,suite,must,no,no,
+Launcher dona con botón central Inicio,suite,must,no,yes,pedido propio; ventana transparente sin marco
+Dona se enciende y se divide en 4 sectores con las apps,suite,must,no,yes,animación de apertura
+Dona se minimiza al abrir una app,suite,must,no,yes,
+Dona se restaura al cerrar la última app,suite,must,no,yes,no restaurar si quedan apps abiertas
+Un solo instalador para toda la suite (exe dmg deb rpm AppImage),suite,must,yes,yes,reusar CI de PapelPDF
+PapelPDF integrado y lanzable desde la dona,suite,must,no,yes,repo PapelPDF v1.2.0
+Logos originales de la suite y de cada app,suite,must,yes,yes,familia visual común con PapelPDF
+Asociación de archivos docx xlsx pptx odt ods odp pdf,suite,must,yes,yes,doble clic abre la app correcta
+Acerca de con licencia GPL-3.0 y créditos de terceros,suite,must,no,yes,
 Tema claro y oscuro,suite,should,yes,no,
 Preferencias de la suite (idioma formato por defecto autoguardado),suite,should,yes,no,
-Ícono en bandeja/dock con menú,suite,should,no,no,
+Ícono en bandeja/dock con menú,suite,should,no,yes,
 Interfaz en español e inglés,suite,should,yes,no,
-Recuperación automática de documentos tras un cierre,suite,must,yes,no,novedad de Office 2024
-Inicio con nuevo en blanco plantillas y recientes,compartido,must,yes,no,
-Backstage Archivo (nuevo abrir guardar exportar imprimir),compartido,must,yes,no,
-Exportar a PDF,compartido,must,yes,no,
-Imprimir con vista previa,compartido,must,yes,no,
-Deshacer y rehacer ilimitado,compartido,must,yes,no,
-Buscar y reemplazar (incluye sin acentos),compartido,must,yes,no,
-Cinta con pestañas y pestañas contextuales,compartido,must,yes,no,patrón de interfaz; íconos propios
-Portapapeles con pegado especial (solo texto / formato),compartido,must,yes,no,
-Revisión ortográfica en español e inglés,compartido,must,yes,no,diccionarios Hunspell libres
+Recuperación automática de documentos tras un cierre,suite,must,yes,yes,novedad de Office 2024
+Inicio con nuevo en blanco plantillas y recientes,compartido,must,yes,yes,
+Backstage Archivo (nuevo abrir guardar exportar imprimir),compartido,must,yes,yes,
+Exportar a PDF,compartido,must,yes,yes,
+Imprimir con vista previa,compartido,must,yes,yes,
+Deshacer y rehacer ilimitado,compartido,must,yes,yes,
+Buscar y reemplazar (incluye sin acentos),compartido,must,yes,yes,
+Cinta con pestañas y pestañas contextuales,compartido,must,yes,yes,patrón de interfaz; íconos propios
+Portapapeles con pegado especial (solo texto / formato),compartido,must,yes,yes,clic derecho → Pegar solo texto
+Revisión ortográfica en español e inglés,compartido,must,yes,yes,diccionarios Hunspell libres
 Comentarios con respuestas,compartido,should,yes,no,
 Reacciones en comentarios,compartido,could,yes,no,novedad de Office 2024
 Abrir y guardar ODF (odt ods odp),compartido,should,yes,no,Office 2024 soporta ODF 1.4
 Barra de acceso rápido personalizable,compartido,could,yes,no,
-Plantillas propias incluidas,compartido,should,yes,no,escritas desde cero
+Plantillas propias incluidas,compartido,should,yes,yes,escritas desde cero
 Propiedades del documento (autor título),compartido,should,yes,no,
 Contraseña para abrir el archivo,compartido,could,yes,no,cifrado OOXML
-Escribir y editar texto con fuente tamaño color negrita cursiva subrayado,escribiente,must,yes,no,
-Párrafo: alineación sangría interlineado espaciado,escribiente,must,yes,no,
-Viñetas y listas numeradas multinivel,escribiente,must,yes,no,
-Estilos de párrafo y carácter (Título 1-6 Normal),escribiente,must,yes,no,
-Vista paginada con márgenes reales,escribiente,must,yes,no,la parte más difícil
-Tamaño de página orientación y márgenes,escribiente,must,yes,no,
-Saltos de página y de sección,escribiente,must,yes,no,
-Encabezados y pies de página,escribiente,must,yes,no,
-Números de página,escribiente,must,yes,no,
-Tablas (insertar combinar bordes sombreado),escribiente,must,yes,no,
-Imágenes con ajuste de texto,escribiente,must,yes,no,
-Hipervínculos,escribiente,must,yes,no,
-Abrir y guardar docx conservando lo desconocido,escribiente,must,yes,no,
-Contador de palabras en barra de estado,escribiente,must,yes,no,
-Zoom,escribiente,must,yes,no,
-Regla con tabulaciones,escribiente,should,yes,no,
+Escribir y editar texto con fuente tamaño color negrita cursiva subrayado,escribiente,must,yes,yes,
+Párrafo: alineación sangría interlineado espaciado,escribiente,must,yes,yes,
+Viñetas y listas numeradas multinivel,escribiente,must,yes,yes,
+Estilos de párrafo y carácter (Título 1-6 Normal),escribiente,must,yes,yes,
+Vista paginada con márgenes reales,escribiente,must,yes,yes,la parte más difícil
+Tamaño de página orientación y márgenes,escribiente,must,yes,yes,
+Saltos de página y de sección,escribiente,must,yes,yes,
+Encabezados y pies de página,escribiente,must,yes,yes,
+Números de página,escribiente,must,yes,yes,
+Tablas (insertar combinar bordes sombreado),escribiente,must,yes,yes,
+Imágenes con ajuste de texto,escribiente,must,yes,yes,
+Hipervínculos,escribiente,must,yes,yes,
+Abrir y guardar docx conservando lo desconocido,escribiente,must,yes,yes,
+Contador de palabras en barra de estado,escribiente,must,yes,yes,
+Zoom,escribiente,must,yes,yes,
+Regla con tabulaciones,escribiente,should,yes,partial,"regla visible; tabulaciones con Tab, sin marcadores arrastrables"
 Columnas,escribiente,should,yes,no,
 Formas y cuadros de texto,escribiente,should,yes,no,
-Tabla de contenido automática,escribiente,should,yes,no,
+Tabla de contenido automática,escribiente,should,yes,yes,
 Notas al pie y al final,escribiente,should,yes,no,
 Control de cambios (aceptar/rechazar),escribiente,should,yes,no,
 Panel de navegación por títulos,escribiente,should,yes,no,
 Copiar formato (brocha),escribiente,should,yes,no,
-Símbolos y caracteres especiales,escribiente,should,yes,no,
+Símbolos y caracteres especiales,escribiente,should,yes,yes,
 Ecuaciones,escribiente,could,yes,no,
 Combinar correspondencia desde CSV/XLSX,escribiente,should,yes,no,
 Etiquetas y sobres,escribiente,could,yes,no,
@@ -61,72 +61,72 @@ Comparar dos documentos,escribiente,could,yes,no,
 Marca de agua y color de página,escribiente,should,yes,no,
 Modo enfoque / lectura,escribiente,could,yes,no,
 Abrir doc binario antiguo,escribiente,could,yes,no,modo compatibilidad
-Exportar a txt html y markdown,escribiente,could,yes,no,
+Exportar a txt html y markdown,escribiente,could,yes,partial,txt y html; markdown solo se abre
 SmartArt,escribiente,could,yes,no,
-Cuadrícula con celdas filas columnas y varias hojas,calcula datos,must,yes,no,canvas para 100k+ filas
-Barra de fórmulas y cuadro de nombres,calcula datos,must,yes,no,
-Fórmulas con referencias relativas absolutas y entre hojas,calcula datos,must,yes,no,HyperFormula
-Funciones básicas (SUMA PROMEDIO SI CONTAR MAX MIN),calcula datos,must,yes,no,
-Funciones de búsqueda (BUSCARV BUSCARX INDICE COINCIDIR),calcula datos,must,yes,no,
-Funciones de texto y fecha,calcula datos,must,yes,no,
-Nombres de funciones en español con archivo en inglés,calcula datos,must,yes,no,SUMA en pantalla y SUM en el xlsx
-Formato de número (moneda porcentaje fecha personalizado),calcula datos,must,yes,no,
-Formato de celdas: fuente bordes relleno alineación,calcula datos,must,yes,no,
-Combinar celdas y ajustar texto,calcula datos,must,yes,no,
-Insertar y eliminar filas columnas y hojas,calcula datos,must,yes,no,
-Ancho y alto de columna/fila y autoajuste,calcula datos,must,yes,no,
-Controlador de relleno con series,calcula datos,must,yes,no,
-Ordenar,calcula datos,must,yes,no,
-Autofiltro,calcula datos,must,yes,no,
-Inmovilizar paneles,calcula datos,must,yes,no,
-Abrir y guardar xlsx,calcula datos,must,yes,no,ExcelJS
-Importar y exportar CSV,calcula datos,must,yes,no,
-Suma promedio y recuento en barra de estado,calcula datos,must,yes,no,
-Errores de fórmula estándar (#DIV/0! #N/D #REF!),calcula datos,must,yes,no,
-Gráficos de columnas barras líneas circular,calcula datos,must,yes,no,ECharts
+Cuadrícula con celdas filas columnas y varias hojas,calcula datos,must,yes,yes,canvas para 100k+ filas
+Barra de fórmulas y cuadro de nombres,calcula datos,must,yes,yes,
+Fórmulas con referencias relativas absolutas y entre hojas,calcula datos,must,yes,yes,HyperFormula
+Funciones básicas (SUMA PROMEDIO SI CONTAR MAX MIN),calcula datos,must,yes,yes,
+Funciones de búsqueda (BUSCARV BUSCARX INDICE COINCIDIR),calcula datos,must,yes,yes,
+Funciones de texto y fecha,calcula datos,must,yes,yes,
+Nombres de funciones en español con archivo en inglés,calcula datos,must,yes,yes,SUMA en pantalla y SUM en el xlsx
+Formato de número (moneda porcentaje fecha personalizado),calcula datos,must,yes,yes,
+Formato de celdas: fuente bordes relleno alineación,calcula datos,must,yes,yes,
+Combinar celdas y ajustar texto,calcula datos,must,yes,yes,
+Insertar y eliminar filas columnas y hojas,calcula datos,must,yes,yes,
+Ancho y alto de columna/fila y autoajuste,calcula datos,must,yes,yes,
+Controlador de relleno con series,calcula datos,must,yes,yes,
+Ordenar,calcula datos,must,yes,yes,
+Autofiltro,calcula datos,must,yes,yes,
+Inmovilizar paneles,calcula datos,must,yes,yes,
+Abrir y guardar xlsx,calcula datos,must,yes,yes,ExcelJS
+Importar y exportar CSV,calcula datos,must,yes,yes,
+Suma promedio y recuento en barra de estado,calcula datos,must,yes,yes,
+Errores de fórmula estándar (#DIV/0! #N/D #REF!),calcula datos,must,yes,yes,
+Gráficos de columnas barras líneas circular,calcula datos,must,yes,yes,ECharts
 Formato condicional (reglas barras escalas íconos),calcula datos,should,yes,no,
 Validación de datos con listas,calcula datos,should,yes,no,
 Tablas con formato,calcula datos,should,yes,no,
 Tablas dinámicas,calcula datos,should,yes,no,
-Funciones estadísticas financieras lógicas e información,calcula datos,should,yes,no,~400 en HyperFormula
-Funciones de matriz dinámica (FILTRAR UNICOS ORDENAR LET),calcula datos,should,yes,no,
+Funciones estadísticas financieras lógicas e información,calcula datos,should,yes,yes,~400 en HyperFormula
+Funciones de matriz dinámica (FILTRAR UNICOS ORDENAR LET),calcula datos,should,yes,yes,
 LAMBDA MAP REDUCE APILARV,calcula datos,could,yes,no,funciones 2024
 Administrador de nombres,calcula datos,should,yes,no,
 Comentarios y notas en celdas,calcula datos,should,yes,no,
 Proteger hoja y libro,calcula datos,should,yes,no,
-Área de impresión y ajustar a página,calcula datos,should,yes,no,
+Área de impresión y ajustar a página,calcula datos,should,yes,partial,parcial: imprime el área usada; sin área personalizada
 Buscar objetivo,calcula datos,could,yes,no,
 Minigráficos (sparklines),calcula datos,could,yes,no,
-Más tipos de gráfico (dispersión área combinado),calcula datos,should,yes,no,
+Más tipos de gráfico (dispersión área combinado),calcula datos,should,yes,yes,
 Gráficos que siguen matrices dinámicas,calcula datos,could,yes,no,novedad 2024
 Función IMAGEN,calcula datos,could,yes,no,
 Segmentación de datos,calcula datos,could,yes,no,
 Solver,calcula datos,could,yes,no,
 Agrupar y esquema,calcula datos,could,yes,no,
-Abrir xlsm sin ejecutar macros,calcula datos,should,yes,no,conservar vbaProject.bin
-Diapositivas: añadir duplicar eliminar reordenar,impresiona,must,yes,no,
-Panel de miniaturas y vista Normal,impresiona,must,yes,no,
-Diseños de diapositiva (título contenido dos columnas),impresiona,must,yes,no,
-Cuadros de texto con formato y viñetas,impresiona,must,yes,no,
-Imágenes,impresiona,must,yes,no,
-Formas básicas con relleno y contorno,impresiona,must,yes,no,
-Mover redimensionar rotar alinear y agrupar objetos,impresiona,must,yes,no,
-Guías inteligentes al mover,impresiona,must,yes,no,
-Temas (colores y fuentes),impresiona,must,yes,no,temas propios
-Notas del orador,impresiona,must,yes,no,
-Presentación a pantalla completa,impresiona,must,yes,no,
-Abrir y guardar pptx,impresiona,must,yes,no,pptxtojson + PptxGenJS
-Transiciones básicas (desvanecer empujar barrido),impresiona,must,yes,no,
-Animaciones de entrada y salida,impresiona,should,yes,no,
+Abrir xlsm sin ejecutar macros,calcula datos,should,yes,partial,conservar vbaProject.bin; se abre; las macros no se conservan al guardar
+Diapositivas: añadir duplicar eliminar reordenar,impresiona,must,yes,yes,
+Panel de miniaturas y vista Normal,impresiona,must,yes,yes,
+Diseños de diapositiva (título contenido dos columnas),impresiona,must,yes,yes,
+Cuadros de texto con formato y viñetas,impresiona,must,yes,yes,
+Imágenes,impresiona,must,yes,yes,
+Formas básicas con relleno y contorno,impresiona,must,yes,yes,
+Mover redimensionar rotar alinear y agrupar objetos,impresiona,must,yes,yes,
+Guías inteligentes al mover,impresiona,must,yes,yes,
+Temas (colores y fuentes),impresiona,must,yes,yes,temas propios
+Notas del orador,impresiona,must,yes,yes,
+Presentación a pantalla completa,impresiona,must,yes,yes,
+Abrir y guardar pptx,impresiona,must,yes,yes,pptxtojson + PptxGenJS
+Transiciones básicas (desvanecer empujar barrido),impresiona,must,yes,yes,
+Animaciones de entrada y salida,impresiona,should,yes,partial,solo entrada
 Panel de animaciones con orden y tiempos,impresiona,should,yes,no,
-Tablas en diapositivas,impresiona,should,yes,no,
+Tablas en diapositivas,impresiona,should,yes,yes,
 Gráficos en diapositivas,impresiona,should,yes,no,mismo motor que Calcula Datos
 Vista del moderador con dos pantallas,impresiona,should,yes,no,
-Clasificador de diapositivas y secciones,impresiona,should,yes,no,
+Clasificador de diapositivas y secciones,impresiona,should,yes,partial,parcial: reordenar arrastrando miniaturas; sin secciones
 Patrón de diapositivas,impresiona,should,yes,no,
-Tamaño 16:9 y 4:3,impresiona,should,yes,no,
-Fondo de diapositiva,impresiona,should,yes,no,
-Puntero láser y pluma en presentación,impresiona,should,yes,no,
+Tamaño 16:9 y 4:3,impresiona,should,yes,yes,
+Fondo de diapositiva,impresiona,should,yes,yes,
+Puntero láser y pluma en presentación,impresiona,should,yes,partial,puntero láser; sin pluma
 Exportar diapositivas a imágenes,impresiona,should,yes,no,
 Video y audio en diapositivas,impresiona,could,yes,no,
 Transición Transformación (Morph),impresiona,could,yes,no,
