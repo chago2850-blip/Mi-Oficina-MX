@@ -89,13 +89,6 @@
         "icon": "build/apps/escribiente"
       },
       {
-        "ext": "odt",
-        "name": "Documento ODF",
-        "description": "Documento de texto",
-        "role": "Viewer",
-        "icon": "build/apps/escribiente"
-      },
-      {
         "ext": "xlsx",
         "name": "Libro",
         "description": "Libro de hojas de cálculo",
@@ -107,7 +100,7 @@
         "name": "CSV",
         "description": "Valores separados por comas",
         "role": "Editor",
-        "icon": "build/apps/calcula"
+        "icon": "build/apps/csv"
       },
       {
         "ext": "pptx",

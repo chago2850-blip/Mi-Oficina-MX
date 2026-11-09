@@ -43,4 +43,6 @@ for a in escribiente calcula impresiona papelpdf; do
   ico "$a" "apps/$a.ico"
   icns "$a" "apps/$a.icns"
 done
+# El .csv usa el ícono de Calcula Datos, pero macOS exige un archivo distinto por asociación
+for e in png ico icns; do cp "apps/calcula.$e" "apps/csv.$e"; done
 echo "[íconos] listos"

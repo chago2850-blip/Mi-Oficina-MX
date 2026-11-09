@@ -24,7 +24,7 @@ const papel = require('./main/papelpdf');
 const APPS = {
   escribiente: {
     name: 'Escribiente', color: '#5B48E8', bg: '#F3F1FB',
-    exts: ['docx', 'odt', 'txt', 'html', 'htm', 'md'],
+    exts: ['docx', 'txt', 'html', 'htm', 'md'],
     saveExt: 'docx', saveName: 'Documento de texto',
   },
   calcula: {
