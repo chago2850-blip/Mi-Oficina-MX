@@ -8,10 +8,10 @@ PapelPDF integrado y lanzable desde la dona,suite,must,no,yes,repo PapelPDF v1.2
 Logos originales de la suite y de cada app,suite,must,yes,yes,familia visual común con PapelPDF
 Asociación de archivos docx xlsx pptx odt ods odp pdf,suite,must,yes,yes,doble clic abre la app correcta
 Acerca de con licencia GPL-3.0 y créditos de terceros,suite,must,no,yes,
-Tema claro y oscuro,suite,should,yes,no,
-Preferencias de la suite (idioma formato por defecto autoguardado),suite,should,yes,no,
+Tema claro y oscuro,suite,should,yes,yes,sigue al sistema o se elige en Preferencias
+Preferencias de la suite (idioma formato por defecto autoguardado),suite,should,yes,partial,"autor, tema e intervalo de autoguardado; idioma pendiente (v0.3)"
 Ícono en bandeja/dock con menú,suite,should,no,yes,
-Interfaz en español e inglés,suite,should,yes,no,
+Interfaz en español e inglés,suite,should,yes,no,pendiente para v0.3
 Recuperación automática de documentos tras un cierre,suite,must,yes,yes,novedad de Office 2024
 Inicio con nuevo en blanco plantillas y recientes,compartido,must,yes,yes,
 Backstage Archivo (nuevo abrir guardar exportar imprimir),compartido,must,yes,yes,
@@ -22,12 +22,12 @@ Buscar y reemplazar (incluye sin acentos),compartido,must,yes,yes,
 Cinta con pestañas y pestañas contextuales,compartido,must,yes,yes,patrón de interfaz; íconos propios
 Portapapeles con pegado especial (solo texto / formato),compartido,must,yes,yes,clic derecho → Pegar solo texto
 Revisión ortográfica en español e inglés,compartido,must,yes,yes,diccionarios Hunspell libres
-Comentarios con respuestas,compartido,should,yes,no,
+Comentarios con respuestas,compartido,should,yes,yes,Escribiente; notas de celda en Calcula Datos
 Reacciones en comentarios,compartido,could,yes,no,novedad de Office 2024
-Abrir y guardar ODF (odt ods odp),compartido,should,yes,no,Office 2024 soporta ODF 1.4
+Abrir y guardar ODF (odt ods odp),compartido,should,yes,yes,escritor/lector propio; fórmulas OpenFormula
 Barra de acceso rápido personalizable,compartido,could,yes,no,
 Plantillas propias incluidas,compartido,should,yes,yes,escritas desde cero
-Propiedades del documento (autor título),compartido,should,yes,no,
+Propiedades del documento (autor título),compartido,should,yes,yes,"título, autor, asunto y palabras clave; se guardan en docx/xlsx/pptx"
 Contraseña para abrir el archivo,compartido,could,yes,no,cifrado OOXML
 Escribir y editar texto con fuente tamaño color negrita cursiva subrayado,escribiente,must,yes,yes,
 Párrafo: alineación sangría interlineado espaciado,escribiente,must,yes,yes,
@@ -44,21 +44,21 @@ Hipervínculos,escribiente,must,yes,yes,
 Abrir y guardar docx conservando lo desconocido,escribiente,must,yes,yes,
 Contador de palabras en barra de estado,escribiente,must,yes,yes,
 Zoom,escribiente,must,yes,yes,
-Regla con tabulaciones,escribiente,should,yes,partial,"regla visible; tabulaciones con Tab, sin marcadores arrastrables"
-Columnas,escribiente,should,yes,no,
-Formas y cuadros de texto,escribiente,should,yes,no,
+Regla con tabulaciones,escribiente,should,yes,partial,marcadores de sangría arrastrables; sin tabulaciones personalizadas
+Columnas,escribiente,should,yes,yes,
+Formas y cuadros de texto,escribiente,should,yes,yes,
 Tabla de contenido automática,escribiente,should,yes,yes,
-Notas al pie y al final,escribiente,should,yes,no,
-Control de cambios (aceptar/rechazar),escribiente,should,yes,no,
-Panel de navegación por títulos,escribiente,should,yes,no,
-Copiar formato (brocha),escribiente,should,yes,no,
+Notas al pie y al final,escribiente,should,yes,partial,notas al pie por página; sin notas al final
+Control de cambios (aceptar/rechazar),escribiente,should,yes,yes,
+Panel de navegación por títulos,escribiente,should,yes,yes,
+Copiar formato (brocha),escribiente,should,yes,yes,
 Símbolos y caracteres especiales,escribiente,should,yes,yes,
 Ecuaciones,escribiente,could,yes,no,
-Combinar correspondencia desde CSV/XLSX,escribiente,should,yes,no,
+Combinar correspondencia desde CSV/XLSX,escribiente,should,yes,yes,"vista previa y salida a docx, pdf o documento"
 Etiquetas y sobres,escribiente,could,yes,no,
 Citas y bibliografía,escribiente,could,yes,no,
 Comparar dos documentos,escribiente,could,yes,no,
-Marca de agua y color de página,escribiente,should,yes,no,
+Marca de agua y color de página,escribiente,should,yes,yes,
 Modo enfoque / lectura,escribiente,could,yes,no,
 Abrir doc binario antiguo,escribiente,could,yes,no,modo compatibilidad
 Exportar a txt html y markdown,escribiente,could,yes,partial,txt y html; markdown solo se abre
@@ -84,17 +84,17 @@ Importar y exportar CSV,calcula datos,must,yes,yes,
 Suma promedio y recuento en barra de estado,calcula datos,must,yes,yes,
 Errores de fórmula estándar (#DIV/0! #N/D #REF!),calcula datos,must,yes,yes,
 Gráficos de columnas barras líneas circular,calcula datos,must,yes,yes,ECharts
-Formato condicional (reglas barras escalas íconos),calcula datos,should,yes,no,
-Validación de datos con listas,calcula datos,should,yes,no,
-Tablas con formato,calcula datos,should,yes,no,
-Tablas dinámicas,calcula datos,should,yes,no,
+Formato condicional (reglas barras escalas íconos),calcula datos,should,yes,yes,
+Validación de datos con listas,calcula datos,should,yes,yes,
+Tablas con formato,calcula datos,should,yes,yes,
+Tablas dinámicas,calcula datos,should,yes,yes,"suma, cuenta, promedio, mín, máx; actualizar"
 Funciones estadísticas financieras lógicas e información,calcula datos,should,yes,yes,~400 en HyperFormula
 Funciones de matriz dinámica (FILTRAR UNICOS ORDENAR LET),calcula datos,should,yes,yes,
 LAMBDA MAP REDUCE APILARV,calcula datos,could,yes,no,funciones 2024
-Administrador de nombres,calcula datos,should,yes,no,
-Comentarios y notas en celdas,calcula datos,should,yes,no,
-Proteger hoja y libro,calcula datos,should,yes,no,
-Área de impresión y ajustar a página,calcula datos,should,yes,partial,parcial: imprime el área usada; sin área personalizada
+Administrador de nombres,calcula datos,should,yes,yes,
+Comentarios y notas en celdas,calcula datos,should,yes,yes,notas
+Proteger hoja y libro,calcula datos,should,yes,yes,sin contraseña cifrada
+Área de impresión y ajustar a página,calcula datos,should,yes,yes,
 Buscar objetivo,calcula datos,could,yes,no,
 Minigráficos (sparklines),calcula datos,could,yes,no,
 Más tipos de gráfico (dispersión área combinado),calcula datos,should,yes,yes,
@@ -103,7 +103,7 @@ Función IMAGEN,calcula datos,could,yes,no,
 Segmentación de datos,calcula datos,could,yes,no,
 Solver,calcula datos,could,yes,no,
 Agrupar y esquema,calcula datos,could,yes,no,
-Abrir xlsm sin ejecutar macros,calcula datos,should,yes,partial,conservar vbaProject.bin; se abre; las macros no se conservan al guardar
+Abrir xlsm sin ejecutar macros,calcula datos,should,yes,yes,las macros nunca se ejecutan; se conservan al guardar como xlsm
 Diapositivas: añadir duplicar eliminar reordenar,impresiona,must,yes,yes,
 Panel de miniaturas y vista Normal,impresiona,must,yes,yes,
 Diseños de diapositiva (título contenido dos columnas),impresiona,must,yes,yes,
@@ -117,17 +117,17 @@ Notas del orador,impresiona,must,yes,yes,
 Presentación a pantalla completa,impresiona,must,yes,yes,
 Abrir y guardar pptx,impresiona,must,yes,yes,pptxtojson + PptxGenJS
 Transiciones básicas (desvanecer empujar barrido),impresiona,must,yes,yes,
-Animaciones de entrada y salida,impresiona,should,yes,partial,solo entrada
-Panel de animaciones con orden y tiempos,impresiona,should,yes,no,
+Animaciones de entrada y salida,impresiona,should,yes,yes,
+Panel de animaciones con orden y tiempos,impresiona,should,yes,yes,"al hacer clic, con la anterior, después de la anterior"
 Tablas en diapositivas,impresiona,should,yes,yes,
-Gráficos en diapositivas,impresiona,should,yes,no,mismo motor que Calcula Datos
-Vista del moderador con dos pantallas,impresiona,should,yes,no,
-Clasificador de diapositivas y secciones,impresiona,should,yes,partial,parcial: reordenar arrastrando miniaturas; sin secciones
-Patrón de diapositivas,impresiona,should,yes,no,
+Gráficos en diapositivas,impresiona,should,yes,yes,gráfico nativo en pptx
+Vista del moderador con dos pantallas,impresiona,should,yes,yes,
+Clasificador de diapositivas y secciones,impresiona,should,yes,yes,
+Patrón de diapositivas,impresiona,should,yes,yes,se aplana en cada diapositiva al exportar pptx
 Tamaño 16:9 y 4:3,impresiona,should,yes,yes,
 Fondo de diapositiva,impresiona,should,yes,yes,
-Puntero láser y pluma en presentación,impresiona,should,yes,partial,puntero láser; sin pluma
-Exportar diapositivas a imágenes,impresiona,should,yes,no,
+Puntero láser y pluma en presentación,impresiona,should,yes,yes,
+Exportar diapositivas a imágenes,impresiona,should,yes,yes,PNG
 Video y audio en diapositivas,impresiona,could,yes,no,
 Transición Transformación (Morph),impresiona,could,yes,no,
 Trayectorias de animación,impresiona,could,yes,no,

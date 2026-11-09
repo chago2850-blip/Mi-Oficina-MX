@@ -3,6 +3,9 @@ import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, esc, api, cl
 import { TEMPLATES, thumb } from './templates.js';
 import { htmlToDocx } from './docx-out.js';
 import { docxToHtml, textToHtml, markdownToHtml, sanitize, htmlToText } from './docx-in.js';
+import { readCoreProps } from '../../shared/coreprops.js';
+import * as F from './features.js';
+import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
 const PAGE_SIZES = {
@@ -37,6 +40,7 @@ const BLOCK_TAGS = /^(P|H[1-6]|BLOCKQUOTE|LI|DIV|TD|TH)$/;
 const state = {
   page: { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 },
   header: '', footer: '', pageNumbers: 'footer-center',
+  comments: [], footnotes: {}, track: false, watermark: null, pageColor: null, merge: null, pageFns: [],
   zoom: 100, pages: 1, pageOf: [],
 };
 
@@ -252,10 +256,17 @@ function paginate() {
   const hs = blocks.map((b) => b.offsetHeight);
   let shift = 0, forceNext = false;
   const pageOf = [];
+  // notas al pie: reducen el espacio de la página donde aparece su llamada
+  const fnOrder = F.numberFootnotes();
+  const fnH = fnOrder.length ? F.footnoteHeights(cw) : {};
+  const pageFns = []; const pageFnH = [];
+  const fnsOf = (b) => [...new Set([...(b.matches('sup.fn') ? [b] : []), ...b.querySelectorAll('sup.fn')].map((x) => x.dataset.fid))].filter((f) => state.footnotes[f] != null);
+  const extraFor = (page, fids) => { const cur = pageFns[page] || []; const add = fids.filter((f) => !cur.includes(f)); if (!add.length) return 0; return (cur.length ? 0 : 14) + add.reduce((a, f) => a + (fnH[f] || 16), 0); };
   blocks.forEach((b, i) => {
     let top = tops[i] + shift;
     let page = Math.floor(top / S);
-    const zoneEnd = page * S + H;
+    const fids = fnOrder.length ? fnsOf(b) : [];
+    const zoneEnd = page * S + H - (pageFnH[page] || 0) - extraFor(page, fids);
     let add = 0;
     if (b.classList.contains('pb')) { pageOf.push(page); forceNext = true; return; }
     if (forceNext) { add = (page + 1) * S - top; forceNext = false; }
@@ -268,8 +279,10 @@ function paginate() {
       b.dataset.push = String(add);
       shift += add; top += add; page = Math.floor(top / S);
     }
+    if (fids.length) { const ex = extraFor(page, fids); pageFns[page] = [...new Set([...(pageFns[page] || []), ...fids])]; pageFnH[page] = (pageFnH[page] || 0) + ex; }
     pageOf.push(page);
   });
+  state.pageFns = pageFns;
   const lastBottom = blocks.length ? tops[blocks.length - 1] + shift + hs[blocks.length - 1] : 0;
   const n = Math.max(1, Math.floor(Math.max(0, lastBottom - 1) / S) + 1, (pageOf[pageOf.length - 1] ?? 0) + 1);
   state.pages = n; state.pageOf = pageOf;
@@ -287,6 +300,7 @@ function paginate() {
   drawRuler();
   updateStatusPage();
   positionImgBox();
+  clearTimeout(paginate.navT); paginate.navT = setTimeout(() => { F.renderNav(); }, 400);
 }
 
 function hfText(tpl, i, n) { return (tpl || '').replace(/\{pagina\}/gi, String(i + 1)).replace(/\{paginas\}/gi, String(n)); }
@@ -297,6 +311,13 @@ function renderHeaderFooter(sh, i, n) {
   if (state.header) sh.append(h('div', { class: 'hf top', style: { ...pad, top: `${Math.max(12, p.mt / 2 - 10)}px` } }, hfText(state.header, i, n)));
   if (state.footer) sh.append(h('div', { class: 'hf bottom', style: { ...pad, bottom: `${Math.max(12, p.mb / 2 - 10)}px` } }, hfText(state.footer, i, n)));
   const pn = state.pageNumbers;
+  if (state.pageColor) sh.style.background = state.pageColor; else sh.style.background = '';
+  if (state.watermark?.text) sh.append(h('div', { class: 'wm', style: { color: state.watermark.color || '#C9CBD6' } }, state.watermark.text));
+  const fns = state.pageFns?.[i];
+  if (fns?.length) {
+    const order = [...editor.querySelectorAll('sup.fn')].map((x) => x.dataset.fid).filter((v, k, a) => a.indexOf(v) === k);
+    sh.append(h('div', { class: 'fnotes doc', style: { left: `${p.ml}px`, width: `${p.w - p.ml - p.mr}px`, bottom: `${p.mb}px` } }, ...fns.map((f) => h('div', { class: 'fnote' }, h('sup', {}, String(order.indexOf(f) + 1)), ` ${state.footnotes[f]}`))));
+  }
   if (pn && pn !== 'none') {
     const label = `Página ${i + 1} de ${n}`;
     const style = pn.startsWith('header') ? { top: `${Math.max(12, p.mt / 2 - 10)}px` } : { bottom: `${Math.max(12, p.mb / 2 - 10)}px` };
@@ -331,6 +352,7 @@ function drawRuler() {
     if (c % 1 === 0 && c > 0) ruler.append(h('div', { class: 'lab', style: { left: `${x}px` } }, String(c)));
     else ruler.append(h('div', { class: 'tick', style: { left: `${x}px`, height: c % 1 ? '4px' : '7px' } }));
   }
+  F.drawIndentMarkers(left + p.ml * z, z, p.w - p.ml - p.mr);
 }
 
 // ------------------------------------------------------------------ barra de estado
@@ -657,6 +679,17 @@ async function headerFooter() {
   shell.markDirty(); schedulePaginate();
 }
 
+async function watermarkDialog() {
+  const v = await form('Marca de agua', [
+    { name: 'text', label: 'Texto (déjalo vacío para quitarla)', value: state.watermark?.text || '', placeholder: 'Ej.: CONFIDENCIAL, BORRADOR, MUESTRA' },
+    { name: 'color', label: 'Color', type: 'select', value: state.watermark?.color || '#C9CBD6', options: [['#C9CBD6', 'Gris claro'], ['#F4B6C2', 'Rosa'], ['#B9B2E3', 'Lila'], ['#A8DCC8', 'Verde']] },
+    { type: 'note', label: 'La marca de agua aparece en pantalla, al imprimir y en el PDF.' },
+  ], 'Aplicar');
+  if (!v) return;
+  state.watermark = v.text.trim() ? { text: v.text.trim(), color: v.color } : null;
+  shell.markDirty(); schedulePaginate();
+}
+
 // ------------------------------------------------------------------ impresión / PDF (páginas idénticas a la pantalla)
 let pageStyleEl = null;
 function buildPrint() {
@@ -688,13 +721,14 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador del archivo
 function snapshotSettings() {
-  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers };
+  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, track: state.track, watermark: state.watermark, pageColor: state.pageColor };
 }
 function setContent(html, settings) {
   editor.innerHTML = html || '<p><br></p>';
   if (settings) {
     if (settings.page) Object.assign(state.page, settings.page);
-    ['header', 'footer', 'pageNumbers'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'track', 'watermark', 'pageColor'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    editor.classList.toggle('tracking', !!state.track);
   }
   selectImage(null);
   editor.querySelectorAll('img').forEach((img) => img.addEventListener('load', schedulePaginate, { once: true }));
@@ -703,14 +737,15 @@ function setContent(html, settings) {
 }
 
 const adapter = {
-  exts: ['docx', 'txt', 'html', 'htm', 'md'],
-  writable: ['docx', 'html', 'htm', 'txt'],
+  exts: ['docx', 'odt', 'txt', 'html', 'htm', 'md'],
+  writable: ['docx', 'odt', 'html', 'htm', 'txt'],
   saveExt: 'docx',
   docIcon: 'doc',
   homeHint: 'Escribe cartas, reportes y documentos que se abren en cualquier procesador de textos.',
   templates: TEMPLATES.map((t) => ({ ...t, thumb: thumb(t) })),
   exportFormats: [
     { ext: 'docx', ic: 'doc', label: 'Documento de Word (.docx)', desc: 'Para editar en cualquier procesador de textos compatible.' },
+    { ext: 'odt', ic: 'doc', label: 'Documento ODF (.odt)', desc: 'Formato abierto, compatible con LibreOffice y otros procesadores.' },
     { ext: 'html', ic: 'link', label: 'Página web (.html)', desc: 'Para publicar en internet o abrir en el navegador.' },
     { ext: 'txt', ic: 'words', label: 'Texto sin formato (.txt)', desc: 'Solo el texto, sin estilos ni imágenes.' },
   ],
@@ -718,6 +753,8 @@ const adapter = {
     const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0];
     state.page = { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 };
     state.header = ''; state.footer = ''; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
+    Object.assign(state, { comments: [], footnotes: {}, track: false, watermark: null, pageColor: null, merge: null });
+    editor.classList.remove('tracking');
     setContent(t.html());
     editor.focus();
     const first = editor.querySelector('p,h1');
@@ -728,8 +765,15 @@ const adapter = {
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
       state.header = ''; state.footer = ''; state.pageNumbers = 'none';
+      Object.assign(state, { comments: [], footnotes: r.footnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
-      return { warnings: r.warnings };
+      return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
+    }
+    if (f.ext === 'odt') {
+      const r = await odtToHtml(f.bytes);
+      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
+      setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
+      return { props: r.props };
     }
     if (f.ext === 'txt') { setContent(textToHtml(text())); return {}; }
     if (f.ext === 'md') { setContent(markdownToHtml(text())); return {}; }
@@ -745,7 +789,8 @@ const adapter = {
   async serialize(ext) {
     if (ext === 'txt') return htmlToText(editor);
     if (ext === 'html' || ext === 'htm') return exportHtml();
-    return htmlToDocx(editor, { ...snapshotSettings(), title: shell.doc.name.replace(/\.[^.]+$/, '') });
+    if (ext === 'odt') return htmlToOdt(editor, { ...snapshotSettings(), ...shell.docProps() });
+    return htmlToDocx(editor, { ...snapshotSettings(), ...shell.docProps() });
   },
   snapshot() { return JSON.stringify({ html: editor.innerHTML, settings: snapshotSettings() }); },
   async restore(s) { const j = JSON.parse(s); setContent(j.html, j.settings); },
@@ -839,6 +884,31 @@ async function onCommand(cmd, arg) {
     case 'imgReset': return imageOp('reset');
     case 'imgDelete': return imageOp('delete');
     case 'exportDocx': return shell.saveAsFormat('docx', 'Documento de Word');
+    case 'painter': return F.startPainter(false);
+    case 'navPane': return F.toggleNav();
+    case 'comment': return F.newComment();
+    case 'showComments': return F.toggleSide('comments');
+    case 'showChanges': return F.toggleSide('changes');
+    case 'track': return F.setTrack(!state.track);
+    case 'revPrev': return F.reviewAction('prev');
+    case 'revNext': return F.reviewAction('next');
+    case 'revAccept': return F.reviewAction('accept');
+    case 'revReject': return F.reviewAction('reject');
+    case 'revAcceptAll': return F.reviewAction('acceptAll');
+    case 'revRejectAll': return F.reviewAction('rejectAll');
+    case 'footnote': return F.insertFootnote();
+    case 'textbox': return F.insertTextBox();
+    case 'cols1': return F.setColumns(1);
+    case 'cols2': return F.setColumns(2);
+    case 'cols3': return F.setColumns(3);
+    case 'recipients': return F.chooseRecipients();
+    case 'mergePreview': return F.previewMerge(0);
+    case 'mergePrev': return F.previewMerge(-1);
+    case 'mergeNext': return F.previewMerge(1);
+    case 'mergeFinish': return F.finishMerge();
+    case 'watermark': return watermarkDialog();
+    case 'pageColor': state.pageColor = arg === 'transparent' || arg === '#FFFFFF' ? null : arg; shell.markDirty(); schedulePaginate(); return;
+    case 'exportOdt': return shell.saveAsFormat('odt', 'Documento ODF');
     default: return undefined;
   }
 }
@@ -867,7 +937,7 @@ const TABS = [
     id: 'home', label: 'Inicio', groups: [
       { label: 'Portapapeles', items: [
         { cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg', title: 'Pegar (Ctrl+V)' },
-        { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut', title: 'Cortar (Ctrl+X)' }, { cmd: 'copy', label: 'Copiar', icon: 'copy', title: 'Copiar (Ctrl+C)' }, { cmd: 'removeFormat', label: 'Borrar formato', icon: 'clear' }] },
+        { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut', title: 'Cortar (Ctrl+X)' }, { cmd: 'copy', label: 'Copiar', icon: 'copy', title: 'Copiar (Ctrl+C)' }, { cmd: 'painter', label: 'Copiar formato', icon: 'brush', title: 'Copiar formato (doble clic: varias veces)' }] },
       ] },
       { label: 'Fuente', items: [
         { stack: [
@@ -894,7 +964,8 @@ const TABS = [
     id: 'insert', label: 'Insertar', groups: [
       { label: 'Páginas', items: [{ cmd: 'pageBreak', label: 'Salto de página', icon: 'pageBreak', size: 'lg', kbd: 'Ctrl+Enter' }] },
       { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
-      { label: 'Ilustraciones', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }] },
+      { label: 'Ilustraciones', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }, { cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: () => F.shapeMenu() }] },
+      { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }] },
       { label: 'Vínculos', items: [{ cmd: 'insertLink', label: 'Vínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
       { label: 'Encabezado y pie', items: [{ cmd: 'headerFooter', label: 'Encabezado y pie', icon: 'header', size: 'lg' }, { cmd: 'headerFooter', label: 'Número de página', icon: 'pageNum', size: 'lg' }] },
       { label: 'Símbolos', items: [{ cmd: 'symbol', label: 'Símbolo', icon: 'symbol', size: 'lg' }, { cmd: 'hr', label: 'Línea horizontal', icon: 'hr', size: 'lg' }] },
@@ -906,23 +977,42 @@ const TABS = [
         { cmd: 'margins', label: 'Márgenes', icon: 'margins', size: 'lg', menu: marginMenu },
         { cmd: 'orientation', label: 'Orientación', icon: 'orientation', size: 'lg' },
         { cmd: 'size', label: 'Tamaño', icon: 'pageSetup', size: 'lg', menu: sizeMenu },
+        { cmd: 'columns', label: 'Columnas', icon: 'columns', size: 'lg', menu: () => [{ label: 'Una columna', run: () => F.setColumns(1) }, { label: 'Dos columnas', run: () => F.setColumns(2) }, { label: 'Tres columnas', run: () => F.setColumns(3) }, '-', { label: 'Se aplica a los párrafos seleccionados', run: () => {} }] },
         { cmd: 'pageSetup', label: 'Más opciones', icon: 'pageSetup', size: 'lg' },
       ] },
       { label: 'Párrafo', items: [{ stack: [{ cmd: 'indent', label: 'Aumentar sangría', icon: 'indent', showLabel: true }, { cmd: 'outdent', label: 'Disminuir sangría', icon: 'outdent', showLabel: true }, { cmd: 'lineSpacing', label: 'Interlineado', icon: 'lineSpacing', showLabel: true, menu: lineMenu }] }] },
     ],
   },
   {
+    id: 'design', label: 'Diseño', groups: [
+      { label: 'Fondo de página', items: [{ cmd: 'watermark', label: 'Marca de agua', icon: 'background', size: 'lg' }, { cmd: 'pageColor', label: 'Color de página', icon: 'fill', size: 'lg', color: true, colorValue: '#FFF8E1', colorOpts: { noneLabel: 'Sin color' } }] },
+    ],
+  },
+  {
     id: 'refs', label: 'Referencias', groups: [
       { label: 'Tabla de contenido', items: [{ cmd: 'toc', label: 'Índice / actualizar', icon: 'styles', size: 'lg' }] },
+      { label: 'Notas al pie', items: [{ cmd: 'footnote', label: 'Insertar nota al pie', icon: 'sup', size: 'lg' }] },
+    ],
+  },
+  {
+    id: 'mail', label: 'Correspondencia', groups: [
+      { label: 'Iniciar combinación', items: [{ cmd: 'recipients', label: 'Elegir destinatarios', icon: 'open', size: 'lg' }] },
+      { label: 'Escribir e insertar campos', items: [{ cmd: 'fields', label: 'Insertar campo', icon: 'textbox', size: 'lg', menu: () => F.fieldMenu() }] },
+      { label: 'Vista previa', items: [{ cmd: 'mergePreview', label: 'Vista previa', icon: 'find', size: 'lg' }, { stack: [{ cmd: 'mergePrev', label: 'Anterior', icon: 'undo', showLabel: true }, { cmd: 'mergeNext', label: 'Siguiente', icon: 'redo', showLabel: true }] }] },
+      { label: 'Finalizar', items: [{ cmd: 'mergeFinish', label: 'Finalizar y combinar', icon: 'check', size: 'lg' }] },
     ],
   },
   {
     id: 'review', label: 'Revisar', groups: [
       { label: 'Revisión', items: [{ cmd: 'spell', label: 'Ortografía', icon: 'spell', size: 'lg' }, { cmd: 'wordCount', label: 'Contar palabras', icon: 'words', size: 'lg' }] },
+      { label: 'Comentarios', items: [{ cmd: 'comment', label: 'Nuevo comentario', icon: 'comment', size: 'lg' }, { cmd: 'showComments', label: 'Mostrar comentarios', icon: 'notes', size: 'lg' }] },
+      { label: 'Seguimiento', items: [{ cmd: 'track', label: 'Control de cambios', icon: 'replace', size: 'lg' }, { cmd: 'showChanges', label: 'Panel de revisiones', icon: 'words', size: 'lg' }] },
+      { label: 'Cambios', items: [{ stack: [{ cmd: 'revAccept', label: 'Aceptar', icon: 'check', showLabel: true, menu: null }, { cmd: 'revReject', label: 'Rechazar', icon: 'close', showLabel: true }, { cmd: 'revAcceptAll', label: 'Aceptar todos', icon: 'check', showLabel: true }] }, { stack: [{ cmd: 'revPrev', label: 'Anterior', icon: 'undo', showLabel: true }, { cmd: 'revNext', label: 'Siguiente', icon: 'redo', showLabel: true }, { cmd: 'revRejectAll', label: 'Rechazar todos', icon: 'trash', showLabel: true }] }] },
     ],
   },
   {
     id: 'view', label: 'Vista', groups: [
+      { label: 'Mostrar', items: [{ cmd: 'navPane', label: 'Panel de navegación', icon: 'styles', size: 'lg' }] },
       { label: 'Zoom', items: [{ cmd: 'zoomReset', label: '100 %', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomWidth', label: 'Ancho de página', icon: 'columns', size: 'lg' }, { cmd: 'zoomPage', label: 'Página completa', icon: 'doc', size: 'lg' }] },
     ],
   },
@@ -967,6 +1057,11 @@ shell.command = async (cmd, arg) => {
 shell.ribbon.onBeforeSelect = saveSelection;
 shell.ribbon.onRender = () => setTimeout(reflectState, 0);
 buildWorkspace(shell.workspace);
+F.initFeatures({
+  editor, state, shell, scroller, ruler, pagesEl, schedulePaginate, paginate, insertHTMLAtCursor, restoreSelection, saveSelection, selectedBlocks, currentBlock, applySpanStyle,
+  setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
+});
+adapter.onPrefs = (p) => { editor.spellcheck = p.spellcheck !== false; };
 statusPages = h('span', {}, 'Página 1 de 1');
 statusWords = h('button', { class: 'sb-btn', title: 'Contar palabras', onclick: () => onCommand('wordCount') }, '0 palabras');
 zoom = shell.zoomControl({ value: 100, min: 30, max: 300, onChange: (v) => { state.zoom = v; applyZoom(); drawRuler(); positionImgBox(); } });
@@ -977,4 +1072,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint };
+window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F };

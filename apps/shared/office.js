@@ -238,7 +238,38 @@ export class OfficeShell {
     this.bindGlobal();
     window.__oficinaSave = () => this.save();
     window.__shell = this;
+    this.prefs = { theme: 'auto', author: '', autosaveSec: 20, spellcheck: true };
+    this.props = {};
+    this.loadPrefs();
   }
+
+  // -------------------------------------------------------------- preferencias y tema
+  async loadPrefs() {
+    if (api?.prefs) this.prefs = { ...this.prefs, ...(await api.prefs()) };
+    this.applyPrefs();
+    api?.onPrefs?.((p) => { this.prefs = { ...this.prefs, ...p }; this.applyPrefs(); });
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyPrefs());
+  }
+  applyPrefs() {
+    const dark = this.prefs.theme === 'dark' || (this.prefs.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.body.dataset.theme = dark ? 'dark' : 'light';
+    this.adapter.onPrefs?.(this.prefs);
+  }
+  async optionsDialog() {
+    const v = await form('Opciones de Mi Oficina MX', [
+      { name: 'author', label: 'Tu nombre (autor de documentos, comentarios y cambios)', value: this.prefs.author },
+      { name: 'theme', label: 'Tema de la interfaz', type: 'select', value: this.prefs.theme, options: [['auto', 'Igual que el sistema'], ['light', 'Claro'], ['dark', 'Oscuro']] },
+      { name: 'autosaveSec', label: 'Guardar copia de recuperación cada (segundos)', type: 'number', value: this.prefs.autosaveSec, min: 5, max: 600 },
+      { name: 'spellcheck', label: 'Revisar la ortografía mientras escribes', type: 'checkbox', value: this.prefs.spellcheck !== false },
+      { type: 'note', label: 'Las opciones se aplican a todas las apps de la suite.' },
+    ], 'Guardar');
+    if (!v) return;
+    v.autosaveSec = Math.max(5, Math.min(600, Number(v.autosaveSec) || 20));
+    this.prefs = { ...this.prefs, ...v };
+    if (api?.setPrefs) await api.setPrefs(v); else this.applyPrefs();
+    toast('Opciones guardadas');
+  }
+  docProps() { return { title: this.props.title || this.doc.name.replace(/\.[^.]+$/, ''), author: this.props.author || this.prefs.author || '', subject: this.props.subject || '', keywords: this.props.keywords || '' }; }
 
   buildTop() {
     this.top.append(
@@ -263,7 +294,7 @@ export class OfficeShell {
   markDirty() {
     if (!this.doc.dirty) { this.doc.dirty = true; this.updateTitle(); }
     clearTimeout(this.autosaveT);
-    this.autosaveT = setTimeout(() => this.autosave(), 20000);
+    this.autosaveT = setTimeout(() => this.autosave(), (this.prefs?.autosaveSec || 20) * 1000);
   }
   markClean() { this.doc.dirty = false; this.updateTitle(); }
   async autosave() {
@@ -308,6 +339,8 @@ export class OfficeShell {
         case 'exportPdf': return this.exportPdf();
         case 'print': return this.print();
         case 'about': return this.about();
+        case 'options': return this.optionsDialog();
+        case 'properties': return this.showBackstage('info');
         case 'find': this.searchBox.focus(); this.searchBox.select(); return this.adapter.onCommand('find', arg);
         default: return this.adapter.onCommand(cmd, arg);
       }
@@ -323,6 +356,7 @@ export class OfficeShell {
   }
 
   async newDoc(tpl) {
+    this.props = {};
     await this.adapter.newDoc(tpl);
     this.doc = { name: 'Sin título', path: null, ext: this.adapter.saveExt, dirty: false, started: true };
     this.updateTitle();
@@ -346,7 +380,9 @@ export class OfficeShell {
     const veil = h('div', { class: 'modal-back' }, h('div', { class: 'modal', style: { padding: '18px 24px', minWidth: '240px' } }, `Abriendo ${f.name}…`));
     document.body.append(veil);
     try {
+      this.props = {};
       const info = await this.adapter.load(f);
+      if (info?.props) this.props = { ...info.props };
       const nativeSave = this.adapter.writable ? this.adapter.writable.includes(f.ext) : f.ext === this.adapter.saveExt;
       this.doc = { name: f.name, path: nativeSave ? f.path : null, ext: nativeSave ? f.ext : this.adapter.saveExt, dirty: false, started: true };
       if (!nativeSave) this.doc.name = f.name.replace(/\.[^.]+$/, '') + '.' + this.adapter.saveExt;
@@ -441,6 +477,7 @@ export class OfficeShell {
       item('print', 'print', 'Imprimir', () => { this.hideBackstage(); this.print(); }, !started),
       item('info', 'info', 'Información', () => this.showBackstage('info'), !started),
       h('div', { class: 'grow' }),
+      item('options', 'brush', 'Opciones', () => this.optionsDialog()),
       item('suite', 'launcher', 'Mi Oficina MX', () => api?.showLauncher()),
       item('about', 'info', 'Acerca de', () => this.about()),
     );
@@ -507,11 +544,20 @@ export class OfficeShell {
 
   renderInfo(main) {
     main.append(h('h1', {}, 'Información'));
+    const grid = h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(260px, 420px) 1fr', gap: '40px', marginTop: '16px', alignItems: 'start' } });
     const stats = this.adapter.stats?.() || [];
-    const tbl = h('table', { style: { borderCollapse: 'collapse', marginTop: '16px' } });
-    [['Nombre', this.doc.name], ['Ubicación', this.doc.path || 'Sin guardar'], ['Formato', `.${this.doc.ext}`], ...stats].forEach(([k, v]) => tbl.append(h('tr', {}, h('td', { style: { color: 'var(--ink-3)', padding: '6px 24px 6px 0' } }, k), h('td', { style: { padding: '6px 0' } }, String(v)))));
-    main.append(tbl);
-    if (this.doc.path) main.append(h('p', {}, h('button', { class: 'btn', onclick: () => api.showInFolder(this.doc.path) }, 'Mostrar en la carpeta')));
+    const tbl = h('table', { style: { borderCollapse: 'collapse' } });
+    [['Nombre', this.doc.name], ['Ubicación', this.doc.path || 'Sin guardar'], ['Formato', `.${this.doc.ext}`], ...stats].forEach(([k, v]) => tbl.append(h('tr', {}, h('td', { style: { color: 'var(--ink-3)', padding: '6px 24px 6px 0', verticalAlign: 'top' } }, k), h('td', { style: { padding: '6px 0', wordBreak: 'break-all' } }, String(v)))));
+    const left = h('div', {}, h('h2', { style: { marginTop: 0 } }, 'Propiedades'));
+    const pr = this.docProps();
+    const fields = [['title', 'Título'], ['author', 'Autor'], ['subject', 'Asunto'], ['keywords', 'Palabras clave']];
+    const inputs = {};
+    fields.forEach(([k, l]) => { inputs[k] = h('input', { value: pr[k] || '', 'data-prop': k }); left.append(h('label', { class: 'field' }, h('span', {}, l), inputs[k])); });
+    left.append(h('button', { class: 'btn primary', onclick: () => { fields.forEach(([k]) => { this.props[k] = inputs[k].value.trim(); }); this.markDirty(); toast('Propiedades actualizadas (se guardan con el archivo)'); } }, 'Aplicar'));
+    const right = h('div', {}, h('h2', { style: { marginTop: 0 } }, 'Datos'), tbl);
+    if (this.doc.path) right.append(h('p', {}, h('button', { class: 'btn', onclick: () => api.showInFolder(this.doc.path) }, 'Mostrar en la carpeta')));
+    grid.append(left, right);
+    main.append(grid);
   }
 
   // -------------------------------------------------------------- barra de estado con zoom

@@ -130,8 +130,9 @@ export class Grid {
       if (!s.rh(r)) continue;
       const y = this.rowTop(r), hh = s.rh(r);
       for (let c = c1; c <= c2; c++) {
-        const st = s.style(r, c);
+        const st = this.eff(r, c);
         if (st?.bg) { ctx.fillStyle = st.bg; ctx.fillRect(this.colLeft(c), y, s.cw(c), hh); }
+        if (st?.bar) { const w = Math.max(0, Math.min(1, st.bar.pct)) * (s.cw(c) - 4); const grd = ctx.createLinearGradient(this.colLeft(c), 0, this.colLeft(c) + w, 0); grd.addColorStop(0, st.bar.color); grd.addColorStop(1, `${st.bar.color}55`); ctx.fillStyle = grd; ctx.fillRect(this.colLeft(c) + 2, y + 3, w, hh - 6); }
       }
     }
     // cuadrícula
@@ -157,8 +158,9 @@ export class Grid {
         if (this.editing && this.editing.r === r && this.editing.c === c) continue;
         const d = wb.display(r, c);
         if (!d.text) continue;
-        const st = s.style(r, c);
+        const st = this.eff(r, c);
         const rect = m ? this.cellRect(r, c) : { x: this.colLeft(c), y, w: s.cw(c), h: hh };
+        if (st?.icon != null) { this.drawIcon(st.icon, st.iconSet, rect); rect.x += 16; rect.w -= 16; }
         this.drawText(d, st, rect, r, c, c2);
       }
     }
@@ -173,6 +175,8 @@ export class Grid {
       const X = Math.round(rc.x) + 0.5, Y = Math.round(rc.y) + 0.5, X2 = Math.round(rc.x + rc.w) + 0.5, Y2 = Math.round(rc.y + rc.h) + 0.5;
       if (b.t) line(X, Y, X2, Y, b.t); if (b.b) line(X, Y2, X2, Y2, b.b); if (b.l) line(X, Y, X, Y2, b.l); if (b.r) line(X2, Y, X2, Y2, b.r);
     }
+    // indicador de notas
+    if (s.notes?.size) for (const k of s.notes.keys()) { const [r, c] = k.split(',').map(Number); if (r < r1 || r > r2 || c < c1 || c > c2) continue; const rc = this.cellRect(r, c); ctx.fillStyle = '#D93025'; ctx.beginPath(); ctx.moveTo(rc.x + rc.w - 7, rc.y + 1); ctx.lineTo(rc.x + rc.w, rc.y + 1); ctx.lineTo(rc.x + rc.w, rc.y + 8); ctx.fill(); }
     // botones de filtro
     const f = s.filter;
     if (f && f.range.r1 >= r1 && f.range.r1 <= r2) {
@@ -187,6 +191,18 @@ export class Grid {
     }
   }
 
+  eff(r, c) { const st = this.s.style(r, c); const cf = this.cfStyle ? this.cfStyle(r, c) : null; return cf ? { ...(st || {}), ...cf } : st; }
+  drawIcon(level, set, rect) {
+    const ctx = this.ctx, x = rect.x + 4, y = rect.y + rect.h / 2;
+    const colors = ['#D93025', '#F2A600', '#1E8E3E'];
+    ctx.fillStyle = colors[level];
+    ctx.beginPath();
+    if (set === 'lights') ctx.arc(x + 5, y, 5, 0, Math.PI * 2);
+    else if (level === 2) { ctx.moveTo(x, y + 4); ctx.lineTo(x + 5, y - 5); ctx.lineTo(x + 10, y + 4); }
+    else if (level === 0) { ctx.moveTo(x, y - 4); ctx.lineTo(x + 5, y + 5); ctx.lineTo(x + 10, y - 4); }
+    else { ctx.moveTo(x, y - 5); ctx.lineTo(x + 9, y); ctx.lineTo(x, y + 5); }
+    ctx.fill();
+  }
   drawText(d, st, rect, r, c, cMax) {
     const ctx = this.ctx, s = this.s;
     ctx.font = this.font(st);
@@ -241,6 +257,9 @@ export class Grid {
     if (g.r1 !== g.r2 || g.c1 !== g.c2) { ctx.fillStyle = 'rgba(14,156,116,.10)'; ctx.fillRect(x, y, w, hh); const ac = this.cellRect(this.sel.r, this.sel.c); ctx.fillStyle = '#fff'; ctx.fillRect(ac.x + 1, ac.y + 1, ac.w - 1, ac.h - 1); const d = this.wb.display(this.sel.r, this.sel.c); if (d.text && !this.editing) this.drawText(d, this.s.style(this.sel.r, this.sel.c), ac, this.sel.r, this.sel.c, this.sel.c); }
     ctx.strokeStyle = this.accent; ctx.lineWidth = 2;
     ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, w - 1, hh - 1);
+    // flecha de lista de validación
+    const vl = this.validationAt?.(this.sel.r, this.sel.c);
+    if (vl?.type === 'list' && !this.editing) { const ac = this.cellRect(this.sel.r, this.sel.c); const bx = ac.x + ac.w + 2, by = ac.y + (ac.h - 18) / 2; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#9AA0B4'; ctx.fillRect(bx, by, 18, 18); ctx.strokeRect(bx + 0.5, by + 0.5, 17, 17); ctx.fillStyle = '#4B5066'; ctx.beginPath(); ctx.moveTo(bx + 5, by + 7); ctx.lineTo(bx + 13, by + 7); ctx.lineTo(bx + 9, by + 12); ctx.fill(); this.listBtn = { x: bx, y: by, w: 18, h: 18 }; } else this.listBtn = null;
     // controlador de relleno
     if (!this.editing) { ctx.fillStyle = this.accent; ctx.fillRect(x + w - 4, y + hh - 4, 7, 7); ctx.fillStyle = '#fff'; ctx.fillRect(x + w - 4, y + hh - 4, 7, 1); ctx.fillRect(x + w - 4, y + hh - 4, 1, 7); }
     // vista previa de relleno
@@ -337,6 +356,7 @@ export class Grid {
   startEdit(initial = null, { caretEnd = true } = {}) {
     if (this.editing) return;
     const { r, c } = this.sel;
+    if (this.canEdit && !this.canEdit(r, c)) { toast('La hoja está protegida. Desprotégela en Revisar → Proteger hoja.', { error: true }); return; }
     this.editing = { r, c, typed: initial != null };
     const ed = this.editor;
     ed.value = initial != null ? initial : this.wb.editText(r, c);
@@ -363,6 +383,8 @@ export class Grid {
     let v = this.editor.value;
     // Autocierra paréntesis de fórmulas
     if (v.startsWith('=')) { const open = (v.match(/\(/g) || []).length - (v.match(/\)/g) || []).length; if (open > 0) v += ')'.repeat(open); }
+    const chk = this.validate ? this.validate(r, c, v) : { ok: true };
+    if (!chk.ok) { toast(chk.msg, { error: true }); this.editor.focus(); return; }
     this.editing = null; this.pickRange = null;
     this.editor.hidden = true;
     const before = this.wb.editText(r, c);
@@ -565,6 +587,7 @@ export class Grid {
   onHover(e) {
     if (this.drag) return;
     const x = e.offsetX / this.zoom, y = e.offsetY / this.zoom;
+    this.noteHover(e);
     const rz = this.resizeZone(x, y);
     if (rz) { this.canvas.style.cursor = rz.axis === 'col' ? 'col-resize' : 'row-resize'; return; }
     const g = this.range, a = this.cellRect(g.r1, g.c1), b = this.cellRect(g.r2, g.c2);
@@ -573,6 +596,18 @@ export class Grid {
     this.canvas.style.cursor = y < HDR_H && x > HDR_W ? 's-resize' : x < HDR_W && y > HDR_H ? 'e-resize' : 'cell';
     void a;
   }
+  noteHover(e) {
+    const s = this.s;
+    if (!s.notes?.size) { this.hideNote(); return; }
+    const { r, c } = this.hit(e.offsetX, e.offsetY);
+    const txt = r >= 0 && c >= 0 ? s.notes.get(`${r},${c}`) : null;
+    if (!txt) { this.hideNote(); return; }
+    if (!this.noteTip) { this.noteTip = h('div', { class: 'note-tip' }); this.host.append(this.noteTip); }
+    const rc = this.cellRect(r, c);
+    this.noteTip.textContent = txt; this.noteTip.hidden = false;
+    this.noteTip.style.left = `${(rc.x + rc.w + 6) * this.zoom}px`; this.noteTip.style.top = `${rc.y * this.zoom}px`;
+  }
+  hideNote() { if (this.noteTip) this.noteTip.hidden = true; }
   resizeZone(x, y) {
     const s = this.s;
     if (y < HDR_H && x > HDR_W) { const { c } = this.hit(x * this.zoom, (HDR_H + 1) * this.zoom); for (const cc of [c - 1, c]) { if (cc < 0) continue; const edge = this.colLeft(cc) + s.cw(cc); if (Math.abs(x - edge) < 4) return { axis: 'col', i: cc, start: edge }; } }
@@ -584,6 +619,7 @@ export class Grid {
     if (e.button !== 0) return;
     closeDropdown();
     const x = e.offsetX / this.zoom, y = e.offsetY / this.zoom;
+    if (this.listBtn && x >= this.listBtn.x && x <= this.listBtn.x + this.listBtn.w && y >= this.listBtn.y && y <= this.listBtn.y + this.listBtn.h) { e.preventDefault(); this.onListButton?.(this.sel.r, this.sel.c, { left: e.clientX, top: e.clientY }); return; }
     const s = this.s;
     // ¿filtro?
     if (s.filter) {

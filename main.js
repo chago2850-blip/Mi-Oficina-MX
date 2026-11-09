@@ -24,17 +24,17 @@ const papel = require('./main/papelpdf');
 const APPS = {
   escribiente: {
     name: 'Escribiente', color: '#5B48E8', bg: '#F3F1FB',
-    exts: ['docx', 'txt', 'html', 'htm', 'md'],
+    exts: ['docx', 'odt', 'txt', 'html', 'htm', 'md'],
     saveExt: 'docx', saveName: 'Documento de texto',
   },
   calcula: {
     name: 'Calcula Datos', color: '#0E9C74', bg: '#F0F8F5',
-    exts: ['xlsx', 'xlsm', 'csv', 'tsv'],
+    exts: ['xlsx', 'xlsm', 'ods', 'csv', 'tsv'],
     saveExt: 'xlsx', saveName: 'Libro de hojas de cálculo',
   },
   impresiona: {
     name: 'Impresiona', color: '#DC3A63', bg: '#FBF1F3',
-    exts: ['pptx'],
+    exts: ['pptx', 'odp'],
     saveExt: 'pptx', saveName: 'Presentación',
   },
   papelpdf: { name: 'PapelPDF', exts: ['pdf'] },
@@ -331,6 +331,9 @@ function buildOfficeMenu(win, id) {
       { label: 'Exportar a PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('exportPdf') },
       { label: 'Imprimir…', accelerator: 'CmdOrCtrl+P', click: () => send('print') },
       { type: 'separator' },
+      { label: 'Propiedades…', click: () => send('properties') },
+      { label: 'Opciones…', click: () => send('options') },
+      { type: 'separator' },
       { label: 'Mostrar Mi Oficina MX', click: () => showLauncher() },
       { label: 'Cerrar ventana', accelerator: 'CmdOrCtrl+W', click: () => win.close() },
     ] },
@@ -359,6 +362,21 @@ function buildOfficeMenu(win, id) {
     ] },
   ]);
 }
+
+// ---------------------------------------------------------------- preferencias de la suite
+const DEFAULT_PREFS = { theme: 'auto', author: '', autosaveSec: 20, defaultFormat: 'office', spellcheck: true };
+let prefs = { ...DEFAULT_PREFS };
+const prefsFile = () => path.join(app.getPath('userData'), 'preferencias.json');
+function loadPrefs() { try { prefs = { ...DEFAULT_PREFS, ...JSON.parse(fss.readFileSync(prefsFile(), 'utf8')) }; } catch { prefs = { ...DEFAULT_PREFS }; } }
+function savePrefs(p) {
+  prefs = { ...prefs, ...p };
+  try { fss.mkdirSync(path.dirname(prefsFile()), { recursive: true }); fss.writeFileSync(prefsFile(), JSON.stringify(prefs, null, 2)); } catch { /* sin permiso */ }
+  const { nativeTheme } = require('electron');
+  nativeTheme.themeSource = prefs.theme === 'auto' ? 'system' : prefs.theme;
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('prefs', prefs);
+}
+ipcMain.handle('of:prefs', () => prefs);
+ipcMain.handle('of:set-prefs', (_e, p) => { savePrefs(p); return prefs; });
 
 // ---------------------------------------------------------------- recientes y recuperación
 const dataDir = () => app.getPath('userData');
@@ -390,6 +408,7 @@ ipcMain.handle('launcher:info', () => ({ version: app.getVersion(), platform: pr
 ipcMain.handle('launcher:menu', (e) => {
   const w = BrowserWindow.fromWebContents(e.sender);
   Menu.buildFromTemplate([
+    { label: 'Preferencias…', click: () => e.sender.send('launcher:prefs') },
     { label: 'Acerca de Mi Oficina MX', click: () => e.sender.send('launcher:about') },
     { label: 'Código fuente (GitHub)', click: () => shell.openExternal('https://github.com/chago2850-blip/Mi-Oficina-MX') },
     { label: 'Licencia GPL-3.0', click: () => shell.openExternal('https://www.gnu.org/licenses/gpl-3.0.html') },
@@ -553,8 +572,61 @@ ipcMain.handle('of:discard-recovered', async (_e, rid) => {
   return true;
 });
 
+// ---------------------------------------------------------------- Impresiona: público y exportar imágenes
+const audiences = new Map(); // webContents del moderador -> ventana del público
+ipcMain.handle('of:audience-open', (e, { pres, i = 0, step = 0 }) => {
+  const presenter = BrowserWindow.fromWebContents(e.sender);
+  const displays = screen.getAllDisplays();
+  const here = screen.getDisplayMatching(presenter.getBounds());
+  const target = displays.find((d) => d.id !== here.id) || here;
+  const aud = new BrowserWindow({
+    x: target.bounds.x, y: target.bounds.y, width: Math.min(1280, target.bounds.width), height: Math.min(800, target.bounds.height),
+    fullscreen: !TEST_DIR && target.id !== here.id, backgroundColor: '#000000', title: 'Presentación — Impresiona', autoHideMenuBar: true,
+    icon: path.join(ROOT, 'build', 'apps', 'impresiona.png'),
+    webPreferences: { preload: path.join(ROOT, 'preload', 'office.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  aud.setMenu(null);
+  aud.loadURL('app://suite/apps/impresiona/index.html?audience=1');
+  aud.webContents.on('did-finish-load', () => aud.webContents.send('audience-msg', { type: 'load', pres, i, step }));
+  aud.on('closed', () => { audiences.delete(e.sender.id); if (!e.sender.isDestroyed()) e.sender.send('audience-closed'); });
+  audiences.set(e.sender.id, aud);
+  return { sameScreen: target.id === here.id };
+});
+ipcMain.handle('of:audience-send', (e, msg) => { const a = audiences.get(e.sender.id); if (a && !a.isDestroyed()) a.webContents.send('audience-msg', msg); return true; });
+ipcMain.handle('of:audience-close', (e) => { const a = audiences.get(e.sender.id); if (a && !a.isDestroyed()) a.close(); audiences.delete(e.sender.id); return true; });
+
+const renderWaiters = new Map();
+ipcMain.handle('of:render-ready', (e, i) => { const w = renderWaiters.get(e.sender.id); if (w) w(i); return true; });
+ipcMain.handle('of:render-slides', async (e, { pres, base = 'Diapositiva' }) => {
+  let folder = TEST_DIR;
+  if (!folder) {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), { title: 'Elige la carpeta para las imágenes', properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    folder = r.filePaths[0];
+  }
+  const { w, h } = pres.size;
+  const win = new BrowserWindow({ width: w, height: h, show: false, useContentSize: true, frame: false, webPreferences: { preload: path.join(ROOT, 'preload', 'office.js'), contextIsolation: true, sandbox: true, offscreen: true } });
+  await win.loadURL('app://suite/apps/impresiona/index.html?render=1');
+  win.webContents.send('audience-msg', { type: 'load', pres });
+  const files = [];
+  try {
+    for (let i = 0; i < pres.slides.length; i++) {
+      const ready = new Promise((res) => renderWaiters.set(win.webContents.id, res));
+      win.webContents.send('audience-msg', { type: 'render', i });
+      await Promise.race([ready, new Promise((res) => setTimeout(res, 4000))]);
+      const img = await win.webContents.capturePage({ x: 0, y: 0, width: w, height: h });
+      const out = path.join(folder, `${base}-${i + 1}.png`);
+      await fs.writeFile(out, img.toPNG());
+      files.push(out);
+    }
+  } finally { renderWaiters.delete(win.webContents.id); win.destroy(); }
+  return { folder, files };
+});
+
 // ---------------------------------------------------------------- arranque
 app.whenReady().then(() => {
+  loadPrefs();
+  require('electron').nativeTheme.themeSource = prefs.theme === 'auto' ? 'system' : prefs.theme;
   registerAppProtocol();
   if (!isMac) Menu.setApplicationMenu(null);
   else Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu', label: 'Mi Oficina MX' }, { role: 'editMenu', label: 'Editar' }, { role: 'windowMenu', label: 'Ventana' }]));

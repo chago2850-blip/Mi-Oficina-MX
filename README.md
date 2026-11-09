@@ -31,9 +31,11 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 ![Calcula Datos](docs/calcula.png)
 ![Impresiona](docs/impresiona.png)
 
-## Funciones (versión 0.1)
+## Funciones (versión 0.2)
 
 **Común a las tres apps:** cinta con pestañas, inicio con plantillas y recientes, guardar / guardar como, exportar a PDF, imprimir, deshacer y rehacer, buscar y reemplazar, arrastrar y soltar archivos, **recuperación automática** si la app se cierra sin guardar, revisión ortográfica en español e inglés, y el botón para volver a la dona.
+
+**Nuevo en la 0.2 para toda la suite:** abrir y guardar **ODF** (`.odt`, `.ods`, `.odp`), **modo oscuro** (sigue al sistema o se elige), **Preferencias** (nombre del autor, tema e intervalo de autoguardado) y **Propiedades del documento** (título, autor, asunto, palabras clave).
 
 **Escribiente**
 - Páginas reales (Carta, Oficio México, Legal, A4, A5), orientación y márgenes; la vista en pantalla y el PDF tienen las mismas páginas
@@ -42,6 +44,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Tablas (insertar/eliminar filas y columnas, sombreado), imágenes con cambio de tamaño, vínculos, saltos de página, símbolos
 - Encabezado, pie y números de página; índice automático; contador de palabras
 - Plantillas: carta formal, reporte y currículum
+- **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie**, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
 
 **Calcula Datos**
 - Cuadrícula rápida (dibujada en canvas), varias hojas, inmovilizar paneles, cambiar ancho/alto, autoajuste
@@ -51,6 +54,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Ordenar, filtros por columna, autosuma, insertar función con ayuda en español
 - Gráficos de columnas, barras, líneas, área, circular y dispersión
 - Plantillas: presupuesto mensual, ventas por mes y lista de asistencia
+- **0.2:** **formato condicional** (reglas, barras de datos, escalas de color, íconos), **validación** con listas desplegables, administrador de nombres, notas en celdas, tablas con formato, **tablas dinámicas**, proteger hoja y libro, área de impresión y ajustar a página, y abrir `.xlsm` sin ejecutar macros (se conservan al guardar)
 
 **Impresiona**
 - Diapositivas con diseños (título, contenido, dos contenidos, sección…), 8 temas originales, fondo, tamaño 16:9 o 4:3
@@ -59,6 +63,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Presentación a pantalla completa con puntero láser, pantalla negra/blanca (B/W) y saltar a una diapositiva
 - Notas del orador, reordenar arrastrando las miniaturas
 - Plantillas: plan de negocio, clase y avance de proyecto
+- **0.2:** **gráficos** (se guardan como gráficos nativos del `.pptx`), animaciones de salida y **panel de animaciones** (al hacer clic / con la anterior / después), **patrón de diapositivas** con pie, número y fecha, clasificador con secciones, **vista del moderador** con ventana para el público en la segunda pantalla, pluma durante la presentación y exportar cada diapositiva como PNG
 
 **PapelPDF** — la app completa del repositorio [PapelPDF](https://github.com/chago2850-blip/PapelPDF): anotar, editar, formularios, firma, organizar páginas, convertir, contraseña, redacción y OCR sin conexión.
 
@@ -120,9 +125,9 @@ replica/                mapa de funciones y pantallas del proyecto
 
 ## Lo que falta (siguientes versiones)
 
-Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. Lo más importante que sigue: control de cambios y comentarios en Escribiente, tablas dinámicas y formato condicional en Calcula Datos, vista del moderador con dos pantallas en Impresiona, y abrir/guardar ODF (`.odt`, `.ods`, `.odp`).
+Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. Lo que sigue para la 0.3: interfaz en inglés, notas al final, tabulaciones personalizadas en la regla y las funciones de prioridad *could* (coautoría, SmartArt, ecuaciones, Power Query, entre otras).
 
-**Limitaciones conocidas de la v0.1:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes y alineación, pero no siempre los colores ni las fuentes de cada palabra; los gráficos de Calcula Datos se guardan en el `.xlsx` de forma que Calcula Datos los recupera, pero Excel no los muestra; las transiciones de Impresiona no se guardan en el `.pptx`. Las macros VBA no se ejecutan.
+**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y alineación, pero no siempre los colores ni las fuentes de cada palabra, y los comentarios y revisiones de un `.docx` ajeno todavía no se importan (sí se exportan); el patrón de Impresiona se aplana dentro de cada diapositiva al guardar en `.pptx`; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
 
 ## Licencia
 

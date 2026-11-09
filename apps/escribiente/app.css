@@ -79,3 +79,51 @@ body.printing #printRoot { display: block; }
 #printRoot .pcontent { position: absolute; display: flow-root; }
 #printRoot .pcontent .pb::after { display: none; }
 #printRoot .pcontent .toc { border-color: transparent; }
+
+/* ---------------- fase 2 ---------------- */
+.sidepanel { position: absolute; top: 0; bottom: 0; z-index: 6; background: var(--surface); display: flex; flex-direction: column; box-shadow: var(--shadow); }
+.sidepanel.left { left: 0; width: 250px; border-right: 1px solid var(--line); }
+.sidepanel.right { right: 0; width: 310px; border-left: 1px solid var(--line); }
+.sp-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.sp-empty { color: var(--ink-3); padding: 14px; line-height: 1.45; }
+.nav-list { overflow: auto; padding: 6px; }
+.nav-item { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+.nav-item:hover { background: var(--accent-soft); }
+.nav-item.l0 { font-weight: 600; } .nav-item.l1 { padding-left: 18px; } .nav-item.l2 { padding-left: 30px; color: var(--ink-2); } .nav-item.l3 { padding-left: 42px; color: var(--ink-2); }
+.sp-tabs { display: flex; align-items: center; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); }
+.sp-tabs button:not(.rb) { flex: 1; border: 0; background: none; padding: 6px; border-radius: 6px; cursor: pointer; color: var(--ink-2); font-weight: 500; }
+.sp-tabs button.on { background: var(--accent-soft); color: var(--accent-2); }
+.sp-body { overflow: auto; padding: 10px; display: grid; gap: 10px; align-content: start; }
+.cmcard, .revcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--surface); cursor: pointer; }
+.cmcard.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.cmcard.resolved { opacity: .6; }
+.cm-top { display: flex; gap: 8px; align-items: center; }
+.cm-top small, .cm-reply small, .revcard small { display: block; color: var(--ink-3); font-size: 11px; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 600; }
+.cm-text { margin: 8px 0; white-space: pre-wrap; }
+.cm-replies { display: grid; gap: 6px; margin: 0 0 6px 14px; }
+.cm-reply p { margin: 2px 0 0; }
+.cmcard input { width: 100%; border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 8px; background: var(--surface); }
+.cm-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 6px; }
+.cm-actions .btn { padding: 3px 8px; font-size: 12px; }
+.revcard.ins b { color: #1565C0; } .revcard.del b { color: #C62828; }
+.revcard p { margin: 4px 0; color: var(--ink-2); }
+.doc .cm { background: #FFF1B8; border-bottom: 2px solid #F2C94C; }
+.doc .cm.on { background: #FFE38A; }
+.doc ins { color: #1565C0; text-decoration: underline; text-decoration-color: #1565C0; }
+.doc del { color: #C62828; text-decoration: line-through; }
+#editor.painting { cursor: copy; }
+.doc sup.fn { color: var(--accent-2); cursor: pointer; font-weight: 600; padding: 0 1px; }
+.fnotes { position: absolute; border-top: 1px solid #999; padding-top: 4px; font-size: 9pt !important; line-height: 1.25; color: #333; }
+.fnote { margin: 0 0 2px; font-size: 9pt; }
+.fnmeasure { position: absolute; left: -9999px; top: 0; visibility: hidden; }
+.doc .cols { column-gap: 24px; margin: 0 0 8pt; }
+.doc .cols > :first-child { margin-top: 0; }
+.doc .tbox { border: 1.5px solid #5B48E8; border-radius: 4px; padding: 6pt 9pt; margin: 0 0 8pt; }
+.doc .mf { background: #E8E4FF; color: #3D30B5; border-radius: 3px; padding: 0 2px; }
+.doc .mf.pv { background: #FFF6D6; color: inherit; }
+.sheet .wm { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-38deg); font: 700 92px Inter, Carlito, sans-serif; letter-spacing: 6px; opacity: .55; white-space: nowrap; pointer-events: none; text-transform: uppercase; }
+.ruler .indent { position: absolute; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; transform: translateX(-6px); cursor: ew-resize; z-index: 2; }
+.ruler .indent.first { top: 2px; border-top: 7px solid var(--accent-2); }
+.ruler .indent.left { bottom: 2px; border-bottom: 7px solid var(--accent-2); }
+body[data-theme="dark"] .ruler .track { background: #2C2F3C; }

@@ -58,6 +58,15 @@
       <button id="about-ok">Cerrar</button>
     </div>
   </div>
+  <div id="prefs" hidden>
+    <div class="card" role="dialog" aria-labelledby="prefs-t">
+      <h1 id="prefs-t">Preferencias</h1>
+      <label class="pf">Tu nombre<input id="pf-author" placeholder="Autor de documentos y comentarios" /></label>
+      <label class="pf">Tema<select id="pf-theme"><option value="auto">Igual que el sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
+      <label class="pf">Copia de recuperación cada<select id="pf-auto"><option value="10">10 segundos</option><option value="20">20 segundos</option><option value="60">1 minuto</option><option value="300">5 minutos</option></select></label>
+      <div class="row"><button id="prefs-cancel" class="ghost">Cancelar</button><button id="prefs-ok">Guardar</button></div>
+    </div>
+  </div>
   <script src="launcher.js"></script>
 </body>
 </html>

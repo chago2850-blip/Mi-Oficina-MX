@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld('launcher', {
   onRestored: (fn) => ipcRenderer.on('launcher:restored', () => fn()),
   onMinimizing: (fn) => ipcRenderer.on('launcher:minimizing', () => fn()),
   onAbout: (fn) => ipcRenderer.on('launcher:about', () => fn()),
+  prefs: () => ipcRenderer.invoke('of:prefs'),
+  setPrefs: (p) => ipcRenderer.invoke('of:set-prefs', p),
+  onPrefs: (fn) => ipcRenderer.on('launcher:prefs', () => fn()),
 });

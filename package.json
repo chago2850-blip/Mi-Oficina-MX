@@ -1,7 +1,7 @@
 {
   "name": "mi-oficina-mx",
   "productName": "Mi Oficina MX",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Suite ofimática libre y multiplataforma: Escribiente, Calcula Datos, Impresiona y PapelPDF.",
   "main": "main.js",
   "author": {
@@ -14,7 +14,7 @@
     "start": "npm run build:ui && electron .",
     "test": "npm run build:ui && node test/formats.test.mjs && node test/e2e.mjs",
     "test:formats": "node test/formats.test.mjs",
-    "test:e2e": "node test/e2e.mjs",
+    "test:e2e": "node test/e2e.mjs && node test/e2e-fase2.mjs",
     "icons": "bash scripts/make-icons.sh",
     "dist": "npm run build:ui && electron-builder",
     "dist:win": "npm run build:ui && electron-builder --win",
@@ -89,6 +89,13 @@
         "icon": "build/apps/escribiente"
       },
       {
+        "ext": "odt",
+        "name": "Documento ODF",
+        "description": "Documento de texto ODF",
+        "role": "Editor",
+        "icon": "build/apps/odt"
+      },
+      {
         "ext": "xlsx",
         "name": "Libro",
         "description": "Libro de hojas de cálculo",
@@ -103,11 +110,25 @@
         "icon": "build/apps/csv"
       },
       {
+        "ext": "ods",
+        "name": "Hoja de cálculo ODF",
+        "description": "Hoja de cálculo ODF",
+        "role": "Editor",
+        "icon": "build/apps/ods"
+      },
+      {
         "ext": "pptx",
         "name": "Presentación",
         "description": "Presentación con diapositivas",
         "role": "Editor",
         "icon": "build/apps/impresiona"
+      },
+      {
+        "ext": "odp",
+        "name": "Presentación ODF",
+        "description": "Presentación ODF",
+        "role": "Editor",
+        "icon": "build/apps/odp"
       },
       {
         "ext": "pdf",

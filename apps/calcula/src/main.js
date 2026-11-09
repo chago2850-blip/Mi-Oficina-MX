@@ -6,6 +6,9 @@ import { Grid } from './grid.js';
 import { readXlsx, writeXlsx, parseCsv, toCsv } from './xlsx.js';
 import { toSpanish, FUNCTION_HELP } from './i18n.js';
 import { FORMATS, changeDecimals, parseInput, formatValue } from './format.js';
+import * as F from './features.js';
+import { readOds, writeOds } from './ods.js';
+import { injectVba } from './xlsx.js';
 
 const wb = new Workbook();
 let shell, grid, nameBox, fxInput, tabsBar, statusInfo, zoom;
@@ -46,7 +49,12 @@ function buildWorkspace(ws) {
     onChange: () => { shell.markDirty(); refreshCharts(); refresh(); },
     onContext: (e, kind) => contextMenu(e, kind),
   });
-  grid.onClear = () => clearContents();
+  grid.onClear = () => { if (!F.canEdit(grid.sel.r, grid.sel.c)) { toast('La hoja está protegida.', { error: true }); return; } clearContents(); };
+  grid.cfStyle = (r, c) => F.cfStyle(r, c);
+  grid.validationAt = (r, c) => F.validationAt(r, c);
+  grid.validate = (r, c, v) => F.validate(r, c, v);
+  grid.canEdit = (r, c) => F.canEdit(r, c);
+  grid.onListButton = (r, c, pos) => { const v = F.validationAt(r, c); const anchor = h('div', { style: { position: 'fixed', left: `${pos.left - 160}px`, top: `${pos.top + 8}px`, width: '1px', height: '1px' } }); document.body.append(anchor); dropdown(anchor, v.list.map((x) => ({ label: x, run: () => { act('Elegir de la lista', () => wb.setInput(r, c, x)); refreshCharts(); } }))); anchor.remove(); };
   grid.onFilterButton = (c, pos) => filterMenu(c, pos);
   grid.onZoomWheel = (d) => zoom.set(zoom.get() + d);
   nameBox.addEventListener('keydown', (e) => {
@@ -104,8 +112,10 @@ function switchSheet(i) {
   wb.active = i; grid.scrollX = grid.scrollY = 0; grid.invalidate(); grid.touchMeta(); grid.updateSpacer(); grid.syncScroll();
   grid.select(0, 0); mountCharts(); refresh();
 }
-function newSheet() { wb.addSheet(); switchSheet(wb.sheets.length - 1); shell.markDirty(); }
+function bookLocked() { if (wb.protectedStructure) { toast('La estructura del libro está protegida (Revisar → Proteger libro).', { error: true }); return true; } return false; }
+function newSheet() { if (bookLocked()) return; wb.addSheet(); switchSheet(wb.sheets.length - 1); shell.markDirty(); }
 async function renameSheet(i) {
+  if (bookLocked()) return;
   const v = await form('Cambiar nombre de la hoja', [{ name: 'n', label: 'Nombre', value: wb.sheets[i].name }]);
   if (!v || !v.n.trim()) return;
   const name = v.n.trim().replace(/[\\/?*[\]:]/g, '').slice(0, 31);
@@ -114,6 +124,7 @@ async function renameSheet(i) {
   tabsBar.dataset.key = ''; refresh(); shell.markDirty();
 }
 async function deleteSheet(i) {
+  if (bookLocked()) return;
   if (wb.sheets.length === 1) { toast('El libro necesita al menos una hoja.', { error: true }); return; }
   if (!(await confirmBox('Eliminar hoja', `¿Eliminar "${wb.sheets[i].name}"? No se puede deshacer.`, 'Eliminar'))) return;
   wb.hf.removeSheet(wb.sheets[i].id); wb.sheets.splice(i, 1);
@@ -424,21 +435,28 @@ function buildPrint() {
   const root = $('#printRoot'); root.replaceChildren();
   const s = wb.sheet, u = wb.usedRange();
   const p = grid.prefix();
-  let maxR = u.r2, maxC = u.c2;
-  for (const ch of s.charts) { maxC = Math.max(maxC, grid.bsearch(p.cx, ch.x + ch.w)); maxR = Math.max(maxR, grid.bsearch(p.ry, ch.y + ch.h)); }
+  const ps = s.pageSetup || {};
+  const area = s.printArea ? parseRange(s.printArea) : null;
+  let minR = area ? area.r1 : 0, minC = area ? area.c1 : 0;
+  let maxR = area ? area.r2 : u.r2, maxC = area ? area.c2 : u.c2;
+  if (!area) for (const ch of s.charts) { maxC = Math.max(maxC, grid.bsearch(p.cx, ch.x + ch.w)); maxR = Math.max(maxR, grid.bsearch(p.ry, ch.y + ch.h)); }
+  const titleR = /^(\d+):(\d+)$/.exec(ps.titleRows || '');
   const table = h('table', { class: 'ptable' });
-  const cg = h('colgroup'); for (let c = 0; c <= maxC; c++) cg.append(h('col', { style: { width: `${s.cw(c)}px` } }));
+  if (ps.gridlines === false) table.classList.add('nogrid');
+  const cg = h('colgroup'); for (let c = minC; c <= maxC; c++) cg.append(h('col', { style: { width: `${s.cw(c)}px` } }));
   table.append(cg);
   const covered = new Set();
-  for (let r = 0; r <= maxR; r++) {
+  const thead = h('thead'); const tbody = h('tbody'); table.append(thead, tbody);
+  for (let r = minR; r <= maxR; r++) {
     if (s.hiddenRows.has(r)) continue;
     const tr = h('tr', { style: { height: `${s.rh(r)}px` } });
-    for (let c = 0; c <= maxC; c++) {
+    for (let c = minC; c <= maxC; c++) {
       if (covered.has(`${r},${c}`)) continue;
       const m = s.mergeAt(r, c);
-      const st = s.style(r, c) || {};
+      const st = grid.eff(r, c) || {};
       const d = wb.display(r, c);
       const td = h('td', {}, d.text);
+      if (st.bar) td.style.backgroundImage = `linear-gradient(90deg, ${st.bar.color} ${Math.round(st.bar.pct * 100)}%, transparent ${Math.round(st.bar.pct * 100)}%)`;
       if (m) { td.rowSpan = m.r2 - m.r1 + 1; td.colSpan = m.c2 - m.c1 + 1; for (let rr = m.r1; rr <= m.r2; rr++) for (let cc = m.c1; cc <= m.c2; cc++) covered.add(`${rr},${cc}`); }
       Object.assign(td.style, {
         fontWeight: st.b ? '700' : '', fontStyle: st.i ? 'italic' : '', textDecoration: [st.u && 'underline', st.s && 'line-through'].filter(Boolean).join(' '),
@@ -448,15 +466,22 @@ function buildPrint() {
       });
       tr.append(td);
     }
-    table.append(tr);
+    (titleR && r >= Number(titleR[1]) - 1 && r <= Number(titleR[2]) - 1 ? thead : tbody).append(tr);
   }
   const wrap = h('div', { class: 'pwrap' }, table);
   for (const ch of s.charts) { const inst = charts.get(ch.id); if (!inst) continue; wrap.append(h('img', { src: inst.getDataURL({ pixelRatio: 2, backgroundColor: '#fff' }), style: { position: 'absolute', left: `${ch.x}px`, top: `${ch.y}px`, width: `${ch.w}px`, height: `${ch.h}px` } })); }
   root.append(h('div', { class: 'ptitle' }, `${shell.doc.name.replace(/\.[^.]+$/, '')} — ${s.name}`), wrap);
-  const totalW = p.cx[maxC + 1];
-  root.dataset.landscape = totalW > 760 ? '1' : '';
+  const totalW = p.cx[maxC + 1] - p.cx[minC];
+  const land = ps.orientation === 'landscape' || (ps.orientation !== 'portrait' && totalW > 760);
+  root.dataset.landscape = land ? '1' : '';
+  const pageW = (land ? 11 : 8.5) * 96 - 2 * 45, pageH = (land ? 8.5 : 11) * 96 - 2 * 57 - 30;
+  if (ps.fit === 'width' || ps.fit === 'page') {
+    const tableH = p.ry[maxR + 1] - p.ry[minR];
+    const k = Math.min(1, pageW / totalW, ps.fit === 'page' ? pageH / tableH : 1);
+    wrap.style.zoom = String(k);
+  }
   let style = $('#pagestyle'); if (!style) { style = h('style', { id: 'pagestyle' }); document.head.append(style); }
-  style.textContent = `@page { size: letter ${totalW > 760 ? 'landscape' : 'portrait'}; margin: 1.5cm 1.2cm; }`;
+  style.textContent = `@page { size: letter ${land ? 'landscape' : 'portrait'}; margin: 1.5cm 1.2cm; }`;
 }
 
 // ------------------------------------------------------------------ adaptador
@@ -499,8 +524,8 @@ const blankThumb = '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" 
 const gridThumb = (head, accent) => `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#E2E4EA;height:100%">${Array.from({ length: 30 }, (_, i) => `<div style="background:${i < 5 && head ? accent : '#fff'}"></div>`).join('')}</div>`;
 
 const adapter = {
-  exts: ['xlsx', 'xlsm', 'csv', 'tsv'],
-  writable: ['xlsx', 'csv'],
+  exts: ['xlsx', 'xlsm', 'ods', 'csv', 'tsv'],
+  writable: ['xlsx', 'xlsm', 'ods', 'csv'],
   saveExt: 'xlsx',
   docIcon: 'sheet',
   homeHint: 'Haz cuentas, presupuestos y reportes con fórmulas en español.',
@@ -512,6 +537,7 @@ const adapter = {
   ],
   exportFormats: [
     { ext: 'xlsx', ic: 'sheet', label: 'Libro de Excel (.xlsx)', desc: 'Compatible con otras hojas de cálculo.' },
+    { ext: 'ods', ic: 'sheet', label: 'Hoja de cálculo ODF (.ods)', desc: 'Formato abierto, compatible con LibreOffice Calc.' },
     { ext: 'csv', ic: 'words', label: 'CSV (valores separados por comas)', desc: 'Solo la hoja actual, sin formato. Útil para importar en otros sistemas.' },
   ],
   async newDoc(tpl) { emptyBook(tpl); afterLoad(); },
@@ -525,11 +551,18 @@ const adapter = {
       wb.hf.clearUndoStack?.(); wb.undoStack = [];
       afterLoad(); return {};
     }
+    if (f.ext === 'ods') { const r = await readOds(wb, f.bytes); afterLoad(); return { ...r, props: await odsProps(f.bytes) }; }
     const r = await readXlsx(wb, f.bytes);
     afterLoad();
     return r;
   },
-  async serialize(ext) { if (ext === 'csv') return toCsv(wb); return writeXlsx(wb); },
+  async serialize(ext) {
+    if (ext === 'csv') return toCsv(wb);
+    if (ext === 'ods') return writeOds(wb, shell.docProps());
+    const bytes = await writeXlsx(wb, shell.docProps());
+    if (ext === 'xlsm' && wb.vba) return injectVba(bytes, wb.vba);
+    return bytes;
+  },
   snapshot() { return JSON.stringify(wb.toJSON()); },
   async restore(str) { wb.fromJSON(JSON.parse(str)); afterLoad(); },
   isPristine() { return !shell.doc.dirty && wb.sheets.length === 1 && wb.usedRange().empty; },
@@ -540,6 +573,7 @@ const adapter = {
   stats() { const u = wb.usedRange(); return [['Hojas', wb.sheets.length], ['Área usada (hoja actual)', u.empty ? '—' : rangeStr(u)], ['Fórmulas (hoja actual)', countFormulas()]]; },
   onCommand,
 };
+async function odsProps(bytes) { try { const JSZip = (await import('jszip')).default; const z = await JSZip.loadAsync(bytes); const t = await z.file('meta.xml')?.async('string'); if (!t) return {}; const d = new DOMParser().parseFromString(t, 'application/xml'); const g = (n) => d.getElementsByTagName(n)[0]?.textContent || ''; return { title: g('dc:title'), author: g('dc:creator') || g('meta:initial-creator') }; } catch { return {}; } }
 function countFormulas() { let n = 0; const u = wb.usedRange(); for (let r = 0; r <= u.r2; r++) for (let c = 0; c <= u.c2; c++) if (wb.hf.doesCellHaveFormula({ sheet: wb.sid, row: r, col: c })) n++; return n; }
 function afterLoad() {
   tabsBar.dataset.key = '';
@@ -610,6 +644,25 @@ async function onCommand(cmd, arg) {
     case 'zoomReset': return zoom.set(100);
     case 'gridlines': return;
     case 'exportCsv': return shell.saveAsFormat('csv', 'CSV');
+    case 'exportOds': return shell.saveAsFormat('ods', 'Hoja de cálculo ODF');
+    case 'cf': return;
+    case 'validation': return F.validationDialog();
+    case 'clearValidation': return F.clearValidation();
+    case 'defineName': return F.defineName();
+    case 'nameManager': return F.manageNames();
+    case 'note': return F.noteDialog();
+    case 'deleteNote': return F.setNote(grid.sel.r, grid.sel.c, '');
+    case 'protect': return F.protectDialog();
+    case 'protectBook': return F.protectBook();
+    case 'unlockCells': return F.toggleUnlock();
+    case 'pivot': return F.pivotDialog();
+    case 'refreshPivot': return F.refreshPivot();
+    case 'pageSetup': return F.pageSetupDialog();
+    case 'printArea': return F.setPrintArea(false);
+    case 'clearPrintArea': return F.setPrintArea(true);
+    case 'orientPortrait': act('Orientación', () => { wb.sheet.pageSetup = { ...(wb.sheet.pageSetup || {}), orientation: 'portrait' }; }, { hf: false }); return;
+    case 'orientLandscape': act('Orientación', () => { wb.sheet.pageSetup = { ...(wb.sheet.pageSetup || {}), orientation: 'landscape' }; }, { hf: false }); return;
+    case 'fitWidth': act('Ajustar', () => { wb.sheet.pageSetup = { ...(wb.sheet.pageSetup || {}), fit: wb.sheet.pageSetup?.fit === 'width' ? 'none' : 'width' }; }, { hf: false }); return;
     default: return undefined;
   }
 }
@@ -678,20 +731,31 @@ const TABS = [
       { row: [{ cmd: 'numFmt', label: 'Formato de número', select: { options: [...FORMATS.map(([k, n]) => [k, n]), ['custom', 'Más formatos…']], width: '170px' } }] },
       { row: [{ cmd: 'currency', label: 'Moneda', icon: 'currency' }, { cmd: 'percent', label: 'Porcentaje', icon: 'percent' }, { cmd: 'thousands', label: 'Separador de miles', icon: 'hr' }, { cmd: 'decInc', label: 'Aumentar decimales', icon: 'decInc' }, { cmd: 'decDec', label: 'Disminuir decimales', icon: 'decDec' }] },
     ] }] },
+    { label: 'Estilos', items: [{ cmd: 'cf', label: 'Formato condicional', icon: 'fill', size: 'lg', menu: () => F.cfMenu() }, { cmd: 'tableStyle', label: 'Formato de tabla', icon: 'table', size: 'lg', menu: () => F.tableStyleMenu() }] },
     { label: 'Celdas', items: [{ cmd: 'insert', label: 'Insertar', icon: 'rowAdd', size: 'lg', menu: insMenu }, { cmd: 'delete', label: 'Eliminar', icon: 'rowDel', size: 'lg', menu: delMenu }, { cmd: 'format', label: 'Formato', icon: 'brush', size: 'lg', menu: fmtMenu }] },
     { label: 'Edición', items: [{ stack: [{ cmd: 'autoSum', label: 'Autosuma', icon: 'sum', showLabel: true, menu: sumMenu }, { cmd: 'clear', label: 'Borrar', icon: 'clear', showLabel: true, menu: clearMenu }, { cmd: 'sort', label: 'Ordenar y filtrar', icon: 'filter', showLabel: true, menu: () => [{ label: 'Ordenar de A a Z', icon: 'sortAsc', run: () => sortSel(true) }, { label: 'Ordenar de Z a A', icon: 'sortDesc', run: () => sortSel(false) }, '-', { label: 'Filtro', icon: 'filter', run: toggleFilter }] }] }] },
   ] },
   { id: 'insert', label: 'Insertar', groups: [
+    { label: 'Tablas', items: [{ cmd: 'pivot', label: 'Tabla dinámica', icon: 'layout', size: 'lg' }, { cmd: 'tableStyle', label: 'Tabla', icon: 'table', size: 'lg', menu: () => F.tableStyleMenu() }] },
     { label: 'Gráficos', items: [{ cmd: 'insertChart', label: 'Gráfico recomendado', icon: 'chart', size: 'lg' }, { cmd: 'charts', label: 'Todos los gráficos', icon: 'chartPie', size: 'lg', menu: chartMenu }] },
     { label: 'Funciones', items: [{ cmd: 'insertFunction', label: 'Función', icon: 'func', size: 'lg' }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
     { label: 'Hojas', items: [{ cmd: 'newSheet', label: 'Hoja nueva', icon: 'sheetAdd', size: 'lg' }] },
   ] },
+  { id: 'page', label: 'Disposición de página', groups: [
+    { label: 'Configurar página', items: [{ cmd: 'orient', label: 'Orientación', icon: 'orientation', size: 'lg', menu: () => [{ label: 'Vertical', run: () => onCommand('orientPortrait') }, { label: 'Horizontal', run: () => onCommand('orientLandscape') }] }, { cmd: 'area', label: 'Área de impresión', icon: 'pageSetup', size: 'lg', menu: () => [{ label: 'Establecer con la selección', run: () => onCommand('printArea') }, { label: 'Borrar área de impresión', run: () => onCommand('clearPrintArea') }] }, { cmd: 'fitWidth', label: 'Ajustar al ancho', icon: 'columns', size: 'lg' }, { cmd: 'pageSetup', label: 'Más opciones', icon: 'pageSetup', size: 'lg' }] },
+  ] },
   { id: 'formulas', label: 'Fórmulas', groups: [
     { label: 'Biblioteca de funciones', items: [{ cmd: 'insertFunction', label: 'Insertar función', icon: 'func', size: 'lg' }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
+    { label: 'Nombres definidos', items: [{ cmd: 'defineName', label: 'Definir nombre', icon: 'textbox', size: 'lg' }, { cmd: 'nameManager', label: 'Administrador de nombres', icon: 'layout', size: 'lg' }] },
   ] },
   { id: 'data', label: 'Datos', groups: [
     { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }] },
-    { label: 'Exportar', items: [{ cmd: 'exportCsv', label: 'Guardar CSV', icon: 'words', size: 'lg' }] },
+    { label: 'Herramientas de datos', items: [{ cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
+    { label: 'Exportar', items: [{ cmd: 'exportCsv', label: 'Guardar CSV', icon: 'words', size: 'lg' }, { cmd: 'exportOds', label: 'Guardar ODS', icon: 'sheet', size: 'lg' }] },
+  ] },
+  { id: 'review', label: 'Revisar', groups: [
+    { label: 'Notas', items: [{ cmd: 'note', label: 'Nueva nota', icon: 'comment', size: 'lg' }, { cmd: 'deleteNote', label: 'Eliminar nota', icon: 'trash', size: 'lg' }] },
+    { label: 'Proteger', items: [{ cmd: 'protect', label: 'Proteger hoja', icon: 'freeze', size: 'lg' }, { cmd: 'protectBook', label: 'Proteger libro', icon: 'sheet', size: 'lg' }, { cmd: 'unlockCells', label: 'Desbloquear celdas', icon: 'check', size: 'lg' }] },
   ] },
   { id: 'view', label: 'Vista', groups: [
     { label: 'Ventana', items: [{ cmd: 'freezePanes', label: 'Inmovilizar', icon: 'freeze', size: 'lg', menu: freezeMenu }] },
@@ -702,6 +766,7 @@ const TABS = [
 // ------------------------------------------------------------------ arranque
 shell = new OfficeShell({ appId: 'calcula', appName: 'Calcula Datos', logo: '../shared/img/calcula.svg', tabs: TABS, adapter });
 buildWorkspace(shell.workspace);
+F.initFeatures({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g) });
 statusInfo = h('span', { class: 'selstats' });
 zoom = shell.zoomControl({ value: 100, min: 50, max: 250, onChange: (v) => { grid.zoom = v / 100; grid.updateSpacer(); grid.syncScroll(); grid.draw(); } });
 shell.status.append(h('span', {}, 'Listo'), h('div', { class: 'grow' }), statusInfo, zoom);
@@ -718,4 +783,4 @@ emptyBook('blank');
 afterLoad();
 shell.start();
 
-window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh };
+window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F };

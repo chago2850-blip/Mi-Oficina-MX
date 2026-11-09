@@ -19,7 +19,8 @@ export const rangeStr = (g) => (g.r1 === g.r2 && g.c1 === g.c2 ? addr(g.r1, g.c1
 const key = (r, c) => `${r},${c}`;
 const sameMeta = (a, b) => a.styles.size === b.styles.size && [...a.styles].every(([k, v]) => b.styles.get(k) === v)
   && JSON.stringify([[...a.colW], [...a.rowH], [...a.hiddenRows], a.merges, a.freeze, a.charts, a.nRows === b.nRows, a.name]) === JSON.stringify([[...b.colW], [...b.rowH], [...b.hiddenRows], b.merges, b.freeze, b.charts, true, b.name])
-  && !!a.filter === !!b.filter;
+  && !!a.filter === !!b.filter
+  && JSON.stringify([a.cf, a.validations, [...a.notes], a.protected, a.printArea, a.pageSetup]) === JSON.stringify([b.cf, b.validations, [...b.notes], b.protected, b.printArea, b.pageSetup]);
 
 export class Sheet {
   constructor(id, name) {
@@ -31,6 +32,7 @@ export class Sheet {
     this.freeze = { rows: 0, cols: 0 };
     this.filter = null; // { range, col criteria: Map col -> Set de valores ocultos }
     this.charts = []; // { id, type, range, title, x, y, w, h }
+    this.cf = []; this.validations = []; this.notes = new Map(); this.protected = null; this.printArea = null; this.pageSetup = {}; this.pivot = null;
     this.nRows = 1000; this.nCols = 52;
   }
   cw(c) { return this.colW.get(c) ?? DEF_W; }
@@ -41,6 +43,7 @@ export class Sheet {
       styles: new Map(this.styles), colW: new Map(this.colW), rowH: new Map(this.rowH), hiddenRows: new Set(this.hiddenRows),
       merges: this.merges.map((m) => ({ ...m })), freeze: { ...this.freeze }, filter: this.filter ? { range: { ...this.filter.range }, hidden: new Map([...this.filter.hidden].map(([k, v]) => [k, new Set(v)])) } : null,
       charts: this.charts.map((c) => ({ ...c })), nRows: this.nRows, nCols: this.nCols, name: this.name,
+      cf: this.cf.map((c) => ({ ...c })), validations: this.validations.map((v) => ({ ...v })), notes: new Map(this.notes), protected: this.protected, printArea: this.printArea, pageSetup: { ...this.pageSetup }, pivot: this.pivot,
     };
   }
   setMeta(m) { Object.assign(this, m); }
@@ -68,6 +71,8 @@ export class Workbook {
   reset() {
     for (const s of this.sheets) this.hf.removeSheet(s.id);
     this.sheets = []; this.active = 0; this.undoStack = []; this.redoStack = [];
+    for (const n of this.names || []) { try { this.hf.removeNamedExpression(n.name); } catch { /* */ } }
+    this.names = []; this.protectedStructure = false; this.vba = null;
     this.hf.clearUndoStack?.(); this.hf.clearRedoStack?.();
   }
   addSheet(name) {
@@ -251,11 +256,12 @@ export class Workbook {
   // ---------------- serializar para recuperación
   toJSON() {
     return {
-      v: 1, active: this.active,
+      v: 1, active: this.active, names: this.names || [], protectedStructure: !!this.protectedStructure,
       sheets: this.sheets.map((s) => ({
         name: s.name, data: this.hf.getSheetSerialized(s.id),
         styles: [...s.styles], colW: [...s.colW], rowH: [...s.rowH], hiddenRows: [...s.hiddenRows], merges: s.merges, freeze: s.freeze,
         charts: s.charts, filter: s.filter ? { range: s.filter.range, hidden: [...s.filter.hidden].map(([k, v]) => [k, [...v]]) } : null,
+        cf: s.cf, validations: s.validations, notes: [...s.notes], protected: s.protected, printArea: s.printArea, pageSetup: s.pageSetup, pivot: s.pivot,
       })),
     };
   }
@@ -267,9 +273,12 @@ export class Workbook {
       s.styles = new Map(d.styles); s.colW = new Map(d.colW); s.rowH = new Map(d.rowH); s.hiddenRows = new Set(d.hiddenRows);
       s.merges = d.merges || []; s.freeze = d.freeze || { rows: 0, cols: 0 }; s.charts = d.charts || [];
       s.filter = d.filter ? { range: d.filter.range, hidden: new Map(d.filter.hidden.map(([k, v]) => [k, new Set(v)])) } : null;
+      s.cf = d.cf || []; s.validations = d.validations || []; s.notes = new Map(d.notes || []); s.protected = d.protected || null; s.printArea = d.printArea || null; s.pageSetup = d.pageSetup || {}; s.pivot = d.pivot || null;
       const u = this.usedRange(s); s.nRows = Math.max(1000, u.r2 + 200); s.nCols = Math.max(52, u.c2 + 20);
     }
     this.active = Math.min(j.active || 0, this.sheets.length - 1);
+    this.protectedStructure = !!j.protectedStructure;
+    for (const n of j.names || []) { try { this.hf.addNamedExpression(n.name, n.expr); this.names.push(n); } catch { /* */ } }
     this.hf.clearUndoStack?.(); this.undoStack = []; this.redoStack = [];
   }
 }

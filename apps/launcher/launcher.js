@@ -82,7 +82,7 @@ async function launch(id, g) {
 
 // Teclado: flechas recorren los sectores, Esc cierra la dona.
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { if (!document.getElementById('about').hidden) closeAbout(); else if (isOpen()) { setOpen(false); core.focus(); } }
+  if (e.key === 'Escape') { if (!prefsCard.hidden) prefsCard.hidden = true; else if (!document.getElementById('about').hidden) closeAbout(); else if (isOpen()) { setOpen(false); core.focus(); } }
   if (!isOpen()) return;
   const idx = sectors.indexOf(document.activeElement);
   if (['ArrowRight', 'ArrowDown'].includes(e.key)) { e.preventDefault(); sectors[(idx + 1 + 4) % 4].focus(); }
@@ -105,6 +105,22 @@ window.launcher.onAbout(async () => {
   const info = await window.launcher.info();
   document.getElementById('ver').textContent = `v${info.version}`;
   about.hidden = false;
+});
+
+// Preferencias
+const prefsCard = document.getElementById('prefs');
+window.launcher.onPrefs(async () => {
+  const p = await window.launcher.prefs();
+  document.getElementById('pf-author').value = p.author || '';
+  document.getElementById('pf-theme').value = p.theme || 'auto';
+  const sel = document.getElementById('pf-auto'); sel.value = String(p.autosaveSec || 20); if (!sel.value) sel.value = '20';
+  prefsCard.hidden = false;
+  document.getElementById('pf-author').focus();
+});
+document.getElementById('prefs-cancel').addEventListener('click', () => { prefsCard.hidden = true; });
+document.getElementById('prefs-ok').addEventListener('click', async () => {
+  await window.launcher.setPrefs({ author: document.getElementById('pf-author').value.trim(), theme: document.getElementById('pf-theme').value, autosaveSec: Number(document.getElementById('pf-auto').value) });
+  prefsCard.hidden = true;
 });
 
 // Estado que manda el proceso principal

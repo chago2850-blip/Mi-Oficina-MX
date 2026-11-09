@@ -3,6 +3,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ExternalHyperlink, ImageRun,
   Table, TableRow, TableCell, WidthType, ShadingType, PageBreak, Header, Footer, PageNumber,
   LevelFormat, PageOrientation, BorderStyle, TabStopType,
+  CommentRangeStart, CommentRangeEnd, CommentReference, InsertedTextRun, DeletedTextRun, FootnoteReferenceRun, SectionType,
 } from 'docx';
 
 const PX_TWIP = 15; // 1 px (96 ppp) = 15 twips
@@ -48,14 +49,22 @@ async function rasterize(img) {
 }
 
 class Builder {
-  constructor() { this.olInstance = 0; }
+  constructor(settings = {}) {
+    this.olInstance = 0; this.settings = settings;
+    this.commentIds = new Map(); this.footIds = new Map(); this.revId = 1;
+  }
+  numFor(map, key) { if (!map.has(key)) map.set(key, map.size + 1); return map.get(key); }
 
   // Recorre nodos en línea y produce TextRun / ImageRun / ExternalHyperlink
   async runs(node, fmt = {}, out = []) {
     for (const n of node.childNodes) {
       if (n.nodeType === 3) {
-        const text = n.nodeValue.replace(/​/g, '');
-        if (text) out.push(new TextRun({ text, ...this.runProps(fmt) }));
+        const text = n.nodeValue.replace(/\u200B/g, '');
+        if (!text) continue;
+        if (fmt.rev) {
+          const o = { text, id: this.revId++, author: fmt.rev.author || 'Escribiente', date: fmt.rev.date || new Date().toISOString(), ...this.runProps(fmt) };
+          out.push(fmt.rev.kind === 'del' ? new DeletedTextRun(o) : new InsertedTextRun(o));
+        } else out.push(new TextRun({ text, ...this.runProps(fmt) }));
         continue;
       }
       if (n.nodeType !== 1) continue;
@@ -63,7 +72,21 @@ class Builder {
       if (tag === 'BR') { out.push(new TextRun({ break: 1, ...this.runProps(fmt) })); continue; }
       if (tag === 'IMG') { const r = await this.image(n); if (r) out.push(r); continue; }
       if (['UL', 'OL', 'TABLE'].includes(tag)) continue; // se manejan como bloques
+      if (tag === 'SUP' && n.classList.contains('fn')) {
+        const fid = n.dataset.fid;
+        if (this.settings.footnotes?.[fid] != null) out.push(new FootnoteReferenceRun(this.numFor(this.footIds, fid)));
+        continue;
+      }
+      if (n.classList?.contains('mf')) { out.push(new TextRun({ text: `«${n.dataset.f}»`, ...this.runProps(fmt) })); continue; }
       const f = { ...fmt };
+      if (tag === 'INS' || tag === 'DEL') f.rev = { kind: tag.toLowerCase(), author: n.dataset.author, date: n.dataset.date };
+      if (n.classList?.contains('cm') && n.dataset.cid && this.settings.comments?.some((c) => c.id === n.dataset.cid)) {
+        const id = this.numFor(this.commentIds, n.dataset.cid);
+        out.push(new CommentRangeStart(id));
+        await this.runs(n, f, out);
+        out.push(new CommentRangeEnd(id), new TextRun({ children: [new CommentReference(id)] }));
+        continue;
+      }
       if (tag === 'B' || tag === 'STRONG') f.bold = true;
       if (tag === 'I' || tag === 'EM') f.italics = true;
       if (tag === 'U') f.underline = true;
@@ -130,7 +153,8 @@ class Builder {
     const al = st.textAlign || el.getAttribute?.('align');
     if (al && ALIGN[al]) p.alignment = ALIGN[al];
     const ml = parseFloat(st.marginLeft) || parseFloat(st.paddingLeft) || 0;
-    if (ml) p.indent = { left: Math.round(ml * PX_TWIP) };
+    const ti = parseFloat(st.textIndent) || 0;
+    if (ml || ti) p.indent = { ...(ml ? { left: Math.round(ml * PX_TWIP) } : {}), ...(ti > 0 ? { firstLine: Math.round(ti * PX_TWIP) } : ti < 0 ? { hanging: Math.round(-ti * PX_TWIP) } : {}) };
     const lh = parseFloat(st.lineHeight);
     const spacing = {};
     if (lh && !String(st.lineHeight).match(/px|pt/)) spacing.line = Math.round(240 * lh);
@@ -199,6 +223,7 @@ class Builder {
 
   async block(el, contentWidthPx) {
     const tag = el.tagName;
+    if (!/^(P|H[1-6]|DIV|UL|OL|TABLE|BLOCKQUOTE|HR|LI|PRE)$/.test(tag)) { const wrap = document.createElement('p'); wrap.append(el.cloneNode(true)); return [await this.paragraph(wrap)]; }
     if (el.classList?.contains('pb')) return [new Paragraph({ children: [new PageBreak()] })];
     if (el.classList?.contains('toc')) {
       const out = [];
@@ -217,6 +242,15 @@ class Builder {
       return out;
     }
     if (tag === 'UL' || tag === 'OL') return this.list(el);
+    if (el.classList?.contains('tbox')) {
+      const bc = hex(el.style.borderColor) || '444444';
+      const border = { style: BorderStyle.SINGLE, size: 6, color: bc, space: 4 };
+      const bg = hex(el.style.backgroundColor);
+      const out = [];
+      const kids = [...el.children].filter((c) => /^(P|H[1-6]|DIV|BLOCKQUOTE)$/.test(c.tagName));
+      for (const k of (kids.length ? kids : [el])) out.push(new Paragraph({ ...this.paraProps(k), border: { top: border, bottom: border, left: border, right: border }, shading: bg ? { type: ShadingType.CLEAR, color: 'auto', fill: bg } : undefined, children: await this.runs(k) }));
+      return out;
+    }
     if (tag === 'TABLE') return [await this.table(el, contentWidthPx)];
     if (tag === 'HR') return [new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '999999', space: 1 } }, children: [] })];
     if (tag === 'DIV' && [...el.children].some((c) => /^(P|H[1-6]|UL|OL|TABLE|DIV|BLOCKQUOTE)$/.test(c.tagName))) {
@@ -230,15 +264,22 @@ class Builder {
 
 // settings: { page:{w,h,mt,mb,ml,mr,landscape}, header, footer, pageNumbers, title, author }
 export async function htmlToDocx(editorEl, settings) {
-  const b = new Builder();
+  const b = new Builder(settings);
   const pg = settings.page;
   const contentW = pg.w - pg.ml - pg.mr;
-  const children = [];
+  // Cada bloque en columnas (div.cols) se vuelve una sección continua con su número de columnas.
+  const groups = [{ cols: 1, children: [] }];
   for (const el of editorEl.children) {
     if (el.nodeType !== 1) continue;
-    children.push(...(await b.block(el, contentW)));
+    if (el.classList.contains('cols')) {
+      const n = Number(el.dataset.n) || 2;
+      const kids = [];
+      for (const c of el.children) kids.push(...(await b.block(c, contentW / n)));
+      groups.push({ cols: n, children: kids.length ? kids : [new Paragraph({})] }, { cols: 1, children: [] });
+    } else groups[groups.length - 1].children.push(...(await b.block(el, contentW)));
   }
-  if (!children.length) children.push(new Paragraph({}));
+  const sectionsData = groups.filter((g, i) => g.children.length || i === 0);
+  if (!sectionsData[0].children.length) sectionsData[0].children.push(new Paragraph({}));
 
   const hfPara = (text, numPos) => {
     const kids = [];
@@ -259,9 +300,25 @@ export async function htmlToDocx(editorEl, settings) {
     style: { paragraph: { indent: { left: 360 * (l + 1) + 360, hanging: 360 } } },
   }));
 
+  const comments = (settings.comments || []).filter((c) => b.commentIds.has(c.id)).map((c) => ({
+    id: b.commentIds.get(c.id), author: c.author || 'Escribiente', date: new Date(c.date || Date.now()),
+    children: [new Paragraph({ children: [new TextRun(c.text || '')] }), ...(c.replies || []).map((r) => new Paragraph({ children: [new TextRun({ text: `↪ ${r.author || ''}: `, bold: true }), new TextRun(r.text || '')] }))],
+  }));
+  const footnotes = {};
+  for (const [fid, n] of b.footIds) footnotes[n] = { children: [new Paragraph({ children: [new TextRun({ text: settings.footnotes[fid] || '', size: 20 })] })] };
+  const pageProps = (i) => ({
+    page: {
+      size: { width: Math.round(Math.min(pg.w, pg.h) * PX_TWIP), height: Math.round(Math.max(pg.w, pg.h) * PX_TWIP), orientation: pg.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
+      margin: { top: Math.round(pg.mt * PX_TWIP), bottom: Math.round(pg.mb * PX_TWIP), left: Math.round(pg.ml * PX_TWIP), right: Math.round(pg.mr * PX_TWIP), header: 708, footer: 708 },
+    },
+    ...(i > 0 ? { type: SectionType.CONTINUOUS } : {}),
+  });
   const doc = new Document({
     creator: settings.author || 'Escribiente',
     title: settings.title || '',
+    subject: settings.subject || undefined,
+    keywords: settings.keywords || undefined,
+    lastModifiedBy: settings.author || undefined,
     description: 'Creado con Escribiente · Mi Oficina MX',
     styles: {
       default: { document: { run: { font: 'Calibri', size: 22 }, paragraph: { spacing: { after: 160, line: 276 } } } },
@@ -271,17 +328,16 @@ export async function htmlToDocx(editorEl, settings) {
       ],
     },
     numbering: { config: [{ reference: 'bullets', levels: bulletLevels }, { reference: 'numbers', levels: numLevels }] },
-    sections: [{
-      properties: {
-        page: {
-          size: { width: Math.round(Math.min(pg.w, pg.h) * PX_TWIP), height: Math.round(Math.max(pg.w, pg.h) * PX_TWIP), orientation: pg.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
-          margin: { top: Math.round(pg.mt * PX_TWIP), bottom: Math.round(pg.mb * PX_TWIP), left: Math.round(pg.ml * PX_TWIP), right: Math.round(pg.mr * PX_TWIP), header: 708, footer: 708 },
-        },
-      },
-      headers: headerChildren ? { default: new Header({ children: headerChildren }) } : undefined,
-      footers: footerChildren ? { default: new Footer({ children: footerChildren }) } : undefined,
-      children,
-    }],
+    comments: comments.length ? { children: comments } : undefined,
+    footnotes: Object.keys(footnotes).length ? footnotes : undefined,
+    background: settings.pageColor ? { color: hex(settings.pageColor) } : undefined,
+    features: settings.track ? { trackRevisions: true } : undefined,
+    sections: sectionsData.map((g, i) => ({
+      properties: { ...pageProps(i), ...(g.cols > 1 ? { column: { count: g.cols, space: 708 } } : {}) },
+      headers: i === 0 && headerChildren ? { default: new Header({ children: headerChildren }) } : undefined,
+      footers: i === 0 && footerChildren ? { default: new Footer({ children: footerChildren }) } : undefined,
+      children: g.children,
+    })),
   });
   const blob = await Packer.toBlob(doc);
   return new Uint8Array(await blob.arrayBuffer());

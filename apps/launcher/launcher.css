@@ -90,9 +90,9 @@ html, body {
 .mini:focus-visible { outline: 2px solid #8E7FFF; outline-offset: 2px; }
 
 /* ---- acerca de ---- */
-#about { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,12,20,.55); border-radius: 24px; }
-#about[hidden] { display: none; }
-#about .card {
+#about, #prefs { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,12,20,.55); border-radius: 24px; }
+#about[hidden], #prefs[hidden] { display: none; }
+#about .card, #prefs .card {
   width: 330px; padding: 22px; border-radius: 18px; background: var(--paper); color: var(--ink);
   text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,.4);
 }
@@ -105,3 +105,11 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0s !important; animation: none !important; }
 }
+
+#prefs .card { text-align: left; }
+#prefs h1 { font-size: 17px; margin: 0 0 10px; }
+.pf { display: grid; gap: 4px; font-size: 12px; color: #4B5066; margin: 10px 0; font-weight: 500; }
+.pf input, .pf select { font: 13px var(--font); padding: 7px 9px; border: 1px solid #CDD0DC; border-radius: 8px; background: #fff; color: var(--ink); }
+#prefs .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#prefs button { border: 0; border-radius: 10px; padding: 8px 16px; background: var(--ink); color: #fff; font: 600 13px var(--font); cursor: pointer; }
+#prefs button.ghost { background: transparent; color: var(--ink); }

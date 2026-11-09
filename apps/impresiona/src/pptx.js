@@ -35,7 +35,18 @@ export async function readPptx(bytes, uid) {
     if (el.type === 'image' && el.base64) return [{ ...base, type: 'image', src: el.base64 }];
     if (el.type === 'table') return [{ ...base, type: 'table', rows: el.data.map((row) => row.map((c) => ({ text: c.text || '', bg: c.fillColor || null, color: c.fontColor || null, bold: !!c.fontBold, hidden: !!(c.vMerge || c.hMerge), rs: c.rowSpan || 1, cs: c.colSpan || 1 }))), style: {} }];
     if (el.type === 'group') return el.elements.flatMap((e) => conv(e, el.left + ox, el.top + oy));
-    if (el.type === 'chart') warnings.add('los gráficos se muestran como un espacio vacío');
+    if (el.type === 'chart') {
+      const ct = String(el.chartType || '');
+      const type = /bar/i.test(ct) ? (el.barDir === 'bar' ? 'bar' : 'column') : /doughnut/i.test(ct) ? 'doughnut' : /pie/i.test(ct) ? 'pie' : /area/i.test(ct) ? 'area' : /scatter/i.test(ct) ? 'scatter' : 'line';
+      const series = Array.isArray(el.data) ? el.data : [];
+      if (type === 'scatter' && el.data?.length) {
+        const xs = el.data[0] || [], ys = el.data[1] || [];
+        return [{ ...base, type: 'chart', chartType: 'scatter', title: '', data: { cats: xs.map((_, i) => String(i + 1)), series: [{ name: 'X', values: xs }, { name: 'Y', values: ys }] } }];
+      }
+      const first = series[0] || { values: [], xlabels: {} };
+      const cats = first.values.map((v, i) => String(first.xlabels?.[i] ?? first.xlabels?.[v.x] ?? v.x ?? i + 1));
+      return [{ ...base, type: 'chart', chartType: type, title: '', data: { cats, series: series.map((sr) => ({ name: String(sr.key ?? 'Serie'), values: sr.values.map((v) => (typeof v.y === 'number' ? v.y : Number(v.y) || null)) })) } }];
+    }
     else if (el.type === 'diagram') warnings.add('los diagramas SmartArt no se pudieron editar');
     else if (el.type === 'video' || el.type === 'audio') warnings.add('los videos y audios no se incluyen todavía');
     return [];
@@ -44,9 +55,16 @@ export async function readPptx(bytes, uid) {
     const objects = [...(s.layoutElements || []).filter((e) => e.type === 'image' || e.type === 'shape'), ...s.elements].flatMap((e) => conv(e));
     const bg = fillColor(s.fill);
     const bgImage = s.fill?.type === 'image' ? s.fill.value?.picBase64 : null;
-    return { id: uid(), layout: 'blank', bg: bg || null, bgImage: bgImage || null, notes: s.note || '', transition: s.transition ? { type: mapTransition(s.transition.type), dur: Math.max(0.3, (s.transition.duration || 700) / 1000) } : { type: 'none', dur: 0.6 }, objects };
+    return { id: uid(), layout: 'blank', bg: bg || null, bgImage: bgImage || null, notes: noteText(s.note), transition: s.transition ? { type: mapTransition(s.transition.type), dur: Math.max(0.3, (s.transition.duration || 700) / 1000) } : { type: 'none', dur: 0.6 }, objects };
   });
   return { pres: { size: { w: W, h: H }, theme: 'claro', slides: slides.length ? slides : [] }, warnings: [...warnings] };
+}
+function noteText(n) {
+  if (!n) return '';
+  if (!/[<>]/.test(n)) return n;
+  const d = new DOMParser().parseFromString(`<body>${n}</body>`, 'text/html');
+  d.querySelectorAll('p,br,li').forEach((el) => el.append('\n'));
+  return d.body.textContent.replace(/\n{3,}/g, '\n\n').trim();
 }
 const mapTransition = (t) => ({ fade: 'fade', push: 'push', wipe: 'wipe', cover: 'cover', zoom: 'zoom', split: 'zoom' }[t] || (t ? 'fade' : 'none'));
 
@@ -103,19 +121,22 @@ function toHex(c) {
 }
 const SHAPE_OUT = { rect: 'rect', roundRect: 'roundRect', ellipse: 'ellipse', triangle: 'triangle', arrow: 'rightArrow', line: 'line', star: 'star5' };
 
-export async function writePptx(pres, renderSlideImage) {
+export async function writePptx(pres, renderSlideImage, props = {}) {
   const p = new PptxGenJS();
   const W = pres.size.w * PX_IN, H = pres.size.h * PX_IN;
   p.defineLayout({ name: 'MIOFICINA', width: W, height: H });
   p.layout = 'MIOFICINA';
-  p.author = 'Impresiona · Mi Oficina MX';
+  p.author = props.author || 'Impresiona · Mi Oficina MX';
+  if (props.title) p.title = props.title;
+  if (props.subject) p.subject = props.subject;
   p.company = 'Mi Oficina MX';
   const th = themeById(pres.theme);
   for (const s of pres.slides) {
     const slide = p.addSlide();
     if (s.bgImage) slide.background = { data: s.bgImage };
     else slide.background = { color: (s.bg || th.bg).replace('#', '') };
-    for (const o of s.objects) {
+    const masterObjs = pres.master?.objects || [];
+    for (const o of [...masterObjs, ...s.objects]) {
       const pos = { x: o.x * PX_IN, y: o.y * PX_IN, w: Math.max(0.05, o.w * PX_IN), h: Math.max(0.05, o.h * PX_IN), rotate: o.rot || 0 };
       const st = o.style || {};
       const defaults = { align: st.align || 'left' };
@@ -132,6 +153,14 @@ export async function writePptx(pres, renderSlideImage) {
         slide.addText(runs, opts);
       } else if (o.type === 'shape') {
         slide.addShape(SHAPE_OUT[o.shape] || 'rect', { ...pos, fill: st.fill ? { color: st.fill.replace('#', '') } : { type: 'none' }, line: st.stroke ? { color: st.stroke.replace('#', ''), width: (st.strokeW || 1) * 0.75 } : { type: 'none' }, rectRadius: o.shape === 'roundRect' ? 0.15 : undefined });
+      } else if (o.type === 'chart') {
+        const d = o.data || { cats: [], series: [] };
+        const CT = { column: 'bar', bar: 'bar', line: 'line', area: 'area', pie: 'pie', doughnut: 'doughnut', scatter: 'scatter' };
+        const data = o.chartType === 'scatter'
+          ? [{ name: 'X', values: d.series[0]?.values || [] }, ...d.series.slice(1).map((sr) => ({ name: sr.name, values: sr.values }))]
+          : d.series.map((sr) => ({ name: sr.name, labels: d.cats, values: sr.values.map((v) => v ?? 0) }));
+        if (!data.length) continue;
+        slide.addChart(CT[o.chartType] || 'bar', data, { ...pos, barDir: o.chartType === 'bar' ? 'bar' : 'col', title: o.title || undefined, showTitle: !!o.title, showLegend: d.series.length > 1 || o.chartType === 'pie' || o.chartType === 'doughnut', legendPos: 'b', chartColors: [th.accent, th.accent2, 'F08A24', '1F8FD6', '2FB4A8', '8E6CD9'].map((c) => c.replace('#', '')), catAxisLabelColor: th.text.replace('#', ''), valAxisLabelColor: th.text.replace('#', ''), titleColor: th.title.replace('#', ''), dataLabelColor: th.text.replace('#', '') });
       } else if (o.type === 'image' && o.src) {
         slide.addImage({ data: o.src, ...pos });
       } else if (o.type === 'table') {
@@ -139,6 +168,9 @@ export async function writePptx(pres, renderSlideImage) {
         slide.addTable(rows, { ...pos, fontSize: st.size || 14, border: { type: 'solid', pt: 0.75, color: '9AA0B4' }, autoPage: false });
       }
     }
+    const idx = pres.slides.indexOf(s);
+    if (pres.master?.footer) slide.addText(pres.master.footer, { x: 0.4, y: H - 0.45, w: W * 0.6, h: 0.3, fontSize: 10, color: th.text.replace('#', ''), fontFace: th.bodyFont });
+    if (pres.master?.showNumber) slide.addText(String(idx + 1), { x: W - 1.2, y: H - 0.45, w: 0.8, h: 0.3, fontSize: 10, align: 'right', color: th.text.replace('#', ''), fontFace: th.bodyFont });
     if (s.notes) slide.addNotes(s.notes);
   }
   void renderSlideImage;

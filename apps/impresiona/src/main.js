@@ -2,13 +2,18 @@
 import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, colorPicker } from '../../shared/office.js';
 import { THEMES, LAYOUTS, themeById, layoutObjects, PLACEHOLDER } from './themes.js';
 import { readPptx, writePptx } from './pptx.js';
+import { readCoreProps } from '../../shared/coreprops.js';
+import { CHART_TYPES, parseChartData, chartDataText, chartSvg } from './charts.js';
+import { runShow, runPresenter, runAudience, EXIT_TYPES } from './show.js';
+import { readOdp, writeOdp } from './odp.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const FONTS = ['Inter', 'Calibri', 'Arial', 'Georgia', 'Verdana', 'Trebuchet MS', 'Times New Roman', 'Courier New'];
 const SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 54, 60, 72, 96];
 const TRANSITIONS = [['none', 'Ninguna'], ['fade', 'Desvanecer'], ['push', 'Empujar'], ['wipe', 'Barrido'], ['cover', 'Cubrir'], ['zoom', 'Zoom']];
-const ANIMS = [['none', 'Ninguna'], ['appear', 'Aparecer'], ['fade', 'Desvanecer'], ['fly', 'Entrar desde abajo'], ['zoom', 'Acercar'], ['wipe', 'Barrido']];
+const ANIMS = [['none', 'Ninguna'], ['appear', 'Aparecer'], ['fade', 'Desvanecer'], ['fly', 'Entrar desde abajo'], ['zoom', 'Acercar'], ['wipe', 'Barrido'], ['fadeOut', 'Salida: desvanecer'], ['flyOut', 'Salida: hacia abajo'], ['zoomOut', 'Salida: alejar']];
+const ANIM_NAMES = Object.fromEntries(ANIMS);
 
 // ------------------------------------------------------------------ estado
 let pres = null; // { size:{w,h}, theme, slides:[...] }
@@ -19,7 +24,8 @@ let shell, stageWrap, stage, slideEl, selLayer, thumbs, notesEl, zoomCtl, status
 let scale = 1, fitMode = true;
 const undoStack = [], redoStack = [];
 
-const slide = () => pres.slides[cur];
+let masterMode = false, sorterMode = false;
+const slide = () => (masterMode ? (pres.master ||= { objects: [], footer: '', showNumber: false, showDate: false }) : pres.slides[cur]);
 const objById = (id) => slide().objects.find((o) => o.id === id);
 const theme = () => themeById(pres.theme);
 
@@ -67,10 +73,15 @@ function renderSlide(s, mode = 'thumb') {
   const { w: W, h: H } = pres.size;
   const el = h('div', { class: `slide m-${mode}`, style: { width: `${W}px`, height: `${H}px`, background: s.bgImage ? `center/cover url("${s.bgImage}")` : (s.bg || th.band || th.bg) } });
   if (!s.bg && !s.bgImage && th.id === 'claro') el.append(h('div', { class: 'deco', style: { background: th.accent } }));
-  for (const o of s.objects) {
+  const isMaster = s === pres.master;
+  const master = !isMaster && pres.master ? pres.master : null;
+  const list = master ? [...master.objects.map((o) => ({ ...o, __m: true })), ...s.objects] : s.objects;
+  for (const o of list) {
     const st = o.style || {};
-    const box = h('div', { class: `obj t-${o.type}${o.role ? ` r-${o.role}` : ''}`, 'data-id': o.id, style: { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px`, transform: o.rot ? `rotate(${o.rot}deg)` : '' } });
-    if (o.anim && o.anim.type !== 'none' && mode === 'show') box.classList.add('anim-wait');
+    const box = h('div', { class: `obj t-${o.type}${o.role ? ` r-${o.role}` : ''}${o.__m ? ' mobj' : ''}`, 'data-id': o.__m ? null : o.id, style: { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px`, transform: o.rot ? `rotate(${o.rot}deg)` : '' } });
+    if (o.anim && o.anim.type !== 'none' && !EXIT_TYPES.includes(o.anim.type) && mode === 'show' && !o.__m) box.classList.add('anim-wait');
+    if (o.type === 'chart') box.innerHTML = chartSvg(o, th);
+    if (o.anim && o.anim.type !== 'none' && mode === 'edit') box.append(h('span', { class: 'anim-badge', title: ANIM_NAMES[o.anim.type] }, String(o.anim.order || '')));
     if (o.type === 'image') box.append(h('img', { src: o.src, alt: '', draggable: 'false' }));
     if (o.type === 'shape') box.innerHTML = shapeSvg(o, th);
     if (o.type === 'table') {
@@ -92,6 +103,14 @@ function renderSlide(s, mode = 'thumb') {
     }
     el.append(box);
   }
+  const mst = pres.master;
+  if (mst && !isMaster) {
+    const idx = pres.slides.indexOf(s);
+    if (mst.footer) el.append(h('div', { class: 'master-footer', style: { color: th.text } }, mst.footer));
+    if (mst.showNumber && idx >= 0) el.append(h('div', { class: 'master-num', style: { color: th.text } }, String(idx + 1)));
+    if (mst.showDate) el.append(h('div', { class: 'master-date', style: { color: th.text } }, new Date().toLocaleDateString('es-MX')));
+  }
+  if (isMaster && mode === 'edit') el.append(h('div', { class: 'master-banner' }, 'Patrón: lo que pongas aquí aparece en todas las diapositivas'));
   return el;
 }
 
@@ -136,7 +155,8 @@ function renderAll() {
   renderStage();
   renderThumbs();
   notesEl.value = slide()?.notes || '';
-  statusSlide.textContent = `Diapositiva ${cur + 1} de ${pres.slides.length}`;
+  statusSlide.textContent = masterMode ? 'Vista Patrón' : `Diapositiva ${cur + 1} de ${pres.slides.length}`;
+  renderAnimPanel();
   reflect();
 }
 function renderStage() {
@@ -156,6 +176,7 @@ function renderThumbs() {
     const mini = renderSlide(s, 'thumb');
     mini.style.transform = `scale(${ts})`; mini.style.transformOrigin = '0 0';
     const frame = h('div', { class: 'tframe', style: { width: `${tw}px`, height: `${pres.size.h * ts}px` } }, mini);
+    if (s.section) thumbs.append(h('div', { class: 'thumb-sec', ondblclick: () => renameSection(i) }, s.section));
     const item = h('div', { class: `thumb${i === cur ? ' on' : ''}`, draggable: 'true', 'data-i': i, tabindex: 0 }, h('span', { class: 'n' }, String(i + 1), s.transition?.type && s.transition.type !== 'none' ? h('i', { class: 'tr', title: 'Tiene transición' }, '★') : null), frame);
     item.addEventListener('click', () => goto(i));
     item.addEventListener('contextmenu', (e) => { e.preventDefault(); goto(i); dropdown(item, [{ label: 'Nueva diapositiva', icon: 'slideAdd', run: () => addSlide() }, { label: 'Duplicar diapositiva', icon: 'slideDup', run: duplicateSlide }, { label: 'Eliminar diapositiva', icon: 'slideDel', run: deleteSlide }, '-', { label: 'Presentar desde aquí', icon: 'presentCur', run: () => present(i) }]); });
@@ -304,6 +325,7 @@ function startTransform(e, handle, p0) {
 function onStageDbl(e) {
   const objEl = e.target.closest('.obj'); if (!objEl) return;
   const o = objById(objEl.dataset.id);
+  if (o?.type === 'chart') { editChart(o); return; }
   if (o && (o.type === 'text' || o.type === 'shape' || o.type === 'table')) startEditing(o.id, true, e);
 }
 function startEditing(id, placeCaret = true, ev = null) {
@@ -442,6 +464,127 @@ async function insertTable() {
   commit('Tabla', () => slide().objects.push(o)); select([o.id]);
 }
 
+// ------------------------------------------------------------------ gráficos
+function insertChart(opts) {
+  const data = typeof opts.data === 'string' ? parseChartData(opts.data) : opts.data;
+  const o = { id: uid(), type: 'chart', ...center(Math.min(640, pres.size.w - 120), Math.min(380, pres.size.h - 120)), rot: 0, chartType: opts.type || 'column', title: opts.title || '', data };
+  commit('Gráfico', () => slide().objects.push(o)); select([o.id]);
+  return o;
+}
+async function chartDialog(o) {
+  const v = await form(o ? 'Editar gráfico' : 'Insertar gráfico', [
+    { name: 'type', label: 'Tipo', type: 'select', value: o?.chartType || 'column', options: CHART_TYPES },
+    { name: 'title', label: 'Título', value: o?.title || '' },
+    { name: 'data', label: 'Datos (la primera fila son los nombres de las series; la primera columna, las categorías)', type: 'textarea', rows: 7, value: o ? chartDataText(o.data) : 'Categoría,Serie 1,Serie 2\nEne,10,14\nFeb,12,18\nMar,9,20\nAbr,15,22' },
+  ], o ? 'Aplicar' : 'Insertar');
+  return v;
+}
+async function addChartUI() { const v = await chartDialog(null); if (v) insertChart({ type: v.type, title: v.title, data: v.data }); }
+async function editChart(o) { const v = await chartDialog(o); if (!v) return; commit('Editar gráfico', () => { const t = objById(o.id); t.chartType = v.type; t.title = v.title; t.data = parseChartData(v.data); }); }
+
+// ------------------------------------------------------------------ patrón de diapositivas
+function toggleMaster(on = !masterMode) {
+  if (editing) stopEditing();
+  masterMode = on; selected.clear();
+  pres.master ||= { objects: [], footer: '', showNumber: false, showDate: false };
+  shell.workspace.classList.toggle('master-mode', on);
+  shell.ribbon.setOn('master', on);
+  renderAll();
+  if (on) toast('Vista Patrón: inserta logotipos, formas o texto que deban repetirse. Pulsa de nuevo para salir.');
+}
+async function footerDialog() {
+  pres.master ||= { objects: [], footer: '', showNumber: false, showDate: false };
+  const m = pres.master;
+  const v = await form('Encabezado y pie de página', [{ name: 'footer', label: 'Pie de página (en todas las diapositivas)', value: m.footer }, { name: 'showNumber', label: 'Número de diapositiva', type: 'checkbox', value: m.showNumber }, { name: 'showDate', label: 'Fecha', type: 'checkbox', value: m.showDate }], 'Aplicar a todas');
+  if (!v) return;
+  commit('Pie de página', () => Object.assign(pres.master, v));
+}
+
+// ------------------------------------------------------------------ clasificador y secciones
+function toggleSorter(on = !sorterMode) {
+  if (editing) stopEditing();
+  sorterMode = on;
+  shell.workspace.classList.toggle('sorting', on);
+  shell.ribbon.setOn('sorter', on);
+  if (on) renderSorter(); else { sorterEl?.replaceChildren(); renderAll(); }
+}
+let sorterEl = null;
+function renderSorter() {
+  if (!sorterEl) { sorterEl = h('div', { class: 'sorter' }); shell.workspace.append(sorterEl); }
+  sorterEl.replaceChildren();
+  const tw = 220, ts = tw / pres.size.w;
+  let grid = null;
+  pres.slides.forEach((s, i) => {
+    if (s.section || i === 0) {
+      sorterEl.append(h('div', { class: 'sec-head' }, h('b', {}, s.section || 'Sección predeterminada'), h('small', {}, `${countSection(i)} diapositivas`), h('button', { class: 'rb sm', title: 'Cambiar nombre', html: icon('textbox', 15), onclick: () => renameSection(i) })));
+      if (!s.section) sorterEl.lastChild.classList.add('default');
+      grid = h('div', { class: 'sgrid' }); sorterEl.append(grid);
+    }
+    const mini = renderSlide(s, 'thumb'); mini.style.transform = `scale(${ts})`; mini.style.transformOrigin = '0 0';
+    const item = h('div', { class: `sitem${i === cur ? ' on' : ''}`, draggable: 'true', tabindex: 0 }, h('div', { class: 'tframe', style: { width: `${tw}px`, height: `${pres.size.h * ts}px` } }, mini), h('span', {}, String(i + 1)));
+    item.addEventListener('click', () => { cur = i; renderSorter(); });
+    item.addEventListener('dblclick', () => { cur = i; toggleSorter(false); });
+    item.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/x-slide', String(i)));
+    item.addEventListener('dragover', (e) => { e.preventDefault(); item.classList.add('over'); });
+    item.addEventListener('dragleave', () => item.classList.remove('over'));
+    item.addEventListener('drop', (e) => { e.preventDefault(); const from = Number(e.dataTransfer.getData('text/x-slide')); if (Number.isNaN(from) || from === i) return; commit('Mover diapositiva', () => { const [m] = pres.slides.splice(from, 1); pres.slides.splice(i, 0, m); cur = i; }); renderSorter(); });
+    grid.append(item);
+  });
+}
+function countSection(start) { let n = 1; for (let k = start + 1; k < pres.slides.length && !pres.slides[k].section; k++) n++; return n; }
+async function addSection() {
+  const v = await form('Agregar sección', [{ name: 'n', label: 'Nombre de la sección (empieza en la diapositiva actual)', value: 'Nueva sección' }], 'Agregar');
+  if (v?.n?.trim()) { commit('Sección', () => { pres.slides[cur].section = v.n.trim(); }); if (sorterMode) renderSorter(); }
+}
+async function renameSection(i) {
+  const v = await form('Cambiar nombre de sección', [{ name: 'n', label: 'Nombre (vacío para quitar la sección)', value: pres.slides[i].section || '' }], 'Aceptar');
+  if (!v) return;
+  commit('Sección', () => { if (v.n.trim()) pres.slides[i].section = v.n.trim(); else delete pres.slides[i].section; });
+  if (sorterMode) renderSorter();
+}
+
+// ------------------------------------------------------------------ panel de animación
+let animPanel = null;
+function toggleAnimPanel(force) {
+  if (!animPanel) { animPanel = h('aside', { class: 'animpanel', hidden: true }); stageWrap.parentElement.append(animPanel); }
+  animPanel.hidden = force !== undefined ? !force : !animPanel.hidden;
+  shell.ribbon.setOn('animPanel', !animPanel.hidden);
+  renderAnimPanel();
+}
+function renderAnimPanel() {
+  if (!animPanel || animPanel.hidden) return;
+  const s = slide();
+  const items = s.objects.filter((o) => o.anim && o.anim.type !== 'none').sort((a, b) => (a.anim.order || 0) - (b.anim.order || 0));
+  const label = (o) => { const t = o.html ? new DOMParser().parseFromString(o.html, 'text/html').body.textContent.trim() : ''; return t ? t.slice(0, 26) : ({ image: 'Imagen', shape: 'Forma', chart: 'Gráfico', table: 'Tabla', text: 'Cuadro de texto' }[o.type]); };
+  const head = h('div', { class: 'sp-head' }, h('b', {}, 'Panel de animación'), h('button', { class: 'rb sm', html: icon('close', 16), onclick: () => toggleAnimPanel(false) }));
+  const body = h('div', { class: 'ap-body' });
+  if (!items.length) body.append(h('p', { class: 'sp-empty' }, 'Selecciona un objeto y elige una animación en la pestaña Animaciones.'));
+  items.forEach((o, k) => {
+    const start = h('select', {}, ...[['click', 'Al hacer clic'], ['with', 'Con la anterior'], ['after', 'Después de la anterior']].map(([v, l]) => h('option', { value: v, selected: (o.anim.start || 'click') === v ? true : null }, l)));
+    const dur = h('input', { type: 'number', step: 0.1, min: 0.1, max: 10, value: o.anim.dur || 0.6, title: 'Duración (s)' });
+    const delay = h('input', { type: 'number', step: 0.1, min: 0, max: 30, value: o.anim.delay || 0, title: 'Retraso (s)' });
+    const upd = (patch) => commit('Animación', () => { Object.assign(objById(o.id).anim, patch); });
+    start.addEventListener('change', () => upd({ start: start.value }));
+    dur.addEventListener('change', () => upd({ dur: Number(dur.value) }));
+    delay.addEventListener('change', () => upd({ delay: Number(delay.value) }));
+    const move = (d) => { const j = k + d; if (j < 0 || j >= items.length) return; commit('Orden', () => { const a = objById(items[k].id).anim, b = objById(items[j].id).anim; [a.order, b.order] = [b.order, a.order]; }); };
+    body.append(h('div', { class: `ap-item${selected.has(o.id) ? ' on' : ''}`, onclick: (e) => { if (e.target.tagName === 'DIV' || e.target.tagName === 'B') select([o.id]); } },
+      h('div', { class: 'ap-row' }, h('span', { class: 'anim-num' }, String(k + 1)), h('b', {}, label(o)), h('small', {}, ANIM_NAMES[o.anim.type] || o.anim.type)),
+      h('div', { class: 'ap-row' }, start, h('label', {}, 'Dur. ', dur), h('label', {}, 'Ret. ', delay)),
+      h('div', { class: 'ap-row end' }, h('button', { class: 'rb sm', title: 'Antes', html: icon('chevronDown', 15).replace('M6 9l6 6 6-6', 'M6 15l6-6 6 6'), onclick: () => move(-1) }), h('button', { class: 'rb sm', title: 'Después', html: icon('chevronDown', 15), onclick: () => move(1) }), h('button', { class: 'rb sm', title: 'Quitar', html: icon('trash', 15), onclick: () => commit('Quitar animación', () => { delete objById(o.id).anim; }) }))));
+  });
+  body.append(h('button', { class: 'btn', style: { marginTop: '8px' }, onclick: () => present(cur) }, 'Reproducir desde esta diapositiva'));
+  animPanel.replaceChildren(head, body);
+}
+
+// ------------------------------------------------------------------ exportar imágenes
+async function exportImages() {
+  if (!api?.renderSlides) return;
+  toast('Creando las imágenes…');
+  const r = await api.renderSlides({ pres: JSON.parse(JSON.stringify(pres)), base: 'Diapositiva' });
+  if (r) toast(`${r.files.length} imágenes guardadas`, { action: { label: 'Mostrar', run: () => api.showInFolder(r.files[0]) } });
+}
+
 // ------------------------------------------------------------------ diapositivas
 function newSlide(layout = 'content') { return { id: uid(), layout, bg: null, notes: '', transition: { type: 'none', dur: 0.6 }, objects: layoutObjects(layout, pres.size.w, pres.size.h, uid) }; }
 function addSlide(layout) {
@@ -535,65 +678,15 @@ function onStageContext(e) {
 // ------------------------------------------------------------------ presentar
 function present(from = 0) {
   if (editing) stopEditing();
-  const show = h('div', { class: 'show', tabindex: 0 });
-  const stageS = h('div', { class: 'show-stage' });
-  const ctrls = h('div', { class: 'show-ctrls' },
-    h('button', { title: 'Anterior', html: icon('chevronDown', 20).replace('M6 9l6 6 6-6', 'M15 6l-6 6 6 6'), onclick: (e) => { e.stopPropagation(); prev(); } }),
-    h('span', { class: 'cnt' }),
-    h('button', { title: 'Siguiente', html: icon('chevronDown', 20).replace('M6 9l6 6 6-6', 'M9 6l6 6-6 6'), onclick: (e) => { e.stopPropagation(); next(); } }),
-    h('button', { title: 'Puntero láser (L)', html: icon('star', 18), onclick: (e) => { e.stopPropagation(); show.classList.toggle('laser'); } }),
-    h('button', { title: 'Terminar (Esc)', html: icon('close', 18), onclick: (e) => { e.stopPropagation(); end(); } }));
-  const laser = h('div', { class: 'laser-dot' });
-  show.append(stageS, ctrls, laser);
-  document.body.append(show);
-  document.documentElement.requestFullscreen?.().catch(() => {});
-  show.focus();
-  let i = from, step = 0, steps = [];
-  const W = pres.size.w, H = pres.size.h;
-  const sc = () => Math.min(innerWidth / W, innerHeight / H);
-  const mount = (dir = 1, animate = true) => {
-    const s = pres.slides[i];
-    const el = renderSlide(s, 'show');
-    el.style.transform = `scale(${sc()})`; el.style.transformOrigin = '0 0';
-    const layer = h('div', { class: 'show-layer', style: { width: `${W * sc()}px`, height: `${H * sc()}px` } }, el);
-    const t = s.transition?.type || 'none';
-    if (animate && t !== 'none' && stageS.children.length) { layer.classList.add(`tr-${t}`, dir < 0 ? 'rev' : 'fwd'); layer.style.animationDuration = `${s.transition.dur || 0.6}s`; }
-    const old = [...stageS.children];
-    stageS.append(layer);
-    setTimeout(() => old.forEach((o) => o.remove()), animate && t !== 'none' ? (s.transition.dur || 0.6) * 1000 : 0);
-    steps = s.objects.filter((o) => o.anim && o.anim.type !== 'none').sort((a, b) => (a.anim.order || 0) - (b.anim.order || 0));
-    step = 0;
-    if (dir < 0) { steps.forEach((o) => reveal(layer, o, false)); step = steps.length; }
-    ctrls.querySelector('.cnt').textContent = `${i + 1} / ${pres.slides.length}`;
-  };
-  const reveal = (layer, o, anim = true) => { const el = layer.querySelector(`[data-id="${o.id}"]`); if (!el) return; el.classList.remove('anim-wait'); if (anim) el.classList.add(`an-${o.anim.type}`); };
-  const next = () => {
-    if (step < steps.length) { reveal(stageS.lastElementChild, steps[step]); step++; return; }
-    if (i < pres.slides.length - 1) { i++; mount(1); } else showEnd();
-  };
-  const prev = () => { if (show.classList.contains('ended')) { show.classList.remove('ended'); mount(-1, false); return; } if (i > 0) { i--; mount(-1); } };
-  const showEnd = () => { if (show.classList.contains('ended')) { end(); return; } show.classList.add('ended'); stageS.replaceChildren(h('div', { class: 'show-end' }, 'Fin de la presentación. Haz clic para salir.')); };
-  const end = () => { show.remove(); if (document.fullscreenElement) document.exitFullscreen?.(); removeEventListener('resize', onResize); goto(Math.min(i, pres.slides.length - 1)); };
-  const onResize = () => { if (!show.classList.contains('ended')) mount(0, false); };
-  addEventListener('resize', onResize);
-  show.addEventListener('click', () => next());
-  show.addEventListener('contextmenu', (e) => { e.preventDefault(); prev(); });
-  show.addEventListener('mousemove', (e) => { show.classList.add('moving'); clearTimeout(show.t); show.t = setTimeout(() => show.classList.remove('moving'), 1800); laser.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`; });
-  let typed = '';
-  show.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter', 'n'].includes(e.key)) { e.preventDefault(); if (e.key === 'Enter' && typed) { const n = Number(typed) - 1; typed = ''; if (n >= 0 && n < pres.slides.length) { i = n; show.classList.remove('ended'); mount(1, false); } return; } next(); }
-    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace', 'p'].includes(e.key)) { e.preventDefault(); prev(); }
-    else if (e.key === 'Escape') { e.preventDefault(); end(); }
-    else if (e.key === 'Home') { i = 0; mount(1, false); }
-    else if (e.key === 'End') { i = pres.slides.length - 1; mount(1, false); }
-    else if (e.key.toLowerCase() === 'b') show.classList.toggle('black');
-    else if (e.key.toLowerCase() === 'w') show.classList.toggle('white');
-    else if (e.key.toLowerCase() === 'l') show.classList.toggle('laser');
-    else if (/^\d$/.test(e.key)) typed += e.key;
-  });
-  mount(1, false);
-  window.__show = { next, prev, end };
+  if (masterMode) toggleMaster(false);
+  runShow({ renderSlide, getPres: () => pres, from, onEnd: (i) => goto(Math.min(i, pres.slides.length - 1)) });
+}
+async function presenter(from = cur) {
+  if (editing) stopEditing();
+  if (!api?.openAudience) { present(from); return; }
+  const r = await api.openAudience({ pres: JSON.parse(JSON.stringify(pres)), i: from, step: 0 });
+  if (r?.sameScreen) toast('Solo hay una pantalla: la presentación se abrió en otra ventana. Conecta un proyector para verla ahí.');
+  runPresenter({ renderSlide, getPres: () => pres, from, api, onEnd: (i) => goto(Math.min(i, pres.slides.length - 1)) });
 }
 
 // ------------------------------------------------------------------ PDF / imprimir
@@ -637,8 +730,8 @@ const tplThumb = (bg, fg, acc) => `<div style="height:100%;background:${bg};disp
 
 // ------------------------------------------------------------------ adaptador
 const adapter = {
-  exts: ['pptx'],
-  writable: ['pptx'],
+  exts: ['pptx', 'odp'],
+  writable: ['pptx', 'odp'],
   saveExt: 'pptx',
   docIcon: 'slides',
   homeHint: 'Crea presentaciones con temas, transiciones y animaciones.',
@@ -648,16 +741,22 @@ const adapter = {
     { id: 'clase', name: 'Clase', thumb: tplThumb('#F0FAF6', '#0A4A3A', '#0E9C74') },
     { id: 'proyecto', name: 'Avance de proyecto', thumb: tplThumb('linear-gradient(135deg,#5B48E8,#2A1C8F)', '#fff', '#FFD38A') },
   ],
-  exportFormats: [{ ext: 'pptx', ic: 'slides', label: 'Presentación de PowerPoint (.pptx)', desc: 'Para abrir en otros programas de presentaciones.' }],
+  exportFormats: [{ ext: 'pptx', ic: 'slides', label: 'Presentación de PowerPoint (.pptx)', desc: 'Para abrir en otros programas de presentaciones.' }, { ext: 'odp', ic: 'slides', label: 'Presentación ODF (.odp)', desc: 'Formato abierto, compatible con LibreOffice Impress.' }, { ic: 'image', label: 'Imágenes PNG', desc: 'Una imagen por diapositiva, para redes sociales o documentos.', run: () => { shell.hideBackstage(); exportImages(); } }],
   async newDoc(tpl) { makePres(tpl); cur = 0; selected.clear(); editing = null; undoStack.length = 0; redoStack.length = 0; fitMode = true; renderAll(); },
   async load(f) {
+    if (f.ext === 'odp') {
+      const r = await readOdp(f.bytes, uid);
+      pres = r.pres; if (!pres.slides.length) pres.slides = [newSlide('title')];
+      cur = 0; selected.clear(); editing = null; masterMode = false; undoStack.length = 0; redoStack.length = 0; fitMode = true;
+      renderAll(); return { warnings: r.warnings, props: r.props };
+    }
     const r = await readPptx(f.bytes, uid);
     pres = r.pres; if (!pres.slides.length) pres.slides = [newSlide('title')];
     cur = 0; selected.clear(); editing = null; undoStack.length = 0; redoStack.length = 0; fitMode = true;
     renderAll();
-    return { warnings: r.warnings };
+    return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
   },
-  async serialize() { if (editing) stopEditing(); return writePptx(pres); },
+  async serialize(ext) { if (editing) stopEditing(); if (ext === 'odp') return writeOdp(pres, shell.docProps()); return writePptx(pres, null, shell.docProps()); },
   snapshot() { return JSON.stringify(pres); },
   async restore(s) { pres = JSON.parse(s); cur = 0; selected.clear(); renderAll(); },
   isPristine() { return !shell.doc.dirty && pres.slides.length === 1 && pres.slides[0].objects.every((o) => !o.html); },
@@ -710,6 +809,16 @@ async function onCommand(cmd, arg) {
     case 'applyTransAll': return commit('Transición', () => { const t = clone(slide().transition || { type: 'none', dur: 0.6 }); pres.slides.forEach((s) => { s.transition = clone(t); }); toast('Transición aplicada a todas las diapositivas'); });
     case 'transDur': { const v = await form('Duración de la transición', [{ name: 'd', label: 'Segundos', type: 'number', step: 0.1, value: slide().transition?.dur || 0.6, min: 0.1, max: 5 }]); if (v) commit('Duración', () => { slide().transition = { ...(slide().transition || { type: 'fade' }), dur: v.d }; }); return; }
     case 'previewTrans': return present(cur);
+    case 'chart': return addChartUI();
+    case 'master': return toggleMaster();
+    case 'footer': return footerDialog();
+    case 'sorter': return toggleSorter();
+    case 'addSection': return addSection();
+    case 'renameSection': { let i = cur; while (i > 0 && !pres.slides[i].section) i--; return renameSection(i); }
+    case 'animPanel': return toggleAnimPanel();
+    case 'presenter': return presenter(cur);
+    case 'exportImages': return exportImages();
+    case 'exportOdp': return shell.saveAsFormat('odp', 'Presentación ODF');
     case 'zoomIn': fitMode = false; scale = Math.min(4, scale * 1.15); fit(); return;
     case 'zoomOut': fitMode = false; scale = Math.max(0.1, scale / 1.15); fit(); return;
     case 'zoomReset': fitMode = true; fit(); return;
@@ -766,7 +875,7 @@ function transGallery() {
 }
 function animGallery() {
   const g = h('div', { class: 'gallery animgal' });
-  ANIMS.forEach(([k, l]) => { const b = h('button', { class: 'gi', 'data-a': k, html: `${icon(k === 'none' ? 'close' : 'animate', 22)}<small>${l}</small>`, style: { alignItems: 'center', minWidth: '74px' } }); b.addEventListener('click', () => { if (!selected.size) { toast('Selecciona un objeto para animarlo.'); return; } commit('Animación', () => { let n = Math.max(0, ...slide().objects.map((o) => o.anim?.order || 0)); selObjs().forEach((o) => { o.anim = k === 'none' ? undefined : { type: k, order: o.anim?.order || ++n }; }); }); }); g.append(b); });
+  ANIMS.forEach(([k, l]) => { const b = h('button', { class: 'gi', 'data-a': k, html: `${icon(k === 'none' ? 'close' : 'animate', 22)}<small>${l}</small>`, style: { alignItems: 'center', minWidth: '74px' } }); b.addEventListener('click', () => { if (!selected.size) { toast('Selecciona un objeto para animarlo.'); return; } commit('Animación', () => { let n = Math.max(0, ...slide().objects.map((o) => o.anim?.order || 0)); selObjs().forEach((o) => { o.anim = k === 'none' ? undefined : { start: 'click', dur: 0.6, delay: 0, ...(o.anim || {}), type: k, order: o.anim?.order || ++n }; }); }); }); g.append(b); });
   return g;
 }
 
@@ -786,7 +895,8 @@ const TABS = [
     { label: 'Diapositivas', items: [{ cmd: 'newSlideMenu', label: 'Nueva diapositiva', icon: 'slideAdd', size: 'lg', menu: () => layoutMenu(false) }] },
     { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
     { label: 'Imágenes', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }] },
-    { label: 'Ilustraciones', items: [{ cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: shapeMenu }] },
+    { label: 'Ilustraciones', items: [{ cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: shapeMenu }, { cmd: 'chart', label: 'Gráfico', icon: 'chart', size: 'lg' }] },
+    { label: 'Encabezado y pie', items: [{ cmd: 'footer', label: 'Pie y número', icon: 'footer', size: 'lg' }] },
     { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }] },
   ] },
   { id: 'design', label: 'Diseño', groups: [
@@ -799,12 +909,16 @@ const TABS = [
     { label: 'Intervalos', items: [{ cmd: 'transDur', label: 'Duración', icon: 'recover', size: 'lg' }, { cmd: 'applyTransAll', label: 'Aplicar a todas', icon: 'slideDup', size: 'lg' }] },
   ] },
   { id: 'anim', label: 'Animaciones', groups: [
-    { label: 'Animación del objeto (entrada al hacer clic)', items: [{ render: animGallery }] },
+    { label: 'Animación del objeto (entrada y salida)', items: [{ render: animGallery }] },
+    { label: 'Avanzado', items: [{ cmd: 'animPanel', label: 'Panel de animación', icon: 'layout', size: 'lg' }] },
   ] },
   { id: 'show', label: 'Presentación', groups: [
-    { label: 'Iniciar', items: [{ cmd: 'present', label: 'Desde el principio', icon: 'present', size: 'lg', kbd: 'F5' }, { cmd: 'presentCurrent', label: 'Desde la actual', icon: 'presentCur', size: 'lg', kbd: 'Mayús+F5' }] },
+    { label: 'Iniciar', items: [{ cmd: 'present', label: 'Desde el principio', icon: 'present', size: 'lg', kbd: 'F5' }, { cmd: 'presentCurrent', label: 'Desde la actual', icon: 'presentCur', size: 'lg', kbd: 'Mayús+F5' }, { cmd: 'presenter', label: 'Vista del moderador', icon: 'notes', size: 'lg', kbd: 'Alt+F5' }] },
+    { label: 'Exportar', items: [{ cmd: 'exportImages', label: 'Imágenes PNG', icon: 'image', size: 'lg' }] },
   ] },
   { id: 'view', label: 'Vista', groups: [
+    { label: 'Vistas', items: [{ cmd: 'sorter', label: 'Clasificador', icon: 'columns', size: 'lg' }, { cmd: 'master', label: 'Patrón de diapositivas', icon: 'layout', size: 'lg' }] },
+    { label: 'Secciones', items: [{ stack: [{ cmd: 'addSection', label: 'Agregar sección', icon: 'plus', showLabel: true }, { cmd: 'renameSection', label: 'Cambiar nombre', icon: 'textbox', showLabel: true }] }] },
     { label: 'Zoom', items: [{ cmd: 'zoomReset', label: 'Ajustar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomIn', label: 'Acercar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomOut', label: 'Alejar', icon: 'zoomOut', size: 'lg' }] },
   ] },
   { id: 'format', label: 'Formato de forma', contextual: true, groups: [
@@ -814,6 +928,10 @@ const TABS = [
 ];
 
 // ------------------------------------------------------------------ arranque
+const MODE = new URLSearchParams(location.search);
+if (MODE.get('audience') === '1' || MODE.get('render') === '1') {
+  runAudience({ renderSlide, setPres: (p) => { pres = p; }, getPres: () => pres, api, render: MODE.get('render') === '1' });
+} else {
 shell = new OfficeShell({ appId: 'impresiona', appName: 'Impresiona', logo: '../shared/img/impresiona.svg', tabs: TABS, adapter });
 shell.ribbon.onRender = () => setTimeout(reflect, 0);
 buildWorkspace(shell.workspace);
@@ -825,4 +943,6 @@ const origFit = fit;
 void origFit;
 makePres('blank'); renderAll();
 shell.start();
-window.__impresiona = { get pres() { return pres; }, set pres(p) { pres = p; }, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto };
+addEventListener('keydown', (e) => { if (e.altKey && e.key === 'F5') { e.preventDefault(); presenter(cur); } });
+}
+window.__impresiona = { get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto };

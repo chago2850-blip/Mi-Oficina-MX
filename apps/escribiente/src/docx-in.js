@@ -88,10 +88,25 @@ export async function docxToHtml(bytes) {
   const box = document.createElement('div');
   box.innerHTML = sanitize(res.value || '<p><br></p>');
   applyAligns(box, extras.aligns);
+  // Notas al pie de mammoth -> sup.fn + lista de notas del documento
+  const footnotes = {};
+  box.querySelectorAll('li[id^="footnote-"], li[id^="endnote-"]').forEach((li) => {
+    const key = li.id;
+    li.querySelectorAll('a[href^="#footnote-ref-"], a[href^="#endnote-ref-"]').forEach((a) => a.remove());
+    const fid = `f${Math.random().toString(36).slice(2, 8)}`;
+    footnotes[fid] = li.textContent.trim();
+    box.querySelectorAll(`a[href="#${key}"]`).forEach((a) => {
+      const sup = document.createElement('sup');
+      sup.className = 'fn'; sup.dataset.fid = fid; sup.contentEditable = 'false'; sup.textContent = '#';
+      (a.parentElement?.tagName === 'SUP' ? a.parentElement : a).replaceWith(sup);
+    });
+    const ol = li.parentElement; li.remove();
+    if (ol && !ol.children.length) ol.remove();
+  });
   // párrafos vacíos -> <p><br></p> para que se puedan editar
   box.querySelectorAll('p:empty').forEach((p) => p.append(document.createElement('br')));
   const warnings = (res.messages || []).filter((m) => m.type === 'warning').map((m) => m.message);
-  return { html: box.innerHTML || '<p><br></p>', page: extras.page, warnings: warnings.length ? [`${warnings.length} elementos no se pudieron conservar del todo`] : [] };
+  return { html: box.innerHTML || '<p><br></p>', page: extras.page, footnotes, warnings: warnings.length ? [`${warnings.length} elementos no se pudieron conservar del todo`] : [] };
 }
 
 const escHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
