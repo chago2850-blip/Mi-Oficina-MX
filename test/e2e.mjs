@@ -17,7 +17,7 @@ const log = (m) => console.log(`✔ ${m}`);
 
 // OFICINA_EXE=ruta/al/ejecutable prueba la app ya empaquetada (instalador)
 const exe = process.env.OFICINA_EXE;
-const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${userData}`] } : { args: [root, `--user-data-dir=${userData}`] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out } });
+const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${userData}`, "--no-sandbox"] } : { args: [root, `--user-data-dir=${userData}`, "--no-sandbox"] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out } });
 const main = (fn, arg) => app.evaluate(fn, arg);
 async function waitWindow(pred, ms = 15000) {
   const t0 = Date.now();
