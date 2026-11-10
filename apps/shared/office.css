@@ -156,7 +156,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .backstage .hello { color: var(--ink-3); margin: 0 0 6px; }
 .tpls { display: flex; flex-wrap: wrap; gap: 18px; }
 .tpl { width: 150px; border: 0; background: none; cursor: pointer; padding: 0; text-align: left; }
-.tpl .thumb { width: 150px; height: 194px; border-radius: 6px; border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow); overflow: hidden; position: relative; transition: transform .15s, box-shadow .15s; }
+.tpl .thumb { display: block; padding: 0; gap: 0; width: 150px; height: 194px; border-radius: 6px; border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow); overflow: hidden; position: relative; transition: transform .15s, box-shadow .15s; }
 body[data-app="impresiona"] .tpl .thumb, body[data-app="calcula"] .tpl .thumb { height: 112px; width: 190px; }
 body[data-app="impresiona"] .tpl, body[data-app="calcula"] .tpl { width: 190px; }
 .tpl:hover .thumb, .tpl:focus-visible .thumb { transform: translateY(-2px); box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg); }

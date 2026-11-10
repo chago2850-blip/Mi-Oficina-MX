@@ -12,12 +12,13 @@ const out = path.join(root, 'test', 'out', 'e2e');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 const userData = path.join(out, 'perfil');
+const UNTITLED = process.env.OFICINA_LANG === 'en' ? 'Untitled' : 'Sin título';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (m) => console.log(`✔ ${m}`);
 
 // OFICINA_EXE=ruta/al/ejecutable prueba la app ya empaquetada (instalador)
 const exe = process.env.OFICINA_EXE;
-const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${userData}`, "--no-sandbox"] } : { args: [root, `--user-data-dir=${userData}`, "--no-sandbox"] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out } });
+const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${userData}`, "--no-sandbox"] } : { args: [root, `--user-data-dir=${userData}`, "--no-sandbox"] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out, OFICINA_LANG: process.env.OFICINA_LANG || 'es' } });
 const main = (fn, arg) => app.evaluate(fn, arg);
 async function waitWindow(pred, ms = 15000) {
   const t0 = Date.now();
@@ -77,12 +78,12 @@ try {
   log(`Escribiente: texto, negritas y paginación (${pages} páginas)`);
 
   await esc.evaluate(() => window.__shell.save());
-  const docxPath = path.join(out, 'Sin título.docx');
+  const docxPath = path.join(out, `${UNTITLED}.docx`);
   assert.ok(fs.existsSync(docxPath), 'se guardó el .docx');
   const docx = fs.readFileSync(docxPath);
   assert.equal(docx.subarray(0, 2).toString(), 'PK');
   await esc.evaluate(() => window.__shell.exportPdf());
-  const pdfPath = path.join(out, 'Sin título.pdf');
+  const pdfPath = path.join(out, `${UNTITLED}.pdf`);
   assert.ok(fs.existsSync(pdfPath)); assert.equal(fs.readFileSync(pdfPath).subarray(0, 5).toString(), '%PDF-');
   const pdfPages = (await PDFDocument.load(fs.readFileSync(pdfPath))).getPageCount();
   assert.equal(pdfPages, pages, `el PDF debe tener las mismas páginas que la pantalla (${pdfPages} vs ${pages})`);
@@ -117,7 +118,7 @@ try {
   await calc.keyboard.type('=SI(A4>50,"alto","bajo")'); await calc.keyboard.press('Enter');
   await calc.keyboard.type('$1,500.00'); await calc.keyboard.press('Enter');
   const vals = await calc.evaluate(() => { const { wb } = window.__calcula; return [wb.value(3, 0), wb.value(4, 0), wb.raw(3, 0), wb.editText(3, 0), wb.display(5, 0).text]; });
-  assert.equal(vals[0], 60.5); assert.equal(vals[1], 'alto'); assert.equal(vals[2], '=SUM(A1:A3)'); assert.equal(vals[3], '=SUMA(A1:A3)'); assert.equal(vals[4], '$1,500.00');
+  assert.equal(vals[0], 60.5); assert.equal(vals[1], 'alto'); assert.equal(vals[2], '=SUM(A1:A3)'); assert.equal(vals[3], process.env.OFICINA_LANG === 'en' ? '=SUM(A1:A3)' : '=SUMA(A1:A3)'); assert.equal(vals[4], '$1,500.00');
   log('Calcula Datos: fórmulas en español (SUMA, SI) y formato de moneda');
   // deshacer / rehacer
   await calc.evaluate(() => window.__calcula.onCommand('undo'));
@@ -133,7 +134,7 @@ try {
   await wait(400);
   await calc.screenshot({ path: path.join(out, 'calcula.png') });
   await calc.evaluate(() => window.__shell.save());
-  const xlsxPath = path.join(out, 'Sin título.xlsx');
+  const xlsxPath = path.join(out, `${UNTITLED}.xlsx`);
   assert.ok(fs.existsSync(xlsxPath));
   await calc.evaluate(async (p) => { const f = await window.oficina.readPath(p); await window.__shell.loadFile(f); }, xlsxPath);
   await wait(400);
@@ -141,7 +142,7 @@ try {
   assert.equal(re[0], '=SUM(A1:A3)'); assert.equal(re[1], 60.5); assert.equal(re[2], '$1,500.00'); assert.equal(re[3], 1);
   log('Calcula Datos: guarda y reabre .xlsx con fórmulas, formato y gráfico');
   await calc.evaluate(() => window.__shell.exportPdf());
-  assert.ok(fs.existsSync(path.join(out, 'Sin título.pdf')));
+  assert.ok(fs.existsSync(path.join(out, `${UNTITLED}.pdf`)));
   log('Calcula Datos: exporta PDF');
   await main(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/calcula/')).close());
   await wait(600);
@@ -177,16 +178,16 @@ try {
   assert.equal(await imp.locator('.show').count(), 0);
   log('Impresiona: presentación a pantalla completa con transiciones');
   await imp.evaluate(() => window.__shell.save());
-  const pptxPath = path.join(out, 'Sin título.pptx');
+  const pptxPath = path.join(out, `${UNTITLED}.pptx`);
   assert.ok(fs.existsSync(pptxPath));
   await imp.evaluate(async (p) => { const f = await window.oficina.readPath(p); await window.__shell.loadFile(f); }, pptxPath);
   await wait(600);
   const back = await imp.evaluate(() => ({ n: window.__impresiona.pres.slides.length, text: window.__impresiona.pres.slides.map((s) => s.objects.map((o) => o.html || '').join(' ')).join(' ') }));
   assert.equal(back.n, 5);
-  assert.ok(back.text.includes('Plan de negocio 2027') && back.text.includes('Cuadro de prueba'));
+  assert.ok(back.text.includes(process.env.OFICINA_LANG === 'en' ? 'Business plan 2027' : 'Plan de negocio 2027') && back.text.includes('Cuadro de prueba'));
   log('Impresiona: guarda y reabre .pptx con sus 5 diapositivas');
   await imp.evaluate(() => window.__shell.exportPdf());
-  assert.ok(fs.existsSync(path.join(out, 'Sin título.pdf')));
+  assert.ok(fs.existsSync(path.join(out, `${UNTITLED}.pdf`)));
   log('Impresiona: exporta PDF');
   await main(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/impresiona/')).close());
   await wait(600);

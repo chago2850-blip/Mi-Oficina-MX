@@ -3,8 +3,10 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ExternalHyperlink, ImageRun,
   Table, TableRow, TableCell, WidthType, ShadingType, PageBreak, Header, Footer, PageNumber,
   LevelFormat, PageOrientation, BorderStyle, TabStopType,
-  CommentRangeStart, CommentRangeEnd, CommentReference, InsertedTextRun, DeletedTextRun, FootnoteReferenceRun, SectionType,
+  CommentRangeStart, CommentRangeEnd, CommentReference, InsertedTextRun, DeletedTextRun, FootnoteReferenceRun, SectionType, Tab,
 } from 'docx';
+import JSZip from 'jszip';
+import { t } from '../../shared/i18n.js';
 
 const PX_TWIP = 15; // 1 px (96 ppp) = 15 twips
 const ptFromCss = (v) => {
@@ -51,7 +53,7 @@ async function rasterize(img) {
 class Builder {
   constructor(settings = {}) {
     this.olInstance = 0; this.settings = settings;
-    this.commentIds = new Map(); this.footIds = new Map(); this.revId = 1;
+    this.commentIds = new Map(); this.footIds = new Map(); this.endIds = new Map(); this.revId = 1;
   }
   numFor(map, key) { if (!map.has(key)) map.set(key, map.size + 1); return map.get(key); }
 
@@ -64,6 +66,8 @@ class Builder {
         if (fmt.rev) {
           const o = { text, id: this.revId++, author: fmt.rev.author || 'Escribiente', date: fmt.rev.date || new Date().toISOString(), ...this.runProps(fmt) };
           out.push(fmt.rev.kind === 'del' ? new DeletedTextRun(o) : new InsertedTextRun(o));
+        } else if (text.includes('\t')) {
+          text.split('\t').forEach((part, i) => { if (i) out.push(new TextRun({ children: [new Tab()], ...this.runProps(fmt) })); if (part) out.push(new TextRun({ text: part, ...this.runProps(fmt) })); });
         } else out.push(new TextRun({ text, ...this.runProps(fmt) }));
         continue;
       }
@@ -72,6 +76,11 @@ class Builder {
       if (tag === 'BR') { out.push(new TextRun({ break: 1, ...this.runProps(fmt) })); continue; }
       if (tag === 'IMG') { const r = await this.image(n); if (r) out.push(r); continue; }
       if (['UL', 'OL', 'TABLE'].includes(tag)) continue; // se manejan como bloques
+      if (tag === 'SUP' && n.classList.contains('en')) {
+        const fid = n.dataset.fid;
+        if (this.settings.endnotes?.[fid] != null) out.push(new TextRun({ text: `\uE010${this.numFor(this.endIds, fid)}\uE011` }));
+        continue;
+      }
       if (tag === 'SUP' && n.classList.contains('fn')) {
         const fid = n.dataset.fid;
         if (this.settings.footnotes?.[fid] != null) out.push(new FootnoteReferenceRun(this.numFor(this.footIds, fid)));
@@ -155,6 +164,8 @@ class Builder {
     const ml = parseFloat(st.marginLeft) || parseFloat(st.paddingLeft) || 0;
     const ti = parseFloat(st.textIndent) || 0;
     if (ml || ti) p.indent = { ...(ml ? { left: Math.round(ml * PX_TWIP) } : {}), ...(ti > 0 ? { firstLine: Math.round(ti * PX_TWIP) } : ti < 0 ? { hanging: Math.round(-ti * PX_TWIP) } : {}) };
+    const tabs = parseTabs(el.dataset?.tabs);
+    if (tabs.length) p.tabStops = tabs.map((t) => ({ type: { l: TabStopType.LEFT, c: TabStopType.CENTER, r: TabStopType.RIGHT }[t.k], position: Math.round(t.x * PX_TWIP) }));
     const lh = parseFloat(st.lineHeight);
     const spacing = {};
     if (lh && !String(st.lineHeight).match(/px|pt/)) spacing.line = Math.round(240 * lh);
@@ -284,7 +295,7 @@ export async function htmlToDocx(editorEl, settings) {
   const hfPara = (text, numPos) => {
     const kids = [];
     if (text) kids.push(new TextRun({ text, size: 20, color: '555555' }));
-    if (numPos) { if (text) kids.push(new TextRun({ text: '   ', size: 20 })); kids.push(new TextRun({ children: ['Página ', PageNumber.CURRENT, ' de ', PageNumber.TOTAL_PAGES], size: 20, color: '555555' })); }
+    if (numPos) { if (text) kids.push(new TextRun({ text: '   ', size: 20 })); kids.push(new TextRun({ children: [`${t('Página')} `, PageNumber.CURRENT, ` ${t('de')} `, PageNumber.TOTAL_PAGES], size: 20, color: '555555' })); }
     return new Paragraph({ alignment: numPos === 'right' ? AlignmentType.RIGHT : numPos === 'center' ? AlignmentType.CENTER : AlignmentType.LEFT, children: kids });
   };
   const pn = settings.pageNumbers || 'none';
@@ -340,5 +351,33 @@ export async function htmlToDocx(editorEl, settings) {
     })),
   });
   const blob = await Packer.toBlob(doc);
-  return new Uint8Array(await blob.arrayBuffer());
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return b.endIds.size ? addEndnotes(bytes, [...b.endIds].map(([fid, k]) => [k, settings.endnotes[fid] || ''])) : bytes;
+}
+
+// docx (la biblioteca) no genera notas al final: se agregan al paquete después.
+const xmlEsc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function addEndnotes(bytes, notes) {
+  const zip = await JSZip.loadAsync(bytes);
+  let doc = await zip.file('word/document.xml').async('string');
+  const ref = (k) => `<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:endnoteReference w:id="${k}"/></w:r>`;
+  doc = doc.replace(/<w:r>(?:(?!<\/w:r>).)*?\uE010(\d+)\uE011(?:(?!<\/w:r>).)*?<\/w:r>/gs, (_, k) => ref(k));
+  zip.file('word/document.xml', doc);
+  const NSD = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const sep = '<w:endnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:endnote><w:endnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:endnote>';
+  const body = notes.map(([k, t]) => `<w:endnote w:id="${k}"><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:vertAlign w:val="superscript"/><w:sz w:val="20"/></w:rPr><w:endnoteRef/></w:r><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve"> ${xmlEsc(t)}</w:t></w:r></w:p></w:endnote>`).join('');
+  zip.file('word/endnotes.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:endnotes ${NSD}>${sep}${body}</w:endnotes>`);
+  let rels = await zip.file('word/_rels/document.xml.rels').async('string');
+  rels = rels.replace('</Relationships>', '<Relationship Id="rIdEndnotes1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes" Target="endnotes.xml"/></Relationships>');
+  zip.file('word/_rels/document.xml.rels', rels);
+  let ct = await zip.file('[Content_Types].xml').async('string');
+  if (!ct.includes('/word/endnotes.xml')) ct = ct.replace('</Types>', '<Override PartName="/word/endnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml"/></Types>');
+  zip.file('[Content_Types].xml', ct);
+  const set = zip.file('word/settings.xml');
+  if (set) { let x = await set.async('string'); if (!x.includes('w:endnotePr')) x = x.replace(/(<w:settings[^>]*>)/, '$1<w:endnotePr><w:numFmt w:val="lowerRoman"/></w:endnotePr>'); zip.file('word/settings.xml', x); }
+  return zip.generateAsync({ type: 'uint8array' });
+}
+
+export function parseTabs(v) {
+  return String(v || '').split(',').map((t) => { const m = /^([lcr]):(\d+(?:\.\d+)?)$/.exec(t.trim()); return m ? { k: m[1], x: Number(m[2]) } : null; }).filter(Boolean).sort((a, b) => a.x - b.x);
 }

@@ -1,5 +1,8 @@
 // Traduce nombres de funciones y errores entre español (lo que ve el usuario) e inglés (lo que se guarda). GPL-3.0
 import { esES } from 'hyperformula/i18n/languages';
+import { getLang, t } from '../../shared/i18n.js';
+// Con la interfaz en inglés, las fórmulas se muestran con los nombres en inglés (como Excel en inglés);
+// en español se pueden escribir en cualquiera de los dos idiomas.
 
 // Ajustes para que coincidan con los nombres en español más usados
 const EXTRA = {
@@ -28,9 +31,11 @@ export function toEnglish(formula) {
 }
 export function toSpanish(formula) {
   if (typeof formula !== 'string' || !formula.startsWith('=')) return formula;
+  if (getLang() === 'en') return formula;
   return mapOutsideStrings(formula, (p) => p.replace(ID, (all, name, paren) => (EN_TO_ES[name.toUpperCase()] || name) + paren).replace(/\bTRUE\b/g, 'VERDADERO').replace(/\bFALSE\b/g, 'FALSO'));
 }
 export function errorText(err) {
+  if (getLang() === 'en') return ERR_EN[err?.type] || err?.value || '#ERROR!';
   if (!err) return '#¡ERROR!';
   return ERR_ES[err.type] || err.value || '#¡ERROR!';
 }
@@ -110,4 +115,16 @@ export const FUNCTION_HELP = [
   ['Financieras', 'NPV', 'Valor neto actual.', 'VNA(tasa; valor1; …)'],
   ['Financieras', 'IRR', 'Tasa interna de retorno.', 'TIR(valores; [estimar])'],
   ['Financieras', 'RATE', 'Tasa de interés por periodo.', 'TASA(nper; pago; va; …)'],
-].map(([cat, en, desc, syntax]) => ({ cat, en, es: EN_TO_ES[en] || en, desc, syntax: syntax.replace(/;/g, ',') }));
+].map(([cat, en, desc, syntax]) => ({
+  en, esName: EN_TO_ES[en] || en, catEs: cat, descEs: desc, syntaxEs: syntax.replace(/;/g, ','),
+  get es() { return getLang() === 'en' ? this.en : this.esName; },
+  get cat() { return t(this.catEs); },
+  get desc() { return t(this.descEs); },
+  get syntax() { return getLang() === 'en' ? syntaxEn(this.syntaxEs) : this.syntaxEs; },
+}));
+const PARAM_EN = { número: 'number', número1: 'number1', número2: 'number2', rango: 'range', rango1: 'range1', criterio: 'criteria', criterio1: 'criteria1', rango_suma: 'sum_range', rango_promedio: 'average_range', decimales: 'num_digits', divisor: 'divisor', potencia: 'power', matriz: 'array', matriz1: 'array1', matriz2: 'array2', inferior: 'bottom', superior: 'top', valor: 'value', valor1: 'value1', ref: 'ref', orden: 'order', prueba_lógica: 'logical_test', valor_si_verdadero: 'value_if_true', valor_si_falso: 'value_if_false', prueba1: 'test1', valor_si_error: 'value_if_error', lógico: 'logical', lógico1: 'logical1', tabla: 'table', columna: 'col_index', fila: 'row_index', FALSO: 'FALSE', matriz_búsqueda: 'lookup_array', matriz_devuelta: 'return_array', si_no_se_encuentra: 'if_not_found', tipo: 'type', índice: 'index', incluir: 'include', texto: 'text', texto1: 'text1', separador: 'delimiter', ignorar_vacías: 'ignore_empty', inicio: 'start', texto_original: 'old_text', texto_nuevo: 'new_text', formato: 'format', texto_buscado: 'find_text', dentro_de: 'within_text', año: 'year', mes: 'month', día: 'day', fecha: 'date', fin: 'end', unidad: 'unit', festivos: 'holidays', meses: 'months', tasa: 'rate', va: 'pv', vf: 'fv', pago: 'pmt', valores: 'values', estimar: 'guess' };
+function syntaxEn(s) {
+  const m = /^([^(]+)\((.*)\)$/.exec(s); if (!m) return s;
+  const name = ES_TO_EN[m[1].toUpperCase()] || m[1];
+  return `${name}(${m[2].replace(/[\p{L}_][\p{L}\p{N}_]*/gu, (w) => PARAM_EN[w] || w)})`;
+}

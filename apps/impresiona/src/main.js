@@ -1,5 +1,5 @@
 // Impresiona — presentaciones de Mi Oficina MX. GPL-3.0-or-later
-import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, colorPicker } from '../../shared/office.js';
+import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, colorPicker, t, localizeHtml } from '../../shared/office.js';
 import { THEMES, LAYOUTS, themeById, layoutObjects, PLACEHOLDER } from './themes.js';
 import { readPptx, writePptx } from './pptx.js';
 import { readCoreProps } from '../../shared/coreprops.js';
@@ -97,7 +97,7 @@ function renderSlide(s, mode = 'thumb') {
       const os = objStyle(o, th);
       const txt = h('div', { class: `otxt v-${st.valign || 'top'}${st.list ? ' list' : ''}`, style: { color: os.color, fontFamily: `"${os.font}", Inter, Carlito, sans-serif`, fontSize: `${os.size}pt`, textAlign: st.align || (o.type === 'shape' ? 'center' : 'left'), fontWeight: st.bold ? '700' : '', fontStyle: st.italic ? 'italic' : '', background: o.type === 'text' && st.fill ? st.fill : '', border: o.type === 'text' && st.stroke ? `${st.strokeW || 1}px solid ${st.stroke}` : '' } });
       const inner = h('div', { class: 'tin', html: o.html || '' });
-      if (o.role && !o.html) { inner.dataset.ph = PLACEHOLDER[o.role] || ''; if (mode !== 'edit') inner.classList.add('ph-hidden'); }
+      if (o.role && !o.html) { inner.dataset.ph = t(PLACEHOLDER[o.role] || ''); if (mode !== 'edit') inner.classList.add('ph-hidden'); }
       txt.append(inner);
       box.append(txt);
     }
@@ -724,12 +724,15 @@ function makePres(tpl) {
       S('content', ['Siguientes pasos', ul('Corregir los hallazgos de las pruebas', 'Preparar el lanzamiento', 'Definir responsables y fechas')]),
     ];
   } else p.slides = [S('title')];
+  // plantillas en el idioma de la interfaz
+  for (const s of p.slides) for (const o of s.objects) if (o.html) o.html = localizeHtml(o.html);
   return p;
 }
 const tplThumb = (bg, fg, acc) => `<div style="height:100%;background:${bg};display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px"><div style="width:62%;height:9px;border-radius:3px;background:${fg}"></div><div style="width:40%;height:5px;border-radius:3px;background:${acc}"></div></div>`;
 
 // ------------------------------------------------------------------ adaptador
 const adapter = {
+  i18nSkip: '.stage .slide, .thumb .slide, .sorter .slide, .show-stage, .presenter .slide, .tin',
   exts: ['pptx', 'odp'],
   writable: ['pptx', 'odp'],
   saveExt: 'pptx',

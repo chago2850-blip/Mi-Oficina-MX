@@ -12,10 +12,11 @@ const out = path.join(root, 'test', 'out', 'fase2');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 const only = process.argv[2];
+const UNTITLED = process.env.OFICINA_LANG === 'en' ? 'Untitled' : 'Sin título';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (m) => console.log(`✔ ${m}`);
 const exe = process.env.OFICINA_EXE;
-const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] } : { args: [root, `--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out } });
+const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] } : { args: [root, `--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out, OFICINA_LANG: process.env.OFICINA_LANG || 'es' } });
 async function waitWindow(pred, ms = 15000) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) { for (const w of app.windows()) { try { if (pred(w.url())) return w; } catch { /* */ } } await wait(150); }
@@ -85,15 +86,22 @@ try {
     log('Escribiente: columnas, marca de agua y panel de navegación');
     // guardar docx y revisar el XML
     await w.evaluate(() => window.__shell.save());
-    const docx = await JSZip.loadAsync(fs.readFileSync(path.join(out, 'Sin título.docx')));
+    const docx = await JSZip.loadAsync(fs.readFileSync(path.join(out, `${UNTITLED}.docx`)));
     const docXml = await docx.file('word/document.xml').async('string');
     assert.ok(docx.file('word/comments.xml'), 'comments.xml'); assert.ok(docx.file('word/footnotes.xml'), 'footnotes.xml');
     assert.ok(/<w:ins /.test(docXml) && /<w:del /.test(docXml), 'revisiones en el docx');
     assert.ok(/<w:cols [^>]*w:num="2"/.test(docXml), 'columnas en el docx');
     log('Escribiente: el .docx incluye comentarios, notas al pie, revisiones y columnas');
+    // al reabrir el .docx se recuperan comentarios (con respuesta) y revisiones
+    await reopen(w, path.join(out, `${UNTITLED}.docx`)); await wait(500);
+    const imp = await w.evaluate(() => { const { state, editor } = window.__escribiente; return { cm: editor.querySelectorAll('.cm').length, comments: state.comments.map((c) => ({ text: c.text, replies: c.replies.length, ok: !!editor.querySelector(`.cm[data-cid="${c.id}"]`) })), ins: editor.querySelectorAll('ins').length, del: editor.querySelectorAll('del').length, author: editor.querySelector('ins')?.dataset.author }; });
+    assert.ok(imp.cm >= 1 && imp.comments.length === 1 && imp.comments[0].ok && imp.comments[0].text === 'Revisar esta palabra', JSON.stringify(imp));
+    assert.equal(imp.comments[0].replies, 1, 'respuesta del comentario');
+    assert.ok(imp.ins >= 1 && imp.del >= 1 && imp.author, `revisiones importadas ${JSON.stringify(imp)}`);
+    log('Escribiente: al abrir un .docx se recuperan comentarios, respuestas y control de cambios');
     // ODT ida y vuelta
     await w.evaluate(() => window.__shell.saveAsFormat('odt', 'ODF'));
-    const odtPath = path.join(out, 'Sin título.odt');
+    const odtPath = path.join(out, `${UNTITLED}.odt`);
     assert.ok(fs.existsSync(odtPath));
     const odt = await JSZip.loadAsync(fs.readFileSync(odtPath));
     assert.equal(await odt.file('mimetype').async('string'), 'application/vnd.oasis.opendocument.text');
@@ -101,6 +109,36 @@ try {
     const back = await w.evaluate(() => ({ h1: document.querySelector('#editor h1')?.textContent, fn: document.querySelectorAll('#editor sup.fn').length, b: !!document.querySelector('#editor [style*="bold"], #editor b, #editor strong') }));
     assert.equal(back.h1, 'Introducción'); assert.equal(back.fn, 1); assert.ok(back.b);
     log('Escribiente: guarda y reabre .odt con títulos, negritas y nota al pie');
+    // notas al final y tabulaciones personalizadas
+    await w.evaluate(() => window.__shell.newDoc('blank'));
+    await w.evaluate(() => {
+      const { editor, state, paginate } = window.__escribiente;
+      editor.innerHTML = '<p id="t1" data-tabs="l:200,r:500">Nombre<span class="otab" contenteditable="false">\t</span>Puesto<span class="otab" contenteditable="false">\t</span>$1,200</p><p>Texto con nota final<sup class="en" data-fid="e1" contenteditable="false">#</sup> y otra<sup class="en" data-fid="e2" contenteditable="false">#</sup>.</p>';
+      state.endnotes = { e1: 'Primera nota al final.', e2: 'Segunda nota al final.' };
+      paginate();
+    });
+    const lay = await w.evaluate(() => {
+      const ed = window.__escribiente.editor; const z = window.__escribiente.state.zoom / 100; const L = ed.getBoundingClientRect().left;
+      const tabs = [...ed.querySelectorAll('#t1 .otab')]; const r = document.createRange(); const p = ed.querySelector('#t1'); r.setStart(p.lastChild, 0); r.setEnd(p.lastChild, p.lastChild.length);
+      return { puesto: (tabs[0].getBoundingClientRect().right - L) / z, endRight: (r.getBoundingClientRect().right - L) / z, sups: [...ed.querySelectorAll('sup.en')].map((s) => s.textContent), notes: document.querySelector('.sheet .enotes')?.textContent || '', marks: document.querySelectorAll('.ruler .tabstop').length };
+    });
+    assert.ok(Math.abs(lay.puesto - 200) < 2, `tabulación izquierda en 200px: ${lay.puesto}`);
+    assert.ok(Math.abs(lay.endRight - 500) < 3, `tabulación derecha en 500px: ${lay.endRight}`);
+    assert.deepEqual(lay.sups, ['i', 'ii']);
+    assert.ok(lay.notes.includes(process.env.OFICINA_LANG === 'en' ? 'Endnotes' : 'Notas al final') && lay.notes.includes('Segunda nota al final.'), lay.notes);
+    log('Escribiente: tabulaciones izquierda y derecha alineadas, notas al final numeradas (i, ii)');
+    await w.evaluate(() => window.__shell.saveAsFormat('docx', 'Word'));
+    const dx2 = await JSZip.loadAsync(fs.readFileSync(path.join(out, `${UNTITLED}.docx`)));
+    const dx2Xml = await dx2.file('word/document.xml').async('string');
+    assert.ok(dx2.file('word/endnotes.xml') && (dx2Xml.match(/<w:endnoteReference /g) || []).length === 2, 'notas al final en el docx');
+    assert.ok(/<w:tab w:val="right" w:pos="7500"\/>/.test(dx2Xml) && /<w:r>(?:<w:rPr\/>)?<w:tab\/><\/w:r>|<w:tab\/>/.test(dx2Xml), 'tabulaciones en el docx');
+    await reopen(w, path.join(out, `${UNTITLED}.docx`)); await wait(500);
+    const back2 = await w.evaluate(() => { const ed = window.__escribiente.editor; return { en: ed.querySelectorAll('sup.en').length, tabs: ed.querySelector('p')?.dataset.tabs, otab: ed.querySelectorAll('.otab').length, txt: Object.values(window.__escribiente.state.endnotes) }; });
+    assert.equal(back2.en, 2); assert.equal(back2.tabs, 'l:200,r:500'); assert.equal(back2.otab, 2); assert.ok(back2.txt.includes('Primera nota al final.'), JSON.stringify(back2));
+    await w.evaluate(() => window.__shell.saveAsFormat('odt', 'ODF'));
+    await reopen(w, path.join(out, `${UNTITLED}.odt`)); await wait(500);
+    assert.equal(await w.evaluate(() => document.querySelectorAll('#editor sup.en').length), 2);
+    log('Escribiente: notas al final y tabulaciones se guardan y reabren en .docx y .odt');
     // combinar correspondencia
     fs.writeFileSync(path.join(out, 'clientes.csv'), 'Nombre,Ciudad\nAna López,Acapulco\nBruno Díaz,Chilpancingo\nCarla Ruiz,Taxco\n');
     await w.evaluate(() => window.__shell.newDoc('blank'));
@@ -142,13 +180,13 @@ try {
     assert.equal(bad.ok, false);
     log('Calcula Datos: validación con lista');
     // nombres
-    await w.evaluate(() => { const { wb, F } = window.__calcula; F.addName('Ventas', 'Hoja1!$C$2:$C$6'); wb.action('f', () => wb.setInput(7, 2, '=SUMA(Ventas)')); });
+    await w.evaluate(() => { const { wb, F } = window.__calcula; F.addName('Ventas', `${wb.sheets[0].name}!$C$2:$C$6`); wb.action('f', () => wb.setInput(7, 2, '=SUMA(Ventas)')); });
     assert.equal(await w.evaluate(() => window.__calcula.wb.value(7, 2)), 500);
     log('Calcula Datos: nombres definidos en fórmulas');
     // notas
     await w.evaluate(() => window.__calcula.F.setNote(1, 0, 'Producto estrella'));
     // tabla dinámica
-    await w.evaluate(() => window.__calcula.F.buildPivot({ source: 'Hoja1!A1:C6', rows: 'Producto', cols: 'Zona', value: 'Ventas', agg: 'sum' }));
+    await w.evaluate(() => window.__calcula.F.buildPivot({ source: `${window.__calcula.wb.sheets[0].name}!A1:C6`, rows: 'Producto', cols: 'Zona', value: 'Ventas', agg: 'sum' }));
     const piv = await w.evaluate(() => { const { wb } = window.__calcula; const s = wb.sheets.find((x) => x.name.startsWith('Dinámica')); const ix = wb.sheets.indexOf(s); const g = (r, c) => wb.value(r, c, s); return { name: s?.name, total: g(4, 3), cafeNorte: g(2, 1) }; });
     assert.equal(piv.total, 500); assert.equal(piv.cafeNorte, 210);
     log('Calcula Datos: tabla dinámica (filas, columnas y totales)');
@@ -158,13 +196,13 @@ try {
     await w.screenshot({ path: path.join(out, 'calcula-fase2.png') });
     log('Calcula Datos: formato de tabla y proteger hoja');
     await w.evaluate(() => window.__shell.save());
-    const xlsxPath = path.join(out, 'Sin título.xlsx');
+    const xlsxPath = path.join(out, `${UNTITLED}.xlsx`);
     await reopen(w, xlsxPath); await wait(400);
     const re = await w.evaluate(() => { const { wb } = window.__calcula; const s = wb.sheets[0]; return { cf: s.cf.length, val: s.validations.length, note: !!s.notes?.get?.('1,0'), name: wb.value(7, 2), sheets: wb.sheets.length }; });
     assert.ok(re.cf >= 1 && re.val === 1 && re.note && re.name === 500 && re.sheets === 2, JSON.stringify(re));
     log('Calcula Datos: el .xlsx conserva formato condicional, validación, notas y nombres');
     await w.evaluate(() => window.__shell.saveAsFormat('ods', 'ODS'));
-    const odsPath = path.join(out, 'Sin título.ods');
+    const odsPath = path.join(out, `${UNTITLED}.ods`);
     await reopen(w, odsPath); await wait(400);
     const ods = await w.evaluate(() => { const { wb } = window.__calcula; return { a1: wb.value(0, 0), f: wb.raw(7, 2), v: wb.value(7, 2), c3: wb.value(3, 2) }; });
     assert.equal(ods.a1, 'Producto'); assert.equal(ods.c3, 150); assert.equal(ods.v, 500);
@@ -206,17 +244,17 @@ try {
     assert.equal(pngs.length, 4, `imágenes: ${pngs.join(',')}`);
     log('Impresiona: exporta cada diapositiva como PNG');
     await w.evaluate(() => window.__shell.save());
-    const pptxPath = path.join(out, 'Sin título.pptx');
+    const pptxPath = path.join(out, `${UNTITLED}.pptx`);
     const pz = await JSZip.loadAsync(fs.readFileSync(pptxPath));
     assert.ok(Object.keys(pz.files).some((f) => f.startsWith('ppt/charts/')), 'gráfico nativo en el pptx');
     await reopen(w, pptxPath); await wait(500);
     assert.ok(await w.evaluate(() => window.__impresiona.pres.slides.some((s) => s.objects.some((o) => o.type === 'chart'))));
     log('Impresiona: el gráfico se guarda como gráfico nativo del .pptx y se recupera');
     await w.evaluate(() => window.__shell.saveAsFormat('odp', 'ODP'));
-    const odpPath = path.join(out, 'Sin título.odp');
+    const odpPath = path.join(out, `${UNTITLED}.odp`);
     await reopen(w, odpPath); await wait(500);
     const odp = await w.evaluate(() => ({ n: window.__impresiona.pres.slides.length, t: window.__impresiona.pres.slides[0].objects.map((o) => o.html || '').join(' ') }));
-    assert.equal(odp.n, 4); assert.ok(odp.t.includes('Plan de negocio 2027'));
+    assert.equal(odp.n, 4); assert.ok(odp.t.includes(process.env.OFICINA_LANG === 'en' ? 'Business plan 2027' : 'Plan de negocio 2027'));
     log('Impresiona: guarda y reabre .odp');
     // vista del moderador
     await w.evaluate(() => window.__impresiona.presenter(0));
@@ -230,6 +268,35 @@ try {
     await w.evaluate(() => window.__presenter.end()); await wait(500);
     log('Impresiona: vista del moderador con ventana para el público');
     await closeApp('impresiona'); await wait(500);
+  }
+  // ============================================================ Idioma de la interfaz
+  if (!only || only === 'idioma') {
+    const w = await openApp('calcula');
+    await w.evaluate(() => window.oficina.setPrefs({ lang: 'es' })); await wait(500);
+    await w.evaluate(() => { const { wb, grid } = window.__calcula; wb.setInput(0, 0, 5); wb.setInput(1, 0, '=SUMA(A1,10)'); grid.select(1, 0); window.__calcula.refresh(); });
+    assert.equal(await w.evaluate(() => document.querySelector('.ribbon .tab[data-tab="home"]')?.textContent), 'Inicio');
+    await w.evaluate(() => window.oficina.setPrefs({ lang: 'en' })); await wait(600);
+    const en = await w.evaluate(() => ({ tab: document.querySelector('.ribbon .tab[data-tab="home"]').textContent, file: document.querySelector('.ribbon .tab.file').textContent, val: window.__calcula.wb.display(1, 0).text, lang: document.documentElement.lang }));
+    assert.equal(en.tab, 'Home'); assert.equal(en.file, 'File'); assert.equal(en.lang, 'en'); assert.equal(en.val, '15');
+    const menu = await app.evaluate(({ BrowserWindow }) => { const bw = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().includes('/calcula/')); return bw.__menu.items.map((i) => i.label); });
+    assert.ok(menu.includes('File') && menu.includes('Edit') && menu.includes('View'), `menú en inglés: ${menu}`);
+    const formula = await w.evaluate(() => { const { wb } = window.__calcula; return wb.editText(1, 0); });
+    if (formula) assert.ok(/^=SUM\(/.test(formula), `fórmula en inglés: ${formula}`);
+    await w.screenshot({ path: path.join(out, 'calcula-ingles.png') });
+    // los mensajes y diálogos también cambian
+    const dlg = w.evaluate(() => window.__calcula.onCommand('insertFunction'));
+    await wait(400);
+    const dt = await w.evaluate(() => ({ title: document.querySelector('.modal h2, .modal .title, .modal header')?.textContent, first: document.querySelector('.fnitem b')?.textContent }));
+    assert.ok(/Insert function/.test(dt.title || '') && dt.first === 'SUM', JSON.stringify(dt));
+    await w.keyboard.press('Escape'); await dlg.catch(() => {});
+    // de regreso a español sin recargar
+    await w.evaluate(() => window.oficina.setPrefs({ lang: 'es' })); await wait(600);
+    assert.equal(await w.evaluate(() => document.querySelector('.ribbon .tab[data-tab="home"]').textContent), 'Inicio');
+    assert.equal(await w.evaluate(() => document.querySelector('.ribbon .tab.file').textContent), 'Archivo');
+    if (formula) assert.ok(/^=SUMA\(/.test(await w.evaluate(() => { const { wb } = window.__calcula; return wb.editText(1, 0); })));
+    await w.evaluate(() => window.oficina.setPrefs({ lang: 'auto' }));
+    log('Suite: la interfaz cambia a inglés y de regreso a español sin reiniciar (cinta, menús, diálogos y fórmulas)');
+    await closeApp('calcula'); await wait(500);
   }
   console.log('\nTodas las pruebas de la fase 2 pasaron.');
 } catch (err) {

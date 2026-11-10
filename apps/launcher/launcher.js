@@ -113,13 +113,14 @@ window.launcher.onPrefs(async () => {
   const p = await window.launcher.prefs();
   document.getElementById('pf-author').value = p.author || '';
   document.getElementById('pf-theme').value = p.theme || 'auto';
+  document.getElementById('pf-lang').value = p.lang || 'auto';
   const sel = document.getElementById('pf-auto'); sel.value = String(p.autosaveSec || 20); if (!sel.value) sel.value = '20';
   prefsCard.hidden = false;
   document.getElementById('pf-author').focus();
 });
 document.getElementById('prefs-cancel').addEventListener('click', () => { prefsCard.hidden = true; });
 document.getElementById('prefs-ok').addEventListener('click', async () => {
-  await window.launcher.setPrefs({ author: document.getElementById('pf-author').value.trim(), theme: document.getElementById('pf-theme').value, autosaveSec: Number(document.getElementById('pf-auto').value) });
+  await window.launcher.setPrefs({ author: document.getElementById('pf-author').value.trim(), theme: document.getElementById('pf-theme').value, lang: document.getElementById('pf-lang').value, autosaveSec: Number(document.getElementById('pf-auto').value) });
   prefsCard.hidden = true;
 });
 

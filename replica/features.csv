@@ -9,9 +9,9 @@ Logos originales de la suite y de cada app,suite,must,yes,yes,familia visual com
 Asociación de archivos docx xlsx pptx odt ods odp pdf,suite,must,yes,yes,doble clic abre la app correcta
 Acerca de con licencia GPL-3.0 y créditos de terceros,suite,must,no,yes,
 Tema claro y oscuro,suite,should,yes,yes,sigue al sistema o se elige en Preferencias
-Preferencias de la suite (idioma formato por defecto autoguardado),suite,should,yes,partial,"autor, tema e intervalo de autoguardado; idioma pendiente (v0.3)"
+Preferencias de la suite (idioma formato por defecto autoguardado),suite,should,yes,yes,"idioma, autor, tema, autoguardado y ortografía; en la dona y en Opciones de cada app"
 Ícono en bandeja/dock con menú,suite,should,no,yes,
-Interfaz en español e inglés,suite,should,yes,no,pendiente para v0.3
+Interfaz en español e inglés,suite,should,yes,yes,"toda la suite, incluidos menús, diálogos, plantillas y PapelPDF; cambia sin reiniciar; en inglés las fórmulas usan nombres en inglés"
 Recuperación automática de documentos tras un cierre,suite,must,yes,yes,novedad de Office 2024
 Inicio con nuevo en blanco plantillas y recientes,compartido,must,yes,yes,
 Backstage Archivo (nuevo abrir guardar exportar imprimir),compartido,must,yes,yes,
@@ -22,7 +22,7 @@ Buscar y reemplazar (incluye sin acentos),compartido,must,yes,yes,
 Cinta con pestañas y pestañas contextuales,compartido,must,yes,yes,patrón de interfaz; íconos propios
 Portapapeles con pegado especial (solo texto / formato),compartido,must,yes,yes,clic derecho → Pegar solo texto
 Revisión ortográfica en español e inglés,compartido,must,yes,yes,diccionarios Hunspell libres
-Comentarios con respuestas,compartido,should,yes,yes,Escribiente; notas de celda en Calcula Datos
+Comentarios con respuestas,compartido,should,yes,yes,Escribiente (se importan de docx con sus respuestas); notas de celda en Calcula Datos
 Reacciones en comentarios,compartido,could,yes,no,novedad de Office 2024
 Abrir y guardar ODF (odt ods odp),compartido,should,yes,yes,escritor/lector propio; fórmulas OpenFormula
 Barra de acceso rápido personalizable,compartido,could,yes,no,
@@ -44,12 +44,12 @@ Hipervínculos,escribiente,must,yes,yes,
 Abrir y guardar docx conservando lo desconocido,escribiente,must,yes,yes,
 Contador de palabras en barra de estado,escribiente,must,yes,yes,
 Zoom,escribiente,must,yes,yes,
-Regla con tabulaciones,escribiente,should,yes,partial,marcadores de sangría arrastrables; sin tabulaciones personalizadas
+Regla con tabulaciones,escribiente,should,yes,yes,sangrías arrastrables y tabulaciones izquierda/centro/derecha; se guardan en docx y odt
 Columnas,escribiente,should,yes,yes,
 Formas y cuadros de texto,escribiente,should,yes,yes,
 Tabla de contenido automática,escribiente,should,yes,yes,
-Notas al pie y al final,escribiente,should,yes,partial,notas al pie por página; sin notas al final
-Control de cambios (aceptar/rechazar),escribiente,should,yes,yes,
+Notas al pie y al final,escribiente,should,yes,yes,"numeradas 1, 2… y i, ii…; se guardan y abren en docx y odt"
+Control de cambios (aceptar/rechazar),escribiente,should,yes,yes,también se importa de docx con autor y fecha
 Panel de navegación por títulos,escribiente,should,yes,yes,
 Copiar formato (brocha),escribiente,should,yes,yes,
 Símbolos y caracteres especiales,escribiente,should,yes,yes,

@@ -19,6 +19,8 @@ const TEST_DIR = process.env.OFICINA_TEST_DIR || null;
 if (TEST_DIR) process.env.PAPELPDF_TEST_DIR = TEST_DIR;
 
 const papel = require('./main/papelpdf');
+const i18n = require('./main/i18n');
+i18n.patchElectron({ Menu, dialog });
 
 // ---------------------------------------------------------------- apps
 const APPS = {
@@ -109,7 +111,7 @@ function createLauncher({ minimized = false } = {}) {
       contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
-  launcher.loadURL('app://suite/apps/launcher/index.html');
+  launcher.loadURL(i18n.withLang('app://suite/apps/launcher/index.html'));
   launcher.once('ready-to-show', () => { if (minimized) launcher.minimize(); else launcher.show(); });
   launcher.on('close', async (e) => {
     if (quitting) return;
@@ -229,10 +231,10 @@ function createOfficeWindow(id, filePath) {
   win.__app = id;
   win.__dirty = false;
   win.__filePath = filePath || null;
-  const menu = buildOfficeMenu(win, id);
-  if (isMac) { win.on('focus', () => Menu.setApplicationMenu(menu)); Menu.setApplicationMenu(menu); } else win.setMenu(menu);
+  win.__menu = buildOfficeMenu(win, id);
+  if (isMac) { win.on('focus', () => Menu.setApplicationMenu(win.__menu)); Menu.setApplicationMenu(win.__menu); } else win.setMenu(win.__menu);
   win.webContents.session.setSpellCheckerLanguages?.(['es-MX', 'es', 'en-US'].filter((l) => win.webContents.session.availableSpellCheckerLanguages?.includes(l)));
-  win.loadURL(`app://suite/apps/${id}/index.html`);
+  win.loadURL(i18n.withLang(`app://suite/apps/${id}/index.html`));
   win.once('ready-to-show', () => { win.show(); if (TEST_DIR) win.blur(); });
   win.webContents.on('did-finish-load', () => { if (filePath) win.webContents.send('open-path', filePath); });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:|^mailto:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
@@ -244,7 +246,7 @@ function createOfficeWindow(id, filePath) {
     e.preventDefault();
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning', buttons: ['Guardar', 'No guardar', 'Cancelar'], defaultId: 0, cancelId: 2,
-      message: `¿Guardar los cambios en "${win.__docName || 'Sin título'}"?`,
+      message: i18n.t('¿Guardar los cambios en "{0}"?').replace('{0}', win.__docName || i18n.t('Sin título')),
       detail: 'Si no los guardas, se perderán.',
     });
     if (response === 2) return;
@@ -357,14 +359,14 @@ function buildOfficeMenu(win, id) {
       { role: 'toggleDevTools', label: 'Herramientas de desarrollo' },
     ] },
     { label: 'Ayuda', submenu: [
-      { label: `Acerca de ${meta.name}`, click: () => send('about') },
+      { label: i18n.t('Acerca de {0}').replace('{0}', meta.name), click: () => send('about') },
       { label: 'Código fuente (GitHub)', click: () => shell.openExternal('https://github.com/chago2850-blip/Mi-Oficina-MX') },
     ] },
   ]);
 }
 
 // ---------------------------------------------------------------- preferencias de la suite
-const DEFAULT_PREFS = { theme: 'auto', author: '', autosaveSec: 20, defaultFormat: 'office', spellcheck: true };
+const DEFAULT_PREFS = { lang: 'auto', theme: 'auto', author: '', autosaveSec: 20, defaultFormat: 'office', spellcheck: true };
 let prefs = { ...DEFAULT_PREFS };
 const prefsFile = () => path.join(app.getPath('userData'), 'preferencias.json');
 function loadPrefs() { try { prefs = { ...DEFAULT_PREFS, ...JSON.parse(fss.readFileSync(prefsFile(), 'utf8')) }; } catch { prefs = { ...DEFAULT_PREFS }; } }
@@ -373,10 +375,23 @@ function savePrefs(p) {
   try { fss.mkdirSync(path.dirname(prefsFile()), { recursive: true }); fss.writeFileSync(prefsFile(), JSON.stringify(prefs, null, 2)); } catch { /* sin permiso */ }
   const { nativeTheme } = require('electron');
   nativeTheme.themeSource = prefs.theme === 'auto' ? 'system' : prefs.theme;
-  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('prefs', prefs);
+  const before = i18n.getLang();
+  applyLang();
+  if (i18n.getLang() !== before) rebuildMenus();
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('prefs', publicPrefs());
 }
-ipcMain.handle('of:prefs', () => prefs);
-ipcMain.handle('of:set-prefs', (_e, p) => { savePrefs(p); return prefs; });
+const publicPrefs = () => ({ ...prefs, uiLang: i18n.getLang() });
+function applyLang() { i18n.setLang(i18n.resolve(prefs.lang, process.env.OFICINA_LANG || app.getLocale())); }
+function rebuildMenus() {
+  for (const w of appWindows()) {
+    if (w.__app === 'papelpdf') { papel.rebuildMenu?.(w); continue; }
+    w.__menu = buildOfficeMenu(w, w.__app);
+    if (isMac) { if (w.isFocused()) Menu.setApplicationMenu(w.__menu); } else w.setMenu(w.__menu);
+  }
+  if (tray) { tray.destroy(); tray = null; createTray(); }
+}
+ipcMain.handle('of:prefs', () => publicPrefs());
+ipcMain.handle('of:set-prefs', (_e, p) => { savePrefs(p); return publicPrefs(); });
 
 // ---------------------------------------------------------------- recientes y recuperación
 const dataDir = () => app.getPath('userData');
@@ -586,7 +601,7 @@ ipcMain.handle('of:audience-open', (e, { pres, i = 0, step = 0 }) => {
     webPreferences: { preload: path.join(ROOT, 'preload', 'office.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   aud.setMenu(null);
-  aud.loadURL('app://suite/apps/impresiona/index.html?audience=1');
+  aud.loadURL(i18n.withLang('app://suite/apps/impresiona/index.html?audience=1'));
   aud.webContents.on('did-finish-load', () => aud.webContents.send('audience-msg', { type: 'load', pres, i, step }));
   aud.on('closed', () => { audiences.delete(e.sender.id); if (!e.sender.isDestroyed()) e.sender.send('audience-closed'); });
   audiences.set(e.sender.id, aud);
@@ -606,7 +621,7 @@ ipcMain.handle('of:render-slides', async (e, { pres, base = 'Diapositiva' }) => 
   }
   const { w, h } = pres.size;
   const win = new BrowserWindow({ width: w, height: h, show: false, useContentSize: true, frame: false, webPreferences: { preload: path.join(ROOT, 'preload', 'office.js'), contextIsolation: true, sandbox: true, offscreen: true } });
-  await win.loadURL('app://suite/apps/impresiona/index.html?render=1');
+  await win.loadURL(i18n.withLang('app://suite/apps/impresiona/index.html?render=1'));
   win.webContents.send('audience-msg', { type: 'load', pres });
   const files = [];
   try {
@@ -626,6 +641,7 @@ ipcMain.handle('of:render-slides', async (e, { pres, base = 'Diapositiva' }) => 
 // ---------------------------------------------------------------- arranque
 app.whenReady().then(() => {
   loadPrefs();
+  applyLang();
   require('electron').nativeTheme.themeSource = prefs.theme === 'auto' ? 'system' : prefs.theme;
   registerAppProtocol();
   if (!isMac) Menu.setApplicationMenu(null);

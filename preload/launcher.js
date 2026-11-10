@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld('launcher', {
   prefs: () => ipcRenderer.invoke('of:prefs'),
   setPrefs: (p) => ipcRenderer.invoke('of:set-prefs', p),
   onPrefs: (fn) => ipcRenderer.on('launcher:prefs', () => fn()),
+  onPrefsChanged: (fn) => ipcRenderer.on('prefs', (_e, p) => fn(p)),
 });

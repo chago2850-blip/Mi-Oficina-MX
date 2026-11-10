@@ -1,6 +1,7 @@
 // Modelo del libro de Calcula Datos: valores y fórmulas en HyperFormula (GPLv3), formato aparte. GPL-3.0
 import { HyperFormula } from 'hyperformula';
 import { toEnglish, toSpanish, errorText } from './i18n.js';
+import { getLang } from '../../shared/i18n.js';
 import { parseInput, formatValue } from './format.js';
 
 export const DEF_W = 92, DEF_H = 24;
@@ -76,8 +77,9 @@ export class Workbook {
     this.hf.clearUndoStack?.(); this.hf.clearRedoStack?.();
   }
   addSheet(name) {
-    let n = name || `Hoja${this.sheets.length + 1}`;
-    let i = 1; while (this.sheets.some((s) => s.name.toLowerCase() === n.toLowerCase())) n = `${name || 'Hoja'}${++i}`;
+    const base = getLang() === 'en' ? 'Sheet' : 'Hoja';
+    let n = name || `${base}${this.sheets.length + 1}`;
+    let i = 1; while (this.sheets.some((s) => s.name.toLowerCase() === n.toLowerCase())) n = `${name || base}${++i}`;
     const added = this.hf.addSheet(n);
     const s = new Sheet(this.hf.getSheetId(added), added);
     this.sheets.push(s);
@@ -145,7 +147,7 @@ export class Workbook {
       const d = formatValue(raw, st.fmt);
       if (/[dmy]/i.test(st.fmt.replace(/"[^"]*"/g, '')) && !/[0#]/.test(st.fmt)) return d.text;
     }
-    if (typeof raw === 'boolean') return raw ? 'VERDADERO' : 'FALSO';
+    if (typeof raw === 'boolean') return getLang() === 'en' ? (raw ? 'TRUE' : 'FALSE') : (raw ? 'VERDADERO' : 'FALSO');
     return String(raw);
   }
   setInput(r, c, text) {

@@ -19,4 +19,6 @@ contextBridge.exposeInMainWorld('papel', {
   appInfo: () => ipcRenderer.invoke('app-info'),
   onMenu: (fn) => ipcRenderer.on('menu', (_e, cmd) => fn(cmd)),
   onOpenPath: (fn) => ipcRenderer.on('open-path', (_e, p) => fn(p)),
+  prefs: () => ipcRenderer.invoke('of:prefs'),
+  onPrefsChanged: (fn) => ipcRenderer.on('prefs', (_e, p) => fn(p)),
 });

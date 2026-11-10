@@ -1,5 +1,6 @@
 // Plantillas originales de Escribiente (escritas desde cero). GPL-3.0
-const today = () => new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+import { longDate } from '../../shared/i18n.js';
+const today = () => longDate();
 
 export const TEMPLATES = [
   { id: 'blank', name: 'Documento en blanco', blank: true, html: () => '<p><br></p>' },

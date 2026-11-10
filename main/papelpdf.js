@@ -258,10 +258,10 @@ function openWindow(filePath, { onClosed } = {}) {
   });
   win.__app = 'papelpdf';
   windows.add(win);
-  const menu = buildMenu(win);
-  if (isMac) win.on('focus', () => Menu.setApplicationMenu(menu)); else win.setMenu(menu);
-  if (isMac) Menu.setApplicationMenu(menu);
-  win.loadURL('app://suite/apps/papelpdf/index.html');
+  win.__menu = buildMenu(win);
+  if (isMac) win.on('focus', () => Menu.setApplicationMenu(win.__menu)); else win.setMenu(win.__menu);
+  if (isMac) Menu.setApplicationMenu(win.__menu);
+  win.loadURL(require('./i18n').withLang('app://suite/apps/papelpdf/index.html'));
   win.once('ready-to-show', () => win.show());
   win.webContents.on('did-finish-load', () => { if (filePath) win.webContents.send('open-path', filePath); });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
@@ -293,4 +293,5 @@ function openPath(filePath, opts) {
   return openWindow(filePath, opts);
 }
 
-module.exports = { openWindow, openPath, windows };
+module.exports = {
+  rebuildMenu: (win) => { win.__menu = buildMenu(win); if (isMac) { if (win.isFocused()) Menu.setApplicationMenu(win.__menu); } else win.setMenu(win.__menu); }, openWindow, openPath, windows };

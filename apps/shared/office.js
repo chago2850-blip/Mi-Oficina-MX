@@ -2,8 +2,9 @@
 // barra superior, cinta, inicio (backstage), diálogos, avisos y ciclo de vida del archivo.
 // GPL-3.0-or-later
 import { icon } from './icons.js';
+import { t, tf, getLang, setLang, onLang, installTranslator, localizeHtml, longDate } from './i18n.js';
 
-export { icon };
+export { icon, t, tf, getLang, onLang, localizeHtml, longDate };
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 export function h(tag, attrs = {}, ...kids) {
@@ -225,7 +226,8 @@ export class Ribbon {
 export class OfficeShell {
   constructor({ appId, appName, logo, tabs, adapter }) {
     this.appId = appId; this.appName = appName; this.logo = logo; this.adapter = adapter;
-    this.doc = { name: 'Sin título', path: null, ext: adapter.saveExt, dirty: false };
+    installTranslator({ skip: adapter.i18nSkip || '' });
+    this.doc = { name: t('Sin título'), path: null, ext: adapter.saveExt, dirty: false };
     this.recoveryId = `${appId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     document.body.dataset.app = appId;
     this.top = h('header', { class: 'topbar' });
@@ -253,11 +255,13 @@ export class OfficeShell {
   applyPrefs() {
     const dark = this.prefs.theme === 'dark' || (this.prefs.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.body.dataset.theme = dark ? 'dark' : 'light';
+    if (this.prefs.uiLang) setLang(this.prefs.uiLang);
     this.adapter.onPrefs?.(this.prefs);
   }
   async optionsDialog() {
     const v = await form('Opciones de Mi Oficina MX', [
       { name: 'author', label: 'Tu nombre (autor de documentos, comentarios y cambios)', value: this.prefs.author },
+      { name: 'lang', label: 'Idioma de la interfaz', type: 'select', value: this.prefs.lang || 'auto', options: [['auto', 'Igual que el sistema'], ['es', 'Español'], ['en', 'English']] },
       { name: 'theme', label: 'Tema de la interfaz', type: 'select', value: this.prefs.theme, options: [['auto', 'Igual que el sistema'], ['light', 'Claro'], ['dark', 'Oscuro']] },
       { name: 'autosaveSec', label: 'Guardar copia de recuperación cada (segundos)', type: 'number', value: this.prefs.autosaveSec, min: 5, max: 600 },
       { name: 'spellcheck', label: 'Revisar la ortografía mientras escribes', type: 'checkbox', value: this.prefs.spellcheck !== false },
@@ -358,7 +362,7 @@ export class OfficeShell {
   async newDoc(tpl) {
     this.props = {};
     await this.adapter.newDoc(tpl);
-    this.doc = { name: 'Sin título', path: null, ext: this.adapter.saveExt, dirty: false, started: true };
+    this.doc = { name: t('Sin título'), path: null, ext: this.adapter.saveExt, dirty: false, started: true };
     this.updateTitle();
     this.hideBackstage();
   }

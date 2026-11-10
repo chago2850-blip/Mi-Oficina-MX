@@ -1,6 +1,7 @@
 // Escribiente — fase 2: navegación, brocha, comentarios, control de cambios, notas al pie,
 // columnas, cuadros de texto, formas, combinar correspondencia y sangrías en la regla. GPL-3.0
-import { h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api } from '../../shared/office.js';
+import { h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, t } from '../../shared/office.js';
+import { roman } from './odt.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 let C = null; // contexto que entrega main.js
@@ -308,7 +309,37 @@ export function renderSide() {
 
 // ------------------------------------------------------------------ notas al pie
 function bindFootnotes() {
-  C.editor.addEventListener('click', (e) => { const fn = e.target.closest('sup.fn'); if (fn) editFootnote(fn.dataset.fid); });
+  C.editor.addEventListener('click', (e) => { const fn = e.target.closest('sup.fn'); if (fn) editFootnote(fn.dataset.fid); const en = e.target.closest('sup.en'); if (en) editEndnote(en.dataset.fid); });
+}
+// ------------------------------------------------------------------ notas al final
+export async function insertEndnote() {
+  C.restoreSelection();
+  const v = await form('Insertar nota al final', [{ name: 't', label: 'Texto de la nota', type: 'textarea', rows: 3 }], 'Insertar');
+  if (!v || !v.t.trim()) return;
+  const fid = `e${uid()}`;
+  C.state.endnotes[fid] = v.t.trim();
+  C.insertHTMLAtCursor(`<sup class="en" data-fid="${fid}" contenteditable="false">#</sup>`);
+  numberFootnotes(); C.shell.markDirty(); C.schedulePaginate();
+}
+async function editEndnote(fid) {
+  const v = await form('Nota al final', [{ name: 't', label: 'Texto de la nota (déjalo vacío para eliminarla)', type: 'textarea', rows: 3, value: C.state.endnotes[fid] || '' }], 'Guardar');
+  if (!v) return;
+  if (!v.t.trim()) { C.editor.querySelectorAll(`sup.en[data-fid="${fid}"]`).forEach((x) => x.remove()); delete C.state.endnotes[fid]; }
+  else C.state.endnotes[fid] = v.t.trim();
+  numberFootnotes(); C.shell.markDirty(); C.schedulePaginate();
+}
+export function endnoteOrder() {
+  return [...C.editor.querySelectorAll('sup.en')].map((x) => x.dataset.fid).filter((v, k, a) => a.indexOf(v) === k && C.state.endnotes[v] != null);
+}
+export function endnotesEl(style) {
+  const order = endnoteOrder();
+  return h('div', { class: 'enotes doc', style }, h('div', { class: 'enhead' }, t('Notas al final')), ...order.map((f, i) => h('div', { class: 'fnote' }, h('sup', {}, roman(i + 1)), ` ${C.state.endnotes[f]}`)));
+}
+export function endnotesHeight(width) {
+  if (!meas) { meas = h('div', { class: 'doc fnmeasure' }); document.body.append(meas); }
+  meas.style.width = `${width}px`;
+  meas.replaceChildren(endnotesEl({ position: 'static', width: `${width}px` }));
+  return meas.firstChild.offsetHeight;
 }
 export async function insertFootnote() {
   C.restoreSelection();
@@ -330,6 +361,8 @@ export function numberFootnotes() {
   const sups = [...C.editor.querySelectorAll('sup.fn')];
   const order = [];
   sups.forEach((s) => { if (!order.includes(s.dataset.fid)) order.push(s.dataset.fid); s.textContent = String(order.indexOf(s.dataset.fid) + 1); });
+  const eo = [];
+  C.editor.querySelectorAll('sup.en').forEach((s) => { if (!eo.includes(s.dataset.fid)) eo.push(s.dataset.fid); s.textContent = roman(eo.indexOf(s.dataset.fid) + 1); });
   return order;
 }
 // Mide el alto de cada nota (en px) con el ancho del texto
@@ -467,4 +500,93 @@ export function drawIndentMarkers(left, z, cw) {
   };
   mk('first', left + (ml + ti) * z, 'Sangría de primera línea', (s, d) => { s.bl.style.textIndent = s.ti + d ? `${s.ti + d}px` : ''; });
   mk('left', left + ml * z, 'Sangría izquierda', (s, d) => { const v = Math.max(0, Math.min(cw - 40, s.ml + d)); s.bl.style.marginLeft = v ? `${v}px` : ''; });
+}
+
+// ------------------------------------------------------------------ tabulaciones
+// Cada tabulación es <span class="otab">\t</span>; su ancho se calcula para llegar a la
+// siguiente parada del párrafo (data-tabs="l:120,c:300,r:500", en px desde el margen izquierdo)
+// o a la siguiente parada predeterminada (cada 1.25 cm, como Word).
+const DEF_TAB = 48;
+let tabKind = 'l';
+export function parseTabs(v) {
+  return String(v || '').split(',').map((t) => { const m = /^([lcr]):(\d+(?:\.\d+)?)$/.exec(t.trim()); return m ? { k: m[1], x: Number(m[2]) } : null; }).filter(Boolean).sort((a, b) => a.x - b.x);
+}
+const tabsStr = (list) => list.sort((a, b) => a.x - b.x).map((t) => `${t.k}:${Math.round(t.x)}`).join(',');
+const TAB_BLOCK = 'p,h1,h2,h3,h4,h5,h6,li,blockquote,td,th';
+export function insertTab() {
+  if (C.state.track) { document.execCommand('insertText', false, '\t'); return; }
+  document.execCommand('insertHTML', false, '<span class="otab" contenteditable="false">\t</span>\u200B');
+}
+export function layoutTabs() {
+  // tabuladores sueltos (pegados o importados) -> span.otab
+  const w = document.createTreeWalker(C.editor, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeValue.includes('\t') && !n.parentElement.closest('.otab,pre,del') ? 1 : 3) });
+  const raw = []; while (w.nextNode()) raw.push(w.currentNode);
+  for (const t of raw) {
+    const frag = document.createDocumentFragment();
+    t.nodeValue.split('\t').forEach((part, i) => { if (i) frag.append(h('span', { class: 'otab', contenteditable: 'false' }, '\t')); if (part) frag.append(document.createTextNode(part)); });
+    t.replaceWith(frag);
+  }
+  const spans = [...C.editor.querySelectorAll('.otab')];
+  if (!spans.length) return;
+  const z = C.state.zoom / 100;
+  const edLeft = C.editor.getBoundingClientRect().left;
+  spans.forEach((s) => { s.style.width = '1px'; });
+  for (const s of spans) {
+    const blk = s.parentElement.closest(TAB_BLOCK) || C.editor;
+    const stops = parseTabs(blk.dataset?.tabs);
+    const bl = blk === C.editor ? 0 : (blk.getBoundingClientRect().left - edLeft) / z;
+    const x = (s.getBoundingClientRect().left - edLeft) / z;
+    const seg = () => {
+      const r = document.createRange(); r.setStartAfter(s);
+      let end = s.nextSibling; while (end && !(end.nodeType === 1 && end.classList?.contains('otab'))) end = end.nextSibling;
+      if (end) r.setEndBefore(end); else r.setEnd(s.parentElement, s.parentElement.childNodes.length);
+      return r.getBoundingClientRect().width / z;
+    };
+    let wdt = 0;
+    for (const st of stops) {
+      if (st.x <= x + 1) continue;
+      if (st.k === 'l') wdt = st.x - x;
+      else { const sw = seg(); wdt = st.k === 'r' ? st.x - x - sw : st.x - x - sw / 2; }
+      if (wdt > 1) break; wdt = 0;
+    }
+    if (!wdt) { const last = stops.length ? Math.max(stops[stops.length - 1].x, 0) : 0; const base = Math.max(last, bl); let nx = Math.floor(x / DEF_TAB + 1) * DEF_TAB; if (nx <= base) nx = Math.ceil((base + 1) / DEF_TAB) * DEF_TAB; wdt = Math.max(4, nx - x); }
+    s.style.width = `${wdt}px`;
+  }
+}
+export function drawTabMarkers(left, z, cw) {
+  const sel = h('button', { class: 'tabkind', title: 'Tipo de tabulación (clic para cambiar): izquierda, centrada o derecha', onclick: () => { tabKind = { l: 'c', c: 'r', r: 'l' }[tabKind]; sel.dataset.k = tabKind; } });
+  sel.dataset.k = tabKind;
+  C.ruler.append(sel);
+  const b = C.currentBlock();
+  const blocks = () => C.selectedBlocks().map((x) => x.closest(TAB_BLOCK) || x);
+  const track = C.ruler.querySelector('.track');
+  if (track && !track.dataset.tabs) {
+    track.dataset.tabs = '1';
+    track.title = 'Haz clic para poner una tabulación';
+    track.addEventListener('mousedown', (e) => {
+      if (e.target !== track && !e.target.classList.contains('m')) return;
+      const x = (e.clientX - C.ruler.getBoundingClientRect().left - left) / z;
+      if (x <= 0 || x >= cw) return;
+      e.preventDefault();
+      for (const bl of blocks()) { const list = parseTabs(bl.dataset.tabs); list.push({ k: tabKind, x }); bl.dataset.tabs = tabsStr(list); }
+      C.shell.markDirty(); C.schedulePaginate();
+    });
+  }
+  if (!b) return;
+  const blk = b.closest(TAB_BLOCK) || b;
+  for (const t of parseTabs(blk.dataset.tabs)) {
+    const m = h('div', { class: `tabstop k-${t.k}`, title: 'Arrastra para mover; arrástrala fuera de la regla para quitarla', style: { left: `${left + t.x * z}px` } });
+    m.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const x0 = e.clientX, y0 = e.clientY; const targets = blocks(); let nx = t.x, gone = false;
+      const move = (ev) => { nx = Math.max(0, Math.min(cw, t.x + (ev.clientX - x0) / z)); gone = Math.abs(ev.clientY - y0) > 24; m.style.left = `${left + nx * z}px`; m.style.opacity = gone ? '0.3' : ''; };
+      const up = () => {
+        removeEventListener('mousemove', move); removeEventListener('mouseup', up);
+        for (const bl of targets) { const list = parseTabs(bl.dataset.tabs).filter((s) => !(s.k === t.k && Math.abs(s.x - t.x) < 1)); if (!gone) list.push({ k: t.k, x: nx }); if (list.length) bl.dataset.tabs = tabsStr(list); else delete bl.dataset.tabs; }
+        C.shell.markDirty(); C.schedulePaginate();
+      };
+      addEventListener('mousemove', move); addEventListener('mouseup', up);
+    });
+    C.ruler.append(m);
+  }
 }

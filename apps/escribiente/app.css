@@ -127,3 +127,21 @@ body.printing #printRoot { display: block; }
 .ruler .indent.first { top: 2px; border-top: 7px solid var(--accent-2); }
 .ruler .indent.left { bottom: 2px; border-bottom: 7px solid var(--accent-2); }
 body[data-theme="dark"] .ruler .track { background: #2C2F3C; }
+.doc sup.en { color: var(--accent-2); cursor: pointer; font-weight: 600; padding: 0 1px; }
+.enotes { position: absolute; font-size: 9pt; line-height: 1.25; color: #333; }
+.enotes .enhead { font-weight: 600; font-size: 10.5pt; border-top: 1px solid #999; padding-top: 6px; margin-bottom: 4px; width: 33%; }
+.doc .otab { display: inline-block; white-space: pre; overflow: hidden; vertical-align: baseline; height: 1em; user-select: none; }
+.doc.showmarks .otab { background: linear-gradient(transparent 45%, #9AA0B4 45%, #9AA0B4 55%, transparent 55%); opacity: .5; }
+.ruler .tabkind { position: absolute; left: 6px; top: 3px; width: 16px; height: 16px; border: 1px solid var(--line-2); border-radius: 3px; background: var(--surface); cursor: pointer; padding: 0; }
+.ruler .tabkind::after, .ruler .tabstop::after { content: ''; position: absolute; border: solid var(--ink); }
+.ruler .tabkind::after { left: 4px; top: 3px; width: 6px; height: 7px; border-width: 0 0 2px 2px; }
+.ruler .tabkind[data-k="c"]::after { left: 3px; width: 8px; border-width: 0 0 2px 0; box-shadow: inset 2px 0 0 -0px transparent; }
+.ruler .tabkind[data-k="c"]::before { content: ''; position: absolute; left: 6px; top: 3px; width: 2px; height: 7px; background: var(--ink); }
+.ruler .tabkind[data-k="r"]::after { left: 4px; border-width: 0 2px 2px 0; }
+.ruler .tabstop { position: absolute; top: 8px; width: 9px; height: 9px; transform: translateX(-1px); cursor: ew-resize; z-index: 2; }
+.ruler .tabstop::after { left: 0; top: 0; width: 6px; height: 6px; border-width: 0 0 2px 2px; border-color: var(--ink); }
+.ruler .tabstop.k-c { transform: translateX(-4px); }
+.ruler .tabstop.k-c::after { left: 0; width: 8px; border-width: 0 0 2px 0; }
+.ruler .tabstop.k-c::before { content: ''; position: absolute; left: 3px; top: 0; width: 2px; height: 7px; background: var(--ink); }
+.ruler .tabstop.k-r { transform: translateX(-7px); }
+.ruler .tabstop.k-r::after { border-width: 0 2px 2px 0; }

@@ -31,11 +31,13 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 ![Calcula Datos](docs/calcula.png)
 ![Impresiona](docs/impresiona.png)
 
-## Funciones (versión 0.2)
+## Funciones (versión 0.2.1)
 
 **Común a las tres apps:** cinta con pestañas, inicio con plantillas y recientes, guardar / guardar como, exportar a PDF, imprimir, deshacer y rehacer, buscar y reemplazar, arrastrar y soltar archivos, **recuperación automática** si la app se cierra sin guardar, revisión ortográfica en español e inglés, y el botón para volver a la dona.
 
-**Nuevo en la 0.2 para toda la suite:** abrir y guardar **ODF** (`.odt`, `.ods`, `.odp`), **modo oscuro** (sigue al sistema o se elige), **Preferencias** (nombre del autor, tema e intervalo de autoguardado) y **Propiedades del documento** (título, autor, asunto, palabras clave).
+**Nuevo en la 0.2 para toda la suite:** abrir y guardar **ODF** (`.odt`, `.ods`, `.odp`), **modo oscuro** (sigue al sistema o se elige), **Preferencias** (idioma, nombre del autor, tema e intervalo de autoguardado) y **Propiedades del documento** (título, autor, asunto, palabras clave).
+
+**Interfaz en español e inglés (0.2.1):** el idioma se elige en *Preferencias* (en la dona) o en *Archivo → Opciones*, y cambia al momento, sin reiniciar: cinta, menús, diálogos, avisos, plantillas nuevas y PapelPDF. Con *Igual que el sistema* se usa español si el sistema está en español y si no, inglés. En inglés, Calcula Datos muestra las fórmulas con los nombres en inglés (`=SUM()`, `=IF()`), como Excel en inglés; el archivo guardado es el mismo en ambos idiomas.
 
 **Escribiente**
 - Páginas reales (Carta, Oficio México, Legal, A4, A5), orientación y márgenes; la vista en pantalla y el PDF tienen las mismas páginas
@@ -44,7 +46,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Tablas (insertar/eliminar filas y columnas, sombreado), imágenes con cambio de tamaño, vínculos, saltos de página, símbolos
 - Encabezado, pie y números de página; índice automático; contador de palabras
 - Plantillas: carta formal, reporte y currículum
-- **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie**, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
+- **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie y al final**, **tabulaciones** (izquierda, centro, derecha) en la regla, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
 
 **Calcula Datos**
 - Cuadrícula rápida (dibujada en canvas), varias hojas, inmovilizar paneles, cambiar ancho/alto, autoajuste
@@ -99,6 +101,9 @@ npm install                   # dependencias, modelos de OCR y empaquetado de la
 npm start                     # abre la suite (la dona)
 node test/formats.test.mjs    # pruebas de formatos de número y fórmulas en español
 npm i --no-save playwright@1.49.1 && xvfb-run -a node test/e2e.mjs   # punta a punta (Linux sin pantalla)
+xvfb-run -a node test/e2e-fase2.mjs              # funciones de la fase 2 (OFICINA_LANG=en para probar en inglés)
+python3 scripts/i18n/merge.py                     # regenera apps/shared/i18n-en.js desde scripts/i18n/en-*.py
+xvfb-run -a node test/i18n-crawl.mjs              # recorre la interfaz en inglés y lista textos sin traducir
 npm run dist:linux            # AppImage + deb + rpm
 npm run dist:win              # instalador NSIS (en Windows)
 npm run dist:mac              # en una Mac: dmg + zip
@@ -125,9 +130,9 @@ replica/                mapa de funciones y pantallas del proyecto
 
 ## Lo que falta (siguientes versiones)
 
-Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. Lo que sigue para la 0.3: interfaz en inglés, notas al final, tabulaciones personalizadas en la regla y las funciones de prioridad *could* (coautoría, SmartArt, ecuaciones, Power Query, entre otras).
+Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. La fase 2 está completa (todas las funciones *should*). Lo que sigue para la 0.3 son las funciones de prioridad *could* (SmartArt, ecuaciones, Power Query, coautoría, entre otras).
 
-**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y alineación, pero no siempre los colores ni las fuentes de cada palabra, y los comentarios y revisiones de un `.docx` ajeno todavía no se importan (sí se exportan); el patrón de Impresiona se aplana dentro de cada diapositiva al guardar en `.pptx`; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
+**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y al final, tabulaciones, comentarios con sus respuestas, control de cambios y alineación, pero no siempre los colores ni las fuentes de cada palabra; el patrón de Impresiona se aplana dentro de cada diapositiva al guardar en `.pptx`; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
 
 ## Licencia
 

@@ -1,5 +1,5 @@
 // Escribiente — procesador de textos de Mi Oficina MX. GPL-3.0-or-later
-import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, esc, api, closeDropdown } from '../../shared/office.js';
+import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, esc, api, closeDropdown, localizeHtml, tf } from '../../shared/office.js';
 import { TEMPLATES, thumb } from './templates.js';
 import { htmlToDocx } from './docx-out.js';
 import { docxToHtml, textToHtml, markdownToHtml, sanitize, htmlToText } from './docx-in.js';
@@ -40,7 +40,7 @@ const BLOCK_TAGS = /^(P|H[1-6]|BLOCKQUOTE|LI|DIV|TD|TH)$/;
 const state = {
   page: { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 },
   header: '', footer: '', pageNumbers: 'footer-center',
-  comments: [], footnotes: {}, track: false, watermark: null, pageColor: null, merge: null, pageFns: [],
+  comments: [], footnotes: {}, endnotes: {}, track: false, watermark: null, pageColor: null, merge: null, pageFns: [], enPos: null,
   zoom: 100, pages: 1, pageOf: [],
 };
 
@@ -205,7 +205,7 @@ function onEditorKey(e) {
     const cell = b && b.closest('td,th');
     if (cell) { e.preventDefault(); moveCell(cell, e.shiftKey ? -1 : 1); return; }
     if (b && b.tagName === 'LI') { e.preventDefault(); exec(e.shiftKey ? 'outdent' : 'indent'); return; }
-    e.preventDefault(); exec('insertText', '\t');
+    e.preventDefault(); F.insertTab(); shell.markDirty(); schedulePaginate();
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selImg) { e.preventDefault(); selImg.remove(); selectImage(null); shell.markDirty(); schedulePaginate(); }
   // Evita que el editor quede vacío sin párrafo
@@ -250,6 +250,7 @@ function paginate() {
   editor.style.top = `${p.mt}px`;
   editor.style.width = `${cw}px`;
   pagesEl.style.width = `${W}px`;
+  F.layoutTabs();
   const blocks = [...editor.children];
   for (const b of blocks) if (b.dataset.push) { b.style.marginTop = ''; delete b.dataset.push; }
   const tops = blocks.map((b) => b.offsetTop);
@@ -284,7 +285,17 @@ function paginate() {
   });
   state.pageFns = pageFns;
   const lastBottom = blocks.length ? tops[blocks.length - 1] + shift + hs[blocks.length - 1] : 0;
-  const n = Math.max(1, Math.floor(Math.max(0, lastBottom - 1) / S) + 1, (pageOf[pageOf.length - 1] ?? 0) + 1);
+  let n = Math.max(1, Math.floor(Math.max(0, lastBottom - 1) / S) + 1, (pageOf[pageOf.length - 1] ?? 0) + 1);
+  // notas al final: después del último párrafo; si no caben, en la página siguiente
+  state.enPos = null;
+  const enOrder = F.endnoteOrder();
+  if (enOrder.length) {
+    const eh = F.endnotesHeight(cw);
+    let start = lastBottom + 24; let pg = Math.floor(start / S);
+    if (start + eh > pg * S + H - (pageFnH[pg] || 0) && start > pg * S + 1) { pg += 1; start = pg * S; }
+    state.enPos = { page: pg, y: start - pg * S };
+    n = Math.max(n, pg + 1);
+  }
   state.pages = n; state.pageOf = pageOf;
   // hojas
   const sheets = $$('.sheet', pagesEl);
@@ -318,8 +329,9 @@ function renderHeaderFooter(sh, i, n) {
     const order = [...editor.querySelectorAll('sup.fn')].map((x) => x.dataset.fid).filter((v, k, a) => a.indexOf(v) === k);
     sh.append(h('div', { class: 'fnotes doc', style: { left: `${p.ml}px`, width: `${p.w - p.ml - p.mr}px`, bottom: `${p.mb}px` } }, ...fns.map((f) => h('div', { class: 'fnote' }, h('sup', {}, String(order.indexOf(f) + 1)), ` ${state.footnotes[f]}`))));
   }
+  if (state.enPos && state.enPos.page === i) sh.append(F.endnotesEl({ left: `${p.ml}px`, width: `${p.w - p.ml - p.mr}px`, top: `${p.mt + state.enPos.y}px` }));
   if (pn && pn !== 'none') {
-    const label = `Página ${i + 1} de ${n}`;
+    const label = tf('Página {0} de {1}', i + 1, n);
     const style = pn.startsWith('header') ? { top: `${Math.max(12, p.mt / 2 - 10)}px` } : { bottom: `${Math.max(12, p.mb / 2 - 10)}px` };
     if (pn.endsWith('center')) Object.assign(style, { left: '0', right: '0', textAlign: 'center' });
     else Object.assign(style, { right: `${p.mr}px` });
@@ -353,6 +365,7 @@ function drawRuler() {
     else ruler.append(h('div', { class: 'tick', style: { left: `${x}px`, height: c % 1 ? '4px' : '7px' } }));
   }
   F.drawIndentMarkers(left + p.ml * z, z, p.w - p.ml - p.mr);
+  F.drawTabMarkers(left + p.ml * z, z, p.w - p.ml - p.mr);
 }
 
 // ------------------------------------------------------------------ barra de estado
@@ -721,13 +734,13 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador del archivo
 function snapshotSettings() {
-  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, track: state.track, watermark: state.watermark, pageColor: state.pageColor };
+  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, track: state.track, watermark: state.watermark, pageColor: state.pageColor };
 }
 function setContent(html, settings) {
   editor.innerHTML = html || '<p><br></p>';
   if (settings) {
     if (settings.page) Object.assign(state.page, settings.page);
-    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'track', 'watermark', 'pageColor'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'track', 'watermark', 'pageColor'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
     editor.classList.toggle('tracking', !!state.track);
   }
   selectImage(null);
@@ -737,6 +750,7 @@ function setContent(html, settings) {
 }
 
 const adapter = {
+  i18nSkip: '#pages, .doc, .fnmeasure, .cm-text, .cmcard .reply-text, .nav-item',
   exts: ['docx', 'odt', 'txt', 'html', 'htm', 'md'],
   writable: ['docx', 'odt', 'html', 'htm', 'txt'],
   saveExt: 'docx',
@@ -753,9 +767,9 @@ const adapter = {
     const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0];
     state.page = { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 };
     state.header = ''; state.footer = ''; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
-    Object.assign(state, { comments: [], footnotes: {}, track: false, watermark: null, pageColor: null, merge: null });
+    Object.assign(state, { comments: [], footnotes: {}, endnotes: {}, track: false, watermark: null, pageColor: null, merge: null });
     editor.classList.remove('tracking');
-    setContent(t.html());
+    setContent(localizeHtml(t.html()));
     editor.focus();
     const first = editor.querySelector('p,h1');
     if (first && t.blank) { const r = document.createRange(); r.setStart(first, 0); r.collapse(true); document.getSelection().removeAllRanges(); document.getSelection().addRange(r); }
@@ -765,13 +779,13 @@ const adapter = {
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
       state.header = ''; state.footer = ''; state.pageNumbers = 'none';
-      Object.assign(state, { comments: [], footnotes: r.footnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
     }
     if (f.ext === 'odt') {
       const r = await odtToHtml(f.bytes);
-      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { props: r.props };
     }
@@ -897,6 +911,7 @@ async function onCommand(cmd, arg) {
     case 'revAcceptAll': return F.reviewAction('acceptAll');
     case 'revRejectAll': return F.reviewAction('rejectAll');
     case 'footnote': return F.insertFootnote();
+    case 'endnote': return F.insertEndnote();
     case 'textbox': return F.insertTextBox();
     case 'cols1': return F.setColumns(1);
     case 'cols2': return F.setColumns(2);
@@ -991,7 +1006,7 @@ const TABS = [
   {
     id: 'refs', label: 'Referencias', groups: [
       { label: 'Tabla de contenido', items: [{ cmd: 'toc', label: 'Índice / actualizar', icon: 'styles', size: 'lg' }] },
-      { label: 'Notas al pie', items: [{ cmd: 'footnote', label: 'Insertar nota al pie', icon: 'sup', size: 'lg' }] },
+      { label: 'Notas al pie', items: [{ cmd: 'footnote', label: 'Insertar nota al pie', icon: 'sup', size: 'lg' }, { cmd: 'endnote', label: 'Insertar nota al final', icon: 'sup' }] },
     ],
   },
   {

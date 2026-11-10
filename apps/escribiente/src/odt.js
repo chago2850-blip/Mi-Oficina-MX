@@ -1,5 +1,6 @@
 // Documentos ODF de texto (.odt): abrir y guardar. GPL-3.0
 import JSZip from 'jszip';
+import { t } from '../../shared/i18n.js';
 
 const NS = {
   office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', style: 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
@@ -11,6 +12,7 @@ const NS = {
 const NSDECL = Object.entries(NS).map(([k, v]) => `xmlns:${k}="${v}"`).join(' ');
 const x = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const px2cm = (px) => `${(px / 37.7953).toFixed(3)}cm`;
+export const roman = (n) => { let r = ''; for (const [v, s] of [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]) while (n >= v) { r += s; n -= v; } return r; };
 export function lenToPx(v) {
   if (!v) return 0;
   const n = parseFloat(v);
@@ -26,7 +28,7 @@ export async function htmlToOdt(editorEl, settings) {
   const autoStyles = new Map(); // clave -> nombre
   const styleXml = [];
   const pictures = [];
-  let fnNum = 0;
+  let fnNum = 0, enNum = 0;
   const textStyle = (f) => {
     const props = [];
     if (f.bold) props.push('fo:font-weight="bold"'); if (f.italic) props.push('fo:font-style="italic"');
@@ -47,9 +49,11 @@ export async function htmlToOdt(editorEl, settings) {
     const ml = parseFloat(st.marginLeft) || 0; if (ml) props.push(`fo:margin-left="${px2cm(ml)}"`);
     const ti = parseFloat(st.textIndent) || 0; if (ti) props.push(`fo:text-indent="${px2cm(ti)}"`);
     const lh = parseFloat(st.lineHeight); if (lh && !/px|pt/.test(st.lineHeight)) props.push(`fo:line-height="${Math.round(lh * 100)}%"`);
-    if (!props.length) return parent;
-    const key = `P|${parent}|${props.join(' ')}`;
-    if (!autoStyles.has(key)) { const name = `P${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="paragraph" style:parent-style-name="${parent}"><style:paragraph-properties ${props.join(' ')}/></style:style>`); }
+    const tabs = String(el.dataset?.tabs || '').split(',').map((t) => /^([lcr]):(\d+)/.exec(t)).filter(Boolean)
+      .map((m) => `<style:tab-stop style:position="${px2cm(Number(m[2]) - ml)}"${m[1] === 'l' ? '' : ` style:type="${m[1] === 'c' ? 'center' : 'right'}"`}/>`).join('');
+    if (!props.length && !tabs) return parent;
+    const key = `P|${parent}|${props.join(' ')}|${tabs}`;
+    if (!autoStyles.has(key)) { const name = `P${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="paragraph" style:parent-style-name="${parent}"><style:paragraph-properties ${props.join(' ')}${tabs ? `><style:tab-stops>${tabs}</style:tab-stops></style:paragraph-properties>` : '/>'}</style:style>`); }
     return autoStyles.get(key);
   };
   const inline = async (node, f = {}) => {
@@ -67,6 +71,7 @@ export async function htmlToOdt(editorEl, settings) {
       if (tag === 'BR') { out += '<text:line-break/>'; continue; }
       if (tag === 'DEL') continue; // se guardan los cambios ya aceptados
       if (tag === 'IMG') { out += await image(n); continue; }
+      if (tag === 'SUP' && n.classList.contains('en')) { const t = settings.endnotes?.[n.dataset.fid]; if (t != null) { enNum++; out += `<text:note text:id="edn${enNum}" text:note-class="endnote"><text:note-citation>${roman(enNum)}</text:note-citation><text:note-body><text:p text:style-name="Endnote">${x(t)}</text:p></text:note-body></text:note>`; } continue; }
       if (tag === 'SUP' && n.classList.contains('fn')) { const t = settings.footnotes?.[n.dataset.fid]; if (t != null) { fnNum++; out += `<text:note text:id="ftn${fnNum}" text:note-class="footnote"><text:note-citation>${fnNum}</text:note-citation><text:note-body><text:p text:style-name="Footnote">${x(t)}</text:p></text:note-body></text:note>`; } continue; }
       if (n.classList?.contains('mf')) { out += x(`«${n.dataset.f}»`); continue; }
       if (['UL', 'OL', 'TABLE'].includes(tag)) continue;
@@ -165,9 +170,11 @@ ${heading(1, 16, '#2F2496')}${heading(2, 13, '#3D30B5')}${heading(3, 12, '#3D30B
 <style:style style:name="Quotations" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-left="1cm" fo:margin-right="1cm"/><style:text-properties fo:font-style="italic" fo:color="#444444"/></style:style>
 <style:style style:name="List_20_Paragraph" style:display-name="List Paragraph" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-bottom="0.05cm"/></style:style>
 <style:style style:name="Footnote" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="9pt"/></style:style>
+<style:style style:name="Endnote" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="9pt"/></style:style>
+<text:notes-configuration text:note-class="endnote" style:num-format="i" text:start-value="0"/>
 </office:styles>
 <office:automatic-styles><style:page-layout style:name="PL1"><style:page-layout-properties fo:page-width="${px2cm(pg.w)}" fo:page-height="${px2cm(pg.h)}" style:print-orientation="${pg.landscape ? 'landscape' : 'portrait'}" fo:margin-top="${px2cm(pg.mt)}" fo:margin-bottom="${px2cm(pg.mb)}" fo:margin-left="${px2cm(pg.ml)}" fo:margin-right="${px2cm(pg.mr)}"${settings.pageColor ? ` fo:background-color="${settings.pageColor}"` : ''}/></style:page-layout></office:automatic-styles>
-<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="PL1">${settings.header ? `<style:header><text:p>${x(settings.header)}</text:p></style:header>` : ''}${settings.footer || (settings.pageNumbers && settings.pageNumbers !== 'none') ? `<style:footer><text:p>${x(settings.footer || '')}${settings.pageNumbers && settings.pageNumbers !== 'none' ? ' Página <text:page-number text:select-page="current"/>' : ''}</text:p></style:footer>` : ''}</style:master-page></office:master-styles></office:document-styles>`;
+<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="PL1">${settings.header ? `<style:header><text:p>${x(settings.header)}</text:p></style:header>` : ''}${settings.footer || (settings.pageNumbers && settings.pageNumbers !== 'none') ? `<style:footer><text:p>${x(settings.footer || '')}${settings.pageNumbers && settings.pageNumbers !== 'none' ? ` ${t('Página')} <text:page-number text:select-page="current"/>` : ''}</text:p></style:footer>` : ''}</style:master-page></office:master-styles></office:document-styles>`;
   const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta ${NSDECL} office:version="1.3"><office:meta><meta:generator>Escribiente · Mi Oficina MX</meta:generator><dc:title>${x(settings.title)}</dc:title><dc:creator>${x(settings.author)}</dc:creator><dc:subject>${x(settings.subject)}</dc:subject><meta:keyword>${x(settings.keywords)}</meta:keyword><dc:date>${new Date().toISOString()}</dc:date></office:meta></office:document-meta>`;
   zip.file('content.xml', content); zip.file('styles.xml', styles); zip.file('meta.xml', meta);
   zip.file('META-INF/manifest.xml', `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>${pictures.map((p) => `<manifest:file-entry manifest:full-path="${p}" manifest:media-type="image/${p.split('.').pop().replace('jpg', 'jpeg').replace('svg', 'svg+xml')}"/>`).join('')}</manifest:manifest>`);
@@ -206,7 +213,7 @@ export async function odtToHtml(bytes) {
   const listKinds = new Map();
   for (const ls of content.getElementsByTagNameNS(NS.text, 'list-style')) listKinds.set(A(ls, 'style', 'name'), ls.getElementsByTagNameNS(NS.text, 'list-level-style-number').length && !ls.firstElementChild?.localName?.includes('bullet') ? 'ol' : 'ul');
   if (styles) for (const ls of styles.getElementsByTagNameNS(NS.text, 'list-style')) if (!listKinds.has(A(ls, 'style', 'name'))) listKinds.set(A(ls, 'style', 'name'), ls.firstElementChild?.localName === 'list-level-style-number' ? 'ol' : 'ul');
-  const footnotes = {};
+  const footnotes = {}, endnotes = {};
   const imgs = {};
   const e = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const css = (o) => [o.bold && 'font-weight:bold', o.italic && 'font-style:italic', (o.underline || o.strike) && `text-decoration:${[o.underline && 'underline', o.strike && 'line-through'].filter(Boolean).join(' ')}`, o.color && `color:${o.color}`, o.bg && `background-color:${o.bg}`, o.size && `font-size:${o.size}pt`, o.font && `font-family:${o.font}`].filter(Boolean).join(';');
@@ -221,7 +228,7 @@ export async function odtToHtml(bytes) {
       if (ln === 'line-break') { out += '<br>'; continue; }
       if (ln === 'span') { const st = resolve(A(n, 'text', 'style-name')); const c = css(st); let inner = await inline(n); if (st.sup) inner = `<sup>${inner}</sup>`; if (st.sub) inner = `<sub>${inner}</sub>`; out += c ? `<span style="${c}">${inner}</span>` : inner; continue; }
       if (ln === 'a') { out += `<a href="${e(A(n, 'xlink', 'href') || '')}">${await inline(n)}</a>`; continue; }
-      if (ln === 'note') { const body = n.getElementsByTagNameNS(NS.text, 'note-body')[0]; const fid = `f${Math.random().toString(36).slice(2, 8)}`; footnotes[fid] = body?.textContent.trim() || ''; out += `<sup class="fn" data-fid="${fid}" contenteditable="false">#</sup>`; continue; }
+      if (ln === 'note') { const body = n.getElementsByTagNameNS(NS.text, 'note-body')[0]; const end = A(n, 'text', 'note-class') === 'endnote'; const fid = `${end ? 'e' : 'f'}${Math.random().toString(36).slice(2, 8)}`; (end ? endnotes : footnotes)[fid] = body?.textContent.trim() || ''; out += `<sup class="${end ? 'en' : 'fn'}" data-fid="${fid}" contenteditable="false">#</sup>`; continue; }
       if (ln === 'frame') {
         const im = n.getElementsByTagNameNS(NS.draw, 'image')[0]; const href = im && A(im, 'xlink', 'href');
         if (href && zip.file(href)) {
@@ -283,5 +290,5 @@ export async function odtToHtml(bytes) {
     page = { w, h: hgt, mt: lenToPx(A(pl, 'fo', 'margin-top') || '2cm'), mb: lenToPx(A(pl, 'fo', 'margin-bottom') || '2cm'), ml: lenToPx(A(pl, 'fo', 'margin-left') || '2cm'), mr: lenToPx(A(pl, 'fo', 'margin-right') || '2cm'), landscape: w > hgt };
   }
   const mg = (tag, ns = 'dc') => meta?.getElementsByTagNameNS(NS[ns], tag)[0]?.textContent || '';
-  return { html: html || '<p><br></p>', page, footnotes, props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
+  return { html: html || '<p><br></p>', page, footnotes, endnotes, props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
 }

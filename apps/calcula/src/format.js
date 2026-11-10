@@ -1,4 +1,5 @@
 // Formato de números estilo hoja de cálculo y reconocimiento de lo que se escribe. GPL-3.0
+import { getLang } from '../../shared/i18n.js';
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const EPOCH = Date.UTC(1899, 11, 30);
@@ -92,7 +93,7 @@ export const isDateFormat = (fmt) => !!fmt && /(^|[^"\\])[dmyhs]/i.test(fmt.repl
 // Devuelve { text, color, align } para mostrar el valor
 export function formatValue(v, fmt) {
   if (v === null || v === undefined || v === '') return { text: '' };
-  if (typeof v === 'boolean') return { text: v ? 'VERDADERO' : 'FALSO', align: 'center' };
+  if (typeof v === 'boolean') return { text: getLang() === 'en' ? (v ? 'TRUE' : 'FALSE') : (v ? 'VERDADERO' : 'FALSO'), align: 'center' };
   if (typeof v === 'string') return { text: v, align: 'left' };
   if (typeof v !== 'number') return { text: String(v) };
   if (!fmt || fmt === 'General') {

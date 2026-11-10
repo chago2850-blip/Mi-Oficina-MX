@@ -1,5 +1,5 @@
 // Calcula Datos — hoja de cálculo de Mi Oficina MX. GPL-3.0-or-later
-import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, confirmBox } from '../../shared/office.js';
+import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, confirmBox, onLang, t } from '../../shared/office.js';
 import * as echarts from 'echarts/dist/echarts.esm.min.mjs';
 import { Workbook, colName, addr, rangeStr, parseRange, parseAddr } from './workbook.js';
 import { Grid } from './grid.js';
@@ -486,33 +486,35 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador
 function emptyBook(tpl) {
+  // plantillas en el idioma de la interfaz
+  const L = (rows) => rows.map((r) => r.map((v) => (typeof v === 'string' && v && !v.startsWith('=') ? t(v) : v)));
   wb.reset();
-  const s = wb.addSheet('Hoja1');
+  const s = wb.addSheet();
   if (tpl === 'presupuesto') {
     const rows = [['Presupuesto mensual', '', '', ''], ['', '', '', ''], ['Concepto', 'Presupuesto', 'Real', 'Diferencia'], ['Renta', 8500, 8500, '=B4-C4'], ['Luz y agua', 900, 1040, '=B5-C5'], ['Internet y teléfono', 650, 650, '=B6-C6'], ['Despensa', 4500, 4820, '=B7-C7'], ['Transporte', 1600, 1350, '=B8-C8'], ['Ahorro', 2000, 2000, '=B9-C9'], ['Total', '=SUM(B4:B9)', '=SUM(C4:C9)', '=B10-C10']];
-    wb.hf.setSheetContent(s.id, rows);
+    wb.hf.setSheetContent(s.id, L(rows));
     s.merges.push({ r1: 0, c1: 0, r2: 0, c2: 3 });
-    wb.setStyle(0, 0, { b: true, size: 16, color: '#0A6B50' });
+    wb.setStyle(0, 0, { b: true, size: 16, color: '#0A6B50' }); s.rowH.set(0, 32);
     for (let c = 0; c < 4; c++) { wb.setStyle(2, c, { b: true, bg: '#DFF5EE', border: { b: '#0E9C74' } }); wb.setStyle(9, c, { b: true, border: { t: '#000000' } }); }
     for (let r = 3; r <= 9; r++) for (let c = 1; c < 4; c++) wb.setStyle(r, c, { ...(wb.sheet.style(r, c) || {}), fmt: '"$"#,##0.00;[Red]-"$"#,##0.00' });
     s.colW.set(0, 170); s.colW.set(1, 110); s.colW.set(2, 110); s.colW.set(3, 110);
-    s.charts.push({ id: uid(), type: 'column', range: 'A3:C9', title: 'Presupuesto vs. real', x: 530, y: 48, w: 460, h: 290 });
+    s.charts.push({ id: uid(), type: 'column', range: 'A3:C9', title: t('Presupuesto vs. real'), x: 530, y: 48, w: 460, h: 290 });
   } else if (tpl === 'ventas') {
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio'];
     const rows = [['Mes', 'Ventas', 'Costos', 'Utilidad', 'Margen']];
     meses.forEach((m, i) => { const r = i + 2; rows.push([m, 42000 + i * 3500 + (i % 2) * 2100, 26000 + i * 1500, `=B${r}-C${r}`, `=D${r}/B${r}`]); });
     rows.push(['Total', '=SUM(B2:B7)', '=SUM(C2:C7)', '=SUM(D2:D7)', '=D8/B8']);
-    wb.hf.setSheetContent(s.id, rows);
+    wb.hf.setSheetContent(s.id, L(rows));
     for (let c = 0; c < 5; c++) { wb.setStyle(0, c, { b: true, color: '#FFFFFF', bg: '#0E9C74', align: c ? 'center' : undefined }); wb.setStyle(7, c, { b: true, border: { t: '#000000' } }); }
     for (let r = 1; r <= 7; r++) { for (let c = 1; c < 4; c++) wb.setStyle(r, c, { ...(wb.sheet.style(r, c) || {}), fmt: '"$"#,##0' }); wb.setStyle(r, 4, { ...(wb.sheet.style(r, 4) || {}), fmt: '0.0%' }); }
     s.colW.set(0, 110); s.freeze = { rows: 1, cols: 0 };
-    s.charts.push({ id: uid(), type: 'line', range: 'A1:D7', title: 'Ventas, costos y utilidad', x: 520, y: 30, w: 480, h: 300 });
+    s.charts.push({ id: uid(), type: 'line', range: 'A1:D7', title: t('Ventas, costos y utilidad'), x: 520, y: 30, w: 480, h: 300 });
   } else if (tpl === 'asistencia') {
     const rows = [['Lista de asistencia', '', '', '', '', '', ''], ['Nombre', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Asistencias']];
     ['Ana López', 'Bruno Díaz', 'Carla Ruiz', 'Diego Mora', 'Elena Paz'].forEach((n, i) => { const r = i + 3; rows.push([n, '✓', '✓', '', '✓', '✓', `=COUNTIF(B${r}:F${r},"✓")`]); });
-    wb.hf.setSheetContent(s.id, rows);
+    wb.hf.setSheetContent(s.id, L(rows));
     s.merges.push({ r1: 0, c1: 0, r2: 0, c2: 6 });
-    wb.setStyle(0, 0, { b: true, size: 15, align: 'center' });
+    wb.setStyle(0, 0, { b: true, size: 15, align: 'center' }); s.rowH.set(0, 30);
     for (let c = 0; c < 7; c++) wb.setStyle(1, c, { b: true, bg: '#DFF5EE', align: 'center', border: { t: '#9AA0B4', b: '#9AA0B4', l: '#9AA0B4', r: '#9AA0B4' } });
     for (let r = 2; r < 7; r++) for (let c = 0; c < 7; c++) wb.setStyle(r, c, { align: c ? 'center' : undefined, border: { t: '#9AA0B4', b: '#9AA0B4', l: '#9AA0B4', r: '#9AA0B4' } });
     s.colW.set(0, 160); for (let c = 1; c < 6; c++) s.colW.set(c, 56); s.colW.set(6, 100);
@@ -524,6 +526,7 @@ const blankThumb = '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" 
 const gridThumb = (head, accent) => `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#E2E4EA;height:100%">${Array.from({ length: 30 }, (_, i) => `<div style="background:${i < 5 && head ? accent : '#fff'}"></div>`).join('')}</div>`;
 
 const adapter = {
+  i18nSkip: '.stab, .grid-cell-editor, .cnote-tip',
   exts: ['xlsx', 'xlsm', 'ods', 'csv', 'tsv'],
   writable: ['xlsx', 'xlsm', 'ods', 'csv'],
   saveExt: 'xlsx',
@@ -782,5 +785,7 @@ addEventListener('keydown', (e) => {
 emptyBook('blank');
 afterLoad();
 shell.start();
+// Al cambiar el idioma, las fórmulas y errores se vuelven a mostrar en el idioma nuevo
+onLang(() => { grid.invalidate(); grid.draw(); refresh(); });
 
 window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F };
