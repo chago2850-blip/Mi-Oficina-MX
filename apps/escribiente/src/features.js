@@ -174,45 +174,72 @@ function wrapSelection(make) {
 function unwrap(el) { const p = el.parentNode; while (el.firstChild) p.insertBefore(el.firstChild, el); el.remove(); }
 
 function bindTrack() {
+  // Escritura natural: el navegador inserta y borra el texto (así la revisión ortográfica y el cursor
+  // funcionan como siempre) y después se marca lo insertado; solo lo ajeno se marca como eliminado.
+  const inOwnIns = (node) => { const el = (node?.nodeType === 3 ? node.parentElement : node)?.closest?.('ins'); return el && el.dataset.author === author() ? el : null; };
+  let pendingIns = null; // { node, offset } donde empieza el texto que se está escribiendo
   C.editor.addEventListener('beforeinput', (e) => {
     if (!C.state.track) return;
     const t = e.inputType;
     const s = document.getSelection();
     if (!s.rangeCount) return;
     const r = s.getRangeAt(0);
-    const inOwnIns = (node) => { const el = (node.nodeType === 3 ? node.parentElement : node)?.closest('ins'); return el && el.dataset.author === author() ? el : null; };
     if (t === 'insertText' || t === 'insertReplacementText' || t === 'insertFromPaste' || t === 'insertFromDrop') {
       const text = t === 'insertText' ? e.data : (e.dataTransfer?.getData('text/plain') ?? e.data ?? '');
       if (text == null) return;
-      e.preventDefault();
-      if (!r.collapsed) markDeleted(r, 'forward');
-      const sel = document.getSelection(); const rr = sel.getRangeAt(0);
-      const own = inOwnIns(rr.startContainer);
-      if (own) { const tn = document.createTextNode(text); rr.insertNode(tn); rr.setStartAfter(tn); rr.collapse(true); }
-      else {
-        // si el cursor quedó dentro de un <del>, se sale de él
-        const del = (rr.startContainer.nodeType === 3 ? rr.startContainer.parentElement : rr.startContainer).closest('del');
-        if (del) { rr.setStartAfter(del); rr.collapse(true); }
-        const ins = revEl('ins'); ins.textContent = text; rr.insertNode(ins);
-        rr.setStart(ins.firstChild, text.length); rr.collapse(true);
-      }
-      sel.removeAllRanges(); sel.addRange(rr);
-      C.shell.markDirty(); C.schedulePaginate(); renderSideSoon();
+      if (!r.collapsed) { e.preventDefault(); markDeleted(r, 'forward'); insertTracked(text); return; }
+      // si el cursor quedó dentro de un <del>, se sale de él
+      const del = (r.startContainer.nodeType === 3 ? r.startContainer.parentElement : r.startContainer)?.closest?.('del');
+      if (del) { r.setStartAfter(del); r.collapse(true); s.removeAllRanges(); s.addRange(r); }
+      if (inOwnIns(r.startContainer)) return; // dentro de lo propio: inserción normal del navegador
+      if (t !== 'insertText' || r.startContainer.nodeType !== 3) { e.preventDefault(); insertTracked(text); return; }
+      pendingIns = { node: r.startContainer, offset: r.startOffset, len: text.length };
       return;
     }
     if (t.startsWith('delete')) {
       if (t === 'deleteByDrag') return;
-      e.preventDefault();
       const backward = t.includes('Backward');
-      if (r.collapsed) {
-        s.modify('extend', backward ? 'backward' : 'forward', t.includes('Word') ? 'word' : 'character');
-      }
+      const orig = r.cloneRange();
+      if (r.collapsed) s.modify('extend', backward ? 'backward' : 'forward', t.includes('Word') ? 'word' : t.includes('Line') ? 'lineboundary' : 'character');
       const rng = s.getRangeAt(0);
-      if (rng.collapsed) return;
+      if (rng.collapsed) { s.removeAllRanges(); s.addRange(orig); return; }
+      // borrar solo texto propio recién insertado: lo hace el navegador (el cursor queda donde debe)
+      const nodes = textNodesIn(rng);
+      if (nodes.length && nodes.every((n) => inOwnIns(n))) { if (orig.collapsed) { s.removeAllRanges(); s.addRange(orig); } return; }
+      e.preventDefault();
       markDeleted(rng, backward ? 'backward' : 'forward');
       C.shell.markDirty(); C.schedulePaginate(); renderSideSoon();
     }
   });
+  C.editor.addEventListener('input', () => {
+    if (!pendingIns) return;
+    const { node, offset, len } = pendingIns; pendingIns = null;
+    if (!node.isConnected || node.nodeValue.length < offset + len) return;
+    const s = document.getSelection();
+    const r = document.createRange(); r.setStart(node, offset); r.setEnd(node, offset + len);
+    // se une a una inserción propia justo antes, o se crea una nueva
+    const prev = offset === 0 ? node.previousSibling : null;
+    let ins;
+    if (prev && prev.nodeName === 'INS' && prev.dataset.author === author()) { ins = prev; const txt = r.toString(); r.deleteContents(); ins.append(txt); }
+    else { ins = revEl('ins'); r.surroundContents(ins); }
+    const c = document.createRange(); const last = ins.lastChild;
+    if (last?.nodeType === 3) c.setStart(last, last.nodeValue.length); else c.setStartAfter(ins);
+    c.collapse(true); s.removeAllRanges(); s.addRange(c);
+    C.shell.markDirty(); renderSideSoon();
+  });
+}
+function insertTracked(text) {
+  const sel = document.getSelection(); const rr = sel.getRangeAt(0);
+  const own = (rr.startContainer.nodeType === 3 ? rr.startContainer.parentElement : rr.startContainer)?.closest?.('ins');
+  if (own && own.dataset.author === author()) { const tn = document.createTextNode(text); rr.insertNode(tn); rr.setStartAfter(tn); rr.collapse(true); }
+  else {
+    const del = (rr.startContainer.nodeType === 3 ? rr.startContainer.parentElement : rr.startContainer)?.closest?.('del');
+    if (del) { rr.setStartAfter(del); rr.collapse(true); }
+    const ins = revEl('ins'); ins.textContent = text; rr.insertNode(ins);
+    rr.setStart(ins.firstChild, text.length); rr.collapse(true);
+  }
+  sel.removeAllRanges(); sel.addRange(rr);
+  C.shell.markDirty(); C.schedulePaginate(); renderSideSoon();
 }
 function markDeleted(range, dir) {
   // Lo que el mismo autor acaba de insertar se borra de verdad; lo demás se marca como eliminado.
@@ -221,22 +248,35 @@ function markDeleted(range, dir) {
   const nodes = textNodesIn(range);
   const ownNodes = nodes.filter(ownIns);
   const endNode = range.endContainer, endOff = range.endOffset, startNode = range.startContainer, startOff = range.startOffset;
-  const last = wrapRange(range, () => revEl('del'), (n) => ownIns(n) || !!n.parentElement?.closest('del'));
-  // borrar lo propio
+  const created = [];
+  wrapRange(range, () => { const d = revEl('del'); created.push(d); return d; }, (n) => ownIns(n) || !!n.parentElement?.closest('del'));
+  // borrar lo propio (deleteData mantiene bien los rangos y el cursor)
+  let caret = null;
   for (const n of ownNodes) {
     const st = n === startNode ? startOff : 0, en = n === endNode ? endOff : n.nodeValue.length;
-    n.nodeValue = n.nodeValue.slice(0, st) + n.nodeValue.slice(en);
-    const ins = n.parentElement.closest('ins'); if (ins && !ins.textContent) ins.remove();
+    if (en > st) n.deleteData(st, en - st);
+    const ins = n.parentElement?.closest('ins');
+    if (!caret) caret = { n, off: st, ins };
   }
-  // cursor: antes (hacia atrás) o después (hacia adelante) de lo marcado
-  const dels = C.editor.querySelectorAll('del');
+  // cursor: antes (hacia atrás) o después (hacia adelante) de lo marcado, en la parte que tocó esta acción
   const r2 = document.createRange();
-  const anchor = last || dels[dels.length - 1];
   try {
-    if (dir === 'backward') { const first = range.startContainer.isConnected ? null : null; void first; if (anchor) { const firstDel = findFirstDelOfRun(anchor); r2.setStartBefore(firstDel); } }
-    else if (anchor) r2.setStartAfter(anchor);
+    if (dir === 'backward' && created.length) r2.setStartBefore(findFirstDelOfRun(created[0]));
+    else if (created.length) r2.setStartAfter(created[created.length - 1]);
+    else if (caret?.n.isConnected) r2.setStart(caret.n, Math.min(caret.off, caret.n.nodeValue.length));
+    else r2.setStart(range.startContainer, Math.min(range.startOffset, range.startContainer.nodeType === 3 ? range.startContainer.nodeValue.length : range.startContainer.childNodes.length));
     r2.collapse(true); s.removeAllRanges(); s.addRange(r2);
   } catch { /* cursor sin cambio */ }
+  for (const n of ownNodes) { const ins = n.parentElement?.closest('ins'); if (ins && !ins.textContent && !ins.contains(s.anchorNode)) ins.remove(); }
+  // tachados seguidos del mismo autor se unen en uno solo
+  for (const d of created) {
+    if (!d.isConnected) continue;
+    const nx = d.nextSibling;
+    if (nx && nx.nodeName === 'DEL' && nx.dataset.author === d.dataset.author) { d.append(...nx.childNodes); nx.remove(); }
+    const pv = d.previousSibling;
+    if (pv && pv.nodeName === 'DEL' && pv.dataset.author === d.dataset.author) { pv.append(...d.childNodes); d.remove(); }
+  }
+  for (const d of created) { if (d.isConnected) d.normalize(); }
 }
 function findFirstDelOfRun(del) { let d = del; while (d.previousSibling && d.previousSibling.nodeName === 'DEL') d = d.previousSibling; return d; }
 

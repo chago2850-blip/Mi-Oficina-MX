@@ -52,6 +52,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Plantillas: carta formal, reporte y currículum
 - **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie y al final**, **tabulaciones** (izquierda, centro, derecha) en la regla, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
 - **0.3:** **ecuaciones** (escritas en LaTeX con vista previa; en el `.docx` quedan como ecuaciones de Word y en el `.odt` como fórmulas), **citas y bibliografía** (APA), **comparar documentos** (el resultado queda como control de cambios), **etiquetas y sobres** (también con los destinatarios de la combinación), **diagramas** tipo SmartArt (lista, proceso, ciclo, jerarquía y pirámide), **modo lectura** y **modo enfoque**, reacciones en comentarios, exportar a **Markdown** y abrir documentos `.doc` de Word 97-2003
+- **0.4.2:** el **control de cambios** se ve en la barra de estado (*Control de cambios: activado/desactivado*, con un clic se apaga); con el control de cambios activo, lo que tú escribiste se borra normalmente con Retroceso, el cursor ya no salta y la ortografía sigue marcando palabras y dando sugerencias con el clic derecho
 - **0.4:** abre las **ecuaciones de Word y LibreOffice** como ecuaciones editables, abre los `.doc` antiguos **con su formato** (títulos, negritas, colores, tamaños, tablas, listas y alineación), y guarda dentro del `.docx`/`.odt` las **reacciones** a comentarios, los diagramas tipo SmartArt editables, las fuentes de las citas y el LaTeX de las ecuaciones
 
 **Calcula Datos**
@@ -86,12 +87,12 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 
 | Sistema | Archivo | Cómo |
 | --- | --- | --- |
-| Windows 10/11 | `Mi.Oficina.MX.Setup.0.4.1.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
-| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.4.1-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
-| macOS Intel | `MiOficinaMX-0.4.1-x64.dmg` | Igual que el anterior. |
-| Ubuntu, Debian, Mint | `mi-oficina-mx_0.4.1_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.4.1_amd64.deb` |
-| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.4.1.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.4.1.x86_64.rpm` |
-| Cualquier Linux | `Mi.Oficina.MX-0.4.1.AppImage` | `chmod +x Mi.Oficina.MX-0.4.1.AppImage` y ábrelo |
+| Windows 10/11 | `Mi.Oficina.MX.Setup.0.4.2.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
+| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.4.2-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
+| macOS Intel | `MiOficinaMX-0.4.2-x64.dmg` | Igual que el anterior. |
+| Ubuntu, Debian, Mint | `mi-oficina-mx_0.4.2_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.4.2_amd64.deb` |
+| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.4.2.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.4.2.x86_64.rpm` |
+| Cualquier Linux | `Mi.Oficina.MX-0.4.2.AppImage` | `chmod +x Mi.Oficina.MX-0.4.2.AppImage` y ábrelo |
 
 El instalador asocia los archivos `.docx`, `.xlsx`, `.csv`, `.pptx` y `.pdf`: con doble clic se abren en la app correcta.
 

@@ -1111,7 +1111,12 @@ adapter.onPrefs = (p) => { editor.spellcheck = p.spellcheck !== false; };
 statusPages = h('span', {}, 'Página 1 de 1');
 statusWords = h('button', { class: 'sb-btn', title: 'Contar palabras', onclick: () => onCommand('wordCount') }, '0 palabras');
 zoom = shell.zoomControl({ value: 100, min: 30, max: 300, onChange: (v) => { state.zoom = v; applyZoom(); drawRuler(); positionImgBox(); } });
-shell.status.append(statusPages, statusWords, h('span', {}, 'Español (México)'), h('div', { class: 'grow' }), zoom);
+// Control de cambios visible en la barra de estado (como Word): un clic lo activa o desactiva
+const statusTrack = h('button', { class: 'sb-btn sb-track', title: 'Clic para activar o desactivar el control de cambios', onclick: () => onCommand('track') });
+const syncTrack = () => { const on = editor.classList.contains('tracking'); statusTrack.textContent = t(on ? 'Control de cambios: activado' : 'Control de cambios: desactivado'); statusTrack.classList.toggle('on', on); shell.ribbon.setOn('track', on); };
+new MutationObserver(syncTrack).observe(editor, { attributes: true, attributeFilter: ['class'] });
+shell.status.append(statusPages, statusWords, statusTrack, h('span', {}, 'Español (México)'), h('div', { class: 'grow' }), zoom);
+syncTrack();
 addEventListener('resize', () => { applyZoom(); drawRuler(); });
 editor.innerHTML = '<p><br></p>';
 schedulePaginate();

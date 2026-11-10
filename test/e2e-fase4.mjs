@@ -98,6 +98,41 @@ try {
       assert.ok(/frac/.test(t2) && /sqrt/.test(t2), `ecuación de LibreOffice: ${t2}`);
       log(`Escribiente: lee la ecuación de un .docx hecho en LibreOffice (${t2})`);
     }
+    // escribir y borrar con el teclado, con y sin control de cambios; ortografía en ambos casos
+    await w.evaluate(() => window.__shell.newDoc('blank')); await wait(500);
+    await app.evaluate(({ BrowserWindow, Menu }) => { Menu.prototype.popup = function () { globalThis.__menu = this.items.map((i) => i.label); }; const bw = BrowserWindow.getAllWindows().find((b) => b.webContents.getURL().includes('/escribiente/')); bw.webContents.on('context-menu', (_e, p) => { globalThis.__cm = p.misspelledWord; }); });
+    const dict = fs.existsSync(path.join(root, 'build', 'dict')) && fs.readdirSync(path.join(root, 'build', 'dict')).some((f) => f.startsWith('es'));
+    const rightClickOn = async (word) => {
+      await app.evaluate(() => { globalThis.__cm = null; });
+      const b = await w.evaluate((wd) => { const tw = document.createTreeWalker(document.getElementById('editor'), NodeFilter.SHOW_TEXT); let n; while ((n = tw.nextNode())) { const i = n.nodeValue.indexOf(wd); if (i >= 0) { n.parentElement.scrollIntoView({ block: 'center' }); const r = document.createRange(); r.setStart(n, i + 2); r.setEnd(n, i + 3); const q = r.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2 }; } } return null; }, word);
+      await w.mouse.click(b.x, b.y, { button: 'right' }); await wait(500);
+      return app.evaluate(() => globalThis.__cm);
+    };
+    const edText = () => w.evaluate(() => { const c = document.getElementById('editor').cloneNode(true); c.querySelectorAll('del').forEach((d) => d.remove()); return c.innerText.replace(/\u00a0/g, ' ').trim(); });
+    await w.click('#editor'); await w.keyboard.type('Hola mundo prueva ', { delay: 15 });
+    for (let i = 0; i < 3; i++) await w.keyboard.press('Backspace');
+    await w.keyboard.type('a final', { delay: 15 });
+    assert.equal(await edText(), 'Hola mundo pruea final');
+    if (dict) { await wait(1200); assert.equal(await rightClickOn('pruea'), 'pruea'); await w.keyboard.press('Escape'); }
+    // con control de cambios: lo propio se borra de verdad y el cursor sigue en su lugar
+    await w.evaluate(() => window.__shell.command('track')); await wait(200);
+    assert.ok(/activado|on$/.test(await w.textContent('.sb-track')) && await w.evaluate(() => document.querySelector('.sb-track').classList.contains('on')));
+    await w.click('#editor'); await w.keyboard.press('Control+End');
+    await w.keyboard.type(' nuevoo textp', { delay: 15 });
+    await w.keyboard.press('Backspace'); await w.keyboard.type('o y mas', { delay: 15 });
+    assert.equal(await edText(), 'Hola mundo pruea final nuevoo texto y mas');
+    assert.equal(await w.evaluate(() => document.querySelectorAll('#editor del').length), 0, 'lo propio no se marca como eliminado');
+    assert.ok(await w.evaluate(() => [...document.querySelectorAll('#editor ins')].map((i) => i.textContent).join('').replace(/\u00a0/g, ' ') === ' nuevoo texto y mas'));
+    if (dict) { await wait(1200); assert.equal(await rightClickOn('nuevoo'), 'nuevoo', 'ortografía dentro del texto insertado con control de cambios'); await w.keyboard.press('Escape'); }
+    // borrar texto que ya estaba: queda tachado y el cursor queda antes de lo tachado
+    await w.click('#editor'); await w.keyboard.press('Control+Home');
+    for (let i = 0; i < 4; i++) await w.keyboard.press('ArrowRight');
+    await w.keyboard.press('Backspace'); await w.keyboard.press('Backspace'); await w.keyboard.type('Z');
+    const html = await w.evaluate(() => document.querySelector('#editor p').innerHTML.replace(/ data-[a-z]+="[^"]*"| title="[^"]*"/g, ''));
+    assert.ok(/^Ho<ins>Z<\/ins><del>la<\/del>|^Ho<del>la<\/del>/.test(html) && /<ins>Z<\/ins>/.test(html), html);
+    await w.evaluate(() => window.__shell.command('track')); await wait(200);
+    assert.equal(await w.evaluate(() => document.querySelector('.sb-track').classList.contains('on')), false);
+    log('Escribiente: retroceso y escritura normales; con control de cambios el cursor no se pierde y la ortografía sigue marcando');
     await closeApp('escribiente'); await wait(600);
   }
   // ============================================================ Impresiona: cámara y narración

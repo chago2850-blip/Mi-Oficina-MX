@@ -58,6 +58,8 @@ D = {
 'Ancho (cm)': 'Width (cm)', 'Alto (cm)': 'Height (cm)', 'Orientación de la diapositiva': 'Slide orientation', 'Horizontal': 'Landscape', 'Vertical': 'Portrait', 'Numerar las diapositivas desde': 'Number slides from',
 'Al cambiar el tamaño, el contenido': 'When resizing, the content', 'Asegurar ajuste (todo el contenido cabe)': 'Ensure fit (all content fits)', 'Maximizar (el contenido llena la diapositiva)': 'Maximize (content fills the slide)',
 'El ancho y el alto deben estar entre {0} y {1} cm.': 'Width and height must be between {0} and {1} cm.',
+# Escribiente: control de cambios en la barra de estado
+'Control de cambios: activado': 'Track changes: on', 'Control de cambios: desactivado': 'Track changes: off', 'Clic para activar o desactivar el control de cambios': 'Click to turn track changes on or off',
 # Suite
 'Cinta de opciones': 'Ribbon', 'Contraer la cinta (Ctrl+F1)': 'Collapse the ribbon (Ctrl+F1)',
 }
