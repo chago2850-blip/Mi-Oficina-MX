@@ -285,11 +285,17 @@ try {
       I.renderAll();
     }, media.id);
     await w.evaluate(() => window.__impresiona.present(window.__impresiona.cur - 1)); await wait(500);
-    await w.evaluate(() => window.__show.next()); await wait(700);
-    const tr = await w.evaluate(() => { const t = window.__impresiona.pres.slides.flatMap((x) => x.objects).find((o) => o.anim?.type === 'pathRight'); return getComputedStyle(document.querySelector(`.show [data-id="${t.id}"]`)).transform; });
+    await w.evaluate(() => window.__show.next());
+    // espera a que termine la animación (en el CI el equipo es más lento)
+    const tr = await w.evaluate(async () => {
+      const t = window.__impresiona.pres.slides.flatMap((x) => x.objects).find((o) => o.anim?.type === 'pathRight');
+      const el = document.querySelector(`.show [data-id="${t.id}"]`);
+      await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
+      for (let k = 0; k < 40 && !/150, 0\)$/.test(getComputedStyle(el).transform); k++) await new Promise((r) => setTimeout(r, 100));
+      return getComputedStyle(el).transform;
+    });
     assert.ok(/matrix\(1, 0, 0, 1, 150, 0\)/.test(tr), `trayectoria: ${tr}`);
-    await w.evaluate(() => window.__show.next()); await wait(150);
-    const morphing = await w.evaluate(() => [...document.querySelectorAll('.show .show-layer:last-child .obj')].some((el) => el.getAnimations().length > 0));
+    const morphing = await w.evaluate(() => { window.__show.next(); return [...document.querySelectorAll('.show .show-layer:last-child .obj')].some((el) => el.getAnimations().length > 0); });
     assert.ok(morphing, 'la transición Transformación anima los objetos');
     await wait(900);
     await w.evaluate(() => window.__show.end()); await wait(300);
