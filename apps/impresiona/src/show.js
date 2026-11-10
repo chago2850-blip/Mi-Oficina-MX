@@ -1,7 +1,22 @@
 // Motor de presentación de Impresiona: transiciones, animaciones por pasos, pluma y vista del moderador. GPL-3.0
-import { h, icon } from '../../shared/office.js';
+import { h, icon, t } from '../../shared/office.js';
 
 export const EXIT_TYPES = ['fadeOut', 'flyOut', 'zoomOut'];
+// Trayectorias de animación: el objeto se ve desde el inicio y se mueve por el camino
+export const PATH_TYPES = ['pathRight', 'pathLeft', 'pathUp', 'pathDown', 'pathArc', 'pathCircle', 'pathWave'];
+export function pathPoints(type, d = 200) {
+  const n = 24; const pts = [];
+  for (let k = 0; k <= n; k++) {
+    const u = k / n;
+    if (type === 'pathRight') pts.push([d * u, 0]); else if (type === 'pathLeft') pts.push([-d * u, 0]);
+    else if (type === 'pathUp') pts.push([0, -d * u]); else if (type === 'pathDown') pts.push([0, d * u]);
+    else if (type === 'pathArc') pts.push([d * u, -Math.sin(Math.PI * u) * d * 0.45]);
+    else if (type === 'pathCircle') pts.push([Math.sin(2 * Math.PI * u) * d * 0.4, (1 - Math.cos(2 * Math.PI * u)) * d * 0.4 * -1]);
+    else if (type === 'pathWave') pts.push([d * u, -Math.sin(4 * Math.PI * u) * d * 0.15]);
+  }
+  return pts;
+}
+const isPath = (o) => PATH_TYPES.includes(o.anim?.type);
 const isExit = (o) => EXIT_TYPES.includes(o.anim?.type);
 
 // Agrupa las animaciones de una diapositiva en pasos de clic
@@ -27,6 +42,8 @@ export class ShowEngine {
   layer() { return this.container.querySelector('.show-layer:last-child'); }
   mount(i, { dir = 1, animate = true, step = 0 } = {}) {
     const pres = this.pres;
+    clearTimeout(this.autoT);
+    const prevI = this.i;
     this.i = Math.max(0, Math.min(pres.slides.length - 1, i));
     const s = pres.slides[this.i];
     const { w: W, h: H } = pres.size; const sc = this.scale();
@@ -35,8 +52,9 @@ export class ShowEngine {
     const layer = h('div', { class: 'show-layer', style: { width: `${W * sc}px`, height: `${H * sc}px` } }, el);
     const t = s.transition?.type || 'none';
     const old = [...this.container.querySelectorAll('.show-layer')];
-    if (animate && t !== 'none' && old.length) { layer.classList.add(`tr-${t}`, dir < 0 ? 'rev' : 'fwd'); layer.style.animationDuration = `${s.transition.dur || 0.6}s`; }
+    if (animate && t !== 'none' && t !== 'morph' && old.length) { layer.classList.add(`tr-${t}`, dir < 0 ? 'rev' : 'fwd'); layer.style.animationDuration = `${s.transition.dur || 0.6}s`; }
     this.container.append(layer);
+    if (animate && t === 'morph' && old.length && pres.slides[prevI] && prevI !== this.i) this.morph(pres.slides[prevI], s, old, layer, (s.transition.dur || 1) * 1000);
     setTimeout(() => old.forEach((o) => o.remove()), animate && t !== 'none' ? (s.transition.dur || 0.6) * 1000 : 0);
     this.steps = buildSteps(s);
     this.step = 0;
@@ -45,7 +63,30 @@ export class ShowEngine {
     for (let k = 0; k < step && k < this.steps.groups.length; k++) this.play(this.steps.groups[k], false);
     this.step = Math.min(step, this.steps.groups.length);
     this.drawInk();
+    if (this.mode === 'show') layer.querySelectorAll('video[data-autoplay], audio[data-autoplay]').forEach((m) => { m.currentTime = 0; m.play().catch(() => {}); });
+    // intervalos ensayados: avance automático
+    if (this.mode === 'show' && this.useTimings && s.advanceAfter > 0) this.autoT = setTimeout(() => this.onAuto?.(), s.advanceAfter * 1000);
     this.onChange?.(this.state());
+  }
+  // Transformación (Morph): los objetos que coinciden entre diapositivas se mueven y cambian de tamaño
+  morph(from, to, oldLayers, layer, ms) {
+    const key = (o) => o.mk || o.id;
+    const sig = (o) => `${o.type}|${o.shape || ''}|${(o.html || o.src || o.title || '').slice(0, 200)}`;
+    const used = new Set();
+    for (const o of to.objects) {
+      const el = layer.querySelector(`[data-id="${o.id}"]`); if (!el) continue;
+      let p = from.objects.find((q) => !used.has(q) && key(q) === key(o)) || from.objects.find((q) => !used.has(q) && sig(q) === sig(o) && q.type === o.type);
+      if (!p) { el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease', fill: 'backwards' }); continue; }
+      used.add(p);
+      const sx = (p.w || 1) / (o.w || 1), sy = (p.h || 1) / (o.h || 1);
+      const fromT = `translate(${p.x - o.x}px, ${p.y - o.y}px) scale(${sx}, ${sy}) rotate(${p.rot || 0}deg)`;
+      el.style.transformOrigin = '0 0';
+      el.animate([{ transform: fromT, opacity: 1 }, { transform: `rotate(${o.rot || 0}deg)`, opacity: 1 }], { duration: ms, easing: 'cubic-bezier(.45,.05,.25,1)' }).finished.then(() => { el.style.transformOrigin = ''; }).catch(() => {});
+    }
+    // lo que solo estaba en la diapositiva anterior se desvanece; el fondo se funde
+    layer.animate([{ opacity: 0.0001 }, { opacity: 1 }], { duration: Math.min(ms, 350), fill: 'backwards' });
+    for (const ol of oldLayers) { ol.style.zIndex = '2'; ol.style.pointerEvents = 'none'; ol.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms * 0.6, fill: 'forwards' }); }
+    setTimeout(() => oldLayers.forEach((x) => x.remove()), ms * 0.6 + 30);
   }
   play(group, animate = true) {
     const layer = this.layer(); if (!layer) return;
@@ -55,6 +96,14 @@ export class ShowEngine {
       const dur = Number(o.anim.dur) || 0.6, delay = Number(o.anim.delay) || 0;
       if ((o.anim.start || 'click') === 'after') t += delay; else t = Math.max(0, t - (group.indexOf(o) ? dur : 0)) + delay;
       const startAt = (o.anim.start || 'click') === 'after' ? t : delay;
+      if (isPath(o)) {
+        const pts = pathPoints(o.anim.type, Number(o.anim.dist) || 200); const [ex, ey] = pts[pts.length - 1];
+        const base = o.rot ? ` rotate(${o.rot}deg)` : '';
+        if (!animate) { el.style.transform = `translate(${ex}px, ${ey}px)${base}`; continue; }
+        el.animate(pts.map(([x, y]) => ({ transform: `translate(${x}px, ${y}px)${base}` })), { duration: dur * 1000, delay: startAt * 1000, easing: 'ease-in-out', fill: 'forwards' });
+        if ((o.anim.start || 'click') === 'after') t += dur;
+        continue;
+      }
       if (!animate) { if (isExit(o)) el.classList.add('gone'); else el.classList.remove('anim-wait'); continue; }
       el.style.animationDuration = `${dur}s`; el.style.animationDelay = `${startAt}s`;
       if (isExit(o)) { el.classList.add(`an-${o.anim.type}`); setTimeout(() => el.classList.add('gone'), (startAt + dur) * 1000); }
@@ -107,7 +156,7 @@ export class ShowEngine {
 }
 
 // ---------------------------------------------------------------- presentación en la misma ventana
-export function runShow({ renderSlide, getPres, from = 0, onEnd }) {
+export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = false, onRehearsed }) {
   const show = h('div', { class: 'show', tabindex: 0 });
   const stageS = h('div', { class: 'show-stage' });
   const cnt = h('span', { class: 'cnt' });
@@ -116,11 +165,29 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd }) {
   show.append(stageS, laser);
   document.body.append(show);
   document.documentElement.requestFullscreen?.().catch(() => {});
-  const eng = new ShowEngine(stageS, { renderSlide, getPres, onChange: (st) => { cnt.textContent = `${st.i + 1} / ${st.total}`; } });
+  // Ensayar intervalos: se mide cuánto tiempo pasa en cada diapositiva
+  const times = []; let tSlide = Date.now(), tTotal = Date.now(), lastI = from;
+  const rehBox = rehearse ? h('div', { class: 'rehearse' }, h('span', { class: 'rh-slide' }, '0:00'), h('span', { class: 'rh-total' }, '0:00')) : null;
+  const fmt = (ms) => { const sec = Math.floor(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+  const rehTick = rehearse ? setInterval(() => { rehBox.firstChild.textContent = fmt(Date.now() - tSlide); rehBox.lastChild.textContent = fmt(Date.now() - tTotal); }, 250) : 0;
+  if (rehBox) show.append(rehBox);
+  const eng = new ShowEngine(stageS, { renderSlide, getPres, onChange: (st) => {
+    cnt.textContent = `${st.i + 1} / ${st.total}`;
+    if (rehearse && st.i !== lastI) { times[lastI] = (times[lastI] || 0) + (Date.now() - tSlide); tSlide = Date.now(); lastI = st.i; }
+  } });
+  eng.useTimings = !rehearse && getPres().useTimings !== false;
+  // con intervalos, al terminar el tiempo se pasa a la siguiente diapositiva (con sus pasos ya incluidos)
+  eng.onAuto = () => { if (ended()) return; if (eng.i < getPres().slides.length - 1) eng.mount(eng.i + 1, { dir: 1 }); else next(); };
   const ended = () => show.classList.contains('ended');
-  const next = () => { if (ended()) { end(); return; } if (!eng.next()) { show.classList.add('ended'); stageS.append(h('div', { class: 'show-end' }, 'Fin de la presentación. Haz clic para salir.')); } };
+  const next = () => { if (ended()) { end(); return; } if (!eng.next()) { clearTimeout(eng.autoT); show.classList.add('ended'); stageS.append(h('div', { class: 'show-end' }, t('Fin de la presentación. Haz clic para salir.'))); } };
   const prev = () => { if (ended()) { show.classList.remove('ended'); stageS.querySelector('.show-end')?.remove(); return; } eng.prev(); };
-  const end = () => { show.remove(); if (document.fullscreenElement) document.exitFullscreen?.(); removeEventListener('resize', onResize); onEnd?.(eng.i); };
+  const end = () => {
+    clearTimeout(eng.autoT); clearInterval(rehTick);
+    show.querySelectorAll('video, audio').forEach((m) => m.pause());
+    show.remove(); if (document.fullscreenElement) document.exitFullscreen?.(); removeEventListener('resize', onResize);
+    if (rehearse) { times[lastI] = (times[lastI] || 0) + (Date.now() - tSlide); onRehearsed?.(times.map((x) => (x ? Math.max(1, Math.round(x / 100) / 10) : 0)), Date.now() - tTotal); }
+    onEnd?.(eng.i);
+  };
   const ctrls = h('div', { class: 'show-ctrls' }, btn('Anterior', 'undo', prev), cnt, btn('Siguiente', 'redo', next), btn('Puntero láser (L)', 'star', () => show.classList.toggle('laser')), btn('Pluma (P)', 'brush', () => eng.setPen(!eng.pen)), btn('Borrar tinta (E)', 'clear', () => eng.clearInk()), btn('Terminar (Esc)', 'close', end));
   show.append(ctrls);
   const onResize = () => { if (!ended()) eng.mount(eng.i, { animate: false, step: eng.step }); };
@@ -146,7 +213,7 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd }) {
   });
   show.focus();
   eng.mount(from, { animate: false });
-  window.__show = { next, prev, end, inkCount: () => eng.inkCount(), engine: eng };
+  window.__show = { next, prev, end, inkCount: () => eng.inkCount(), engine: eng, times: () => times };
   return eng;
 }
 
@@ -207,8 +274,15 @@ export function runAudience({ renderSlide, setPres, getPres, api, render = false
     if (msg.type === 'black') stage.style.visibility = msg.on ? 'hidden' : '';
     if (msg.type === 'render') {
       const s = getPres().slides[msg.i];
-      const el = renderSlide(s, 'print');
-      stage.replaceChildren(el);
+      if (msg.step != null) {
+        // un estado intermedio de las animaciones (para exportar a video)
+        stage.replaceChildren();
+        const e2 = new ShowEngine(stage, { renderSlide, getPres, mode: 'render' });
+        e2.mount(msg.i, { animate: false, step: msg.step });
+      } else {
+        const el = renderSlide(s, 'print');
+        stage.replaceChildren(el);
+      }
       await document.fonts?.ready;
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       api.renderReady(msg.i);

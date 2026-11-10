@@ -4,6 +4,7 @@ import {
   Table, TableRow, TableCell, WidthType, ShadingType, PageBreak, Header, Footer, PageNumber,
   LevelFormat, PageOrientation, BorderStyle, TabStopType,
   CommentRangeStart, CommentRangeEnd, CommentReference, InsertedTextRun, DeletedTextRun, FootnoteReferenceRun, SectionType, Tab,
+  Math as OMath, MathRun, MathFraction, MathSuperScript, MathSubScript, MathSubSuperScript, MathRadical, MathSum, MathIntegral,
 } from 'docx';
 import JSZip from 'jszip';
 import { t } from '../../shared/i18n.js';
@@ -76,6 +77,7 @@ class Builder {
       if (tag === 'BR') { out.push(new TextRun({ break: 1, ...this.runProps(fmt) })); continue; }
       if (tag === 'IMG') { const r = await this.image(n); if (r) out.push(r); continue; }
       if (['UL', 'OL', 'TABLE'].includes(tag)) continue; // se manejan como bloques
+      if (n.classList?.contains('eq')) { const m = n.querySelector('math'); if (m) out.push(new OMath({ children: mathKids(m) })); else out.push(new TextRun({ text: n.dataset.tex || '' })); continue; }
       if (tag === 'SUP' && n.classList.contains('en')) {
         const fid = n.dataset.fid;
         if (this.settings.endnotes?.[fid] != null) out.push(new TextRun({ text: `\uE010${this.numFor(this.endIds, fid)}\uE011` }));
@@ -168,7 +170,7 @@ class Builder {
     if (tabs.length) p.tabStops = tabs.map((t) => ({ type: { l: TabStopType.LEFT, c: TabStopType.CENTER, r: TabStopType.RIGHT }[t.k], position: Math.round(t.x * PX_TWIP) }));
     const lh = parseFloat(st.lineHeight);
     const spacing = {};
-    if (lh && !String(st.lineHeight).match(/px|pt/)) spacing.line = Math.round(240 * lh);
+    if (lh && !String(st.lineHeight).match(/px|pt/)) { spacing.line = Math.round(240 * lh); spacing.lineRule = 'auto'; }
     if (Object.keys(spacing).length) p.spacing = spacing;
     return p;
   }
@@ -332,7 +334,7 @@ export async function htmlToDocx(editorEl, settings) {
     lastModifiedBy: settings.author || undefined,
     description: 'Creado con Escribiente · Mi Oficina MX',
     styles: {
-      default: { document: { run: { font: 'Calibri', size: 22 }, paragraph: { spacing: { after: 160, line: 276 } } } },
+      default: { document: { run: { font: 'Calibri', size: 22 }, paragraph: { spacing: { after: 160, line: 276, lineRule: 'auto' } } } },
       paragraphStyles: [
         { id: 'Subtitle', name: 'Subtitle', basedOn: 'Normal', next: 'Normal', run: { size: 28, color: '6B6F80' } },
         { id: 'Quote', name: 'Quote', basedOn: 'Normal', next: 'Normal', run: { italics: true, color: '444444' }, paragraph: { indent: { left: 720, right: 720 } } },
@@ -376,6 +378,43 @@ async function addEndnotes(bytes, notes) {
   const set = zip.file('word/settings.xml');
   if (set) { let x = await set.async('string'); if (!x.includes('w:endnotePr')) x = x.replace(/(<w:settings[^>]*>)/, '$1<w:endnotePr><w:numFmt w:val="lowerRoman"/></w:endnotePr>'); zip.file('word/settings.xml', x); }
   return zip.generateAsync({ type: 'uint8array' });
+}
+
+// MathML (de temml) -> ecuación nativa de Word (OMML) con los componentes de la biblioteca docx
+const NARY = /^[∑∏∐⋃⋂]$/;
+function mathKids(el) {
+  const out = [];
+  const kids = [...el.children].filter((k) => !['annotation', 'annotation-xml', 'mspace', 'none'].includes(k.localName));
+  for (let i = 0; i < kids.length; i++) {
+    const k = kids[i];
+    const base = k.children[0], a = k.children[1], b = k.children[2];
+    switch (k.localName) {
+      case 'semantics': case 'mrow': case 'mstyle': case 'mpadded': case 'mphantom': case 'menclose': case 'math': out.push(...mathKids(k)); break;
+      case 'mfrac': out.push(new MathFraction({ numerator: mathKids(wrap(base)), denominator: mathKids(wrap(a)) })); break;
+      case 'msqrt': out.push(new MathRadical({ children: mathKids(k) })); break;
+      case 'mroot': out.push(new MathRadical({ children: mathKids(wrap(base)), degree: mathKids(wrap(a)) })); break;
+      case 'msup': case 'mover': out.push(new MathSuperScript({ children: mathKids(wrap(base)), superScript: mathKids(wrap(a)) })); break;
+      case 'msub': case 'munder': {
+        if (NARY.test(base?.textContent || '') || /^∫/.test(base?.textContent || '')) { out.push(...nary(base, a, null, kids, i)); i = kids.length; break; }
+        out.push(new MathSubScript({ children: mathKids(wrap(base)), subScript: mathKids(wrap(a)) })); break;
+      }
+      case 'msubsup': case 'munderover': {
+        if (NARY.test(base?.textContent || '') || /^∫/.test(base?.textContent || '')) { out.push(...nary(base, a, b, kids, i)); i = kids.length; break; }
+        out.push(new MathSubSuperScript({ children: mathKids(wrap(base)), subScript: mathKids(wrap(a)), superScript: mathKids(wrap(b)) })); break;
+      }
+      case 'mtable': [...k.querySelectorAll('mtr')].forEach((tr, ri) => { if (ri) out.push(new MathRun('; ')); [...tr.children].forEach((td, ci) => { if (ci) out.push(new MathRun(', ')); out.push(...mathKids(td)); }); }); break;
+      default: { const tx = k.textContent; if (tx) out.push(new MathRun(tx)); }
+    }
+  }
+  return out;
+  function wrap(n) { if (!n) { const e = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'mrow'); return e; } if (n.localName === 'mrow') return n; const r = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'mrow'); r.append(n.cloneNode(true)); return r; }
+  // Suma o integral con límites: el resto de la expresión es su argumento
+  function nary(sym, lo, hi, all, i) {
+    const rest = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'mrow');
+    all.slice(i + 1).forEach((x) => rest.append(x.cloneNode(true)));
+    const Cls = /^∫/.test(sym.textContent) ? MathIntegral : MathSum;
+    return [new Cls({ children: mathKids(rest), subScript: lo ? mathKids(wrap(lo)) : undefined, superScript: hi ? mathKids(wrap(hi)) : undefined })];
+  }
 }
 
 export function parseTabs(v) {

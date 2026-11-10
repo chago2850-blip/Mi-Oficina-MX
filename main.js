@@ -26,7 +26,7 @@ i18n.patchElectron({ Menu, dialog });
 const APPS = {
   escribiente: {
     name: 'Escribiente', color: '#5B48E8', bg: '#F3F1FB',
-    exts: ['docx', 'odt', 'txt', 'html', 'htm', 'md'],
+    exts: ['docx', 'odt', 'doc', 'txt', 'html', 'htm', 'md'],
     saveExt: 'docx', saveName: 'Documento de texto',
   },
   calcula: {
@@ -440,8 +440,27 @@ const winOf = (e) => BrowserWindow.fromWebContents(e.sender);
 async function readDoc(id, p) {
   const buf = await fs.readFile(p);
   await addRecent(id, p);
-  return { path: p, name: path.basename(p), ext: path.extname(p).slice(1).toLowerCase(), bytes: new Uint8Array(buf) };
+  const ext = path.extname(p).slice(1).toLowerCase();
+  const base = { path: p, name: path.basename(p), ext };
+  // Archivos de Office protegidos con contraseña (cifrado ECMA-376): la interfaz pide la contraseña
+  if (['docx', 'xlsx', 'xlsm', 'pptx'].includes(ext) && isEncrypted(buf)) return { ...base, encrypted: true };
+  // Documento binario antiguo de Word (.doc): se extrae el texto (modo compatibilidad)
+  if (ext === 'doc') return { ...base, doc: await readBinaryDoc(buf) };
+  return { ...base, bytes: new Uint8Array(buf) };
 }
+function isEncrypted(buf) { try { return require('officecrypto-tool').isEncrypted(buf); } catch { return false; } }
+async function readBinaryDoc(buf) {
+  const WordExtractor = require('word-extractor');
+  const d = await new WordExtractor().extract(buf);
+  return { body: d.getBody(), headers: d.getHeaders({ includeFooters: false }), footers: d.getFooters(), footnotes: d.getFootnotes(), endnotes: d.getEndnotes() };
+}
+ipcMain.handle('of:decrypt', async (e, { path: p, password }) => {
+  const buf = await fs.readFile(p);
+  try {
+    const out = await require('officecrypto-tool').decrypt(buf, { password });
+    return { path: p, name: path.basename(p), ext: path.extname(p).slice(1).toLowerCase(), bytes: new Uint8Array(out), password };
+  } catch { return { error: 'password' }; }
+});
 
 ipcMain.handle('of:open-dialog', async (e, { filters, title } = {}) => {
   const w = winOf(e);
@@ -472,7 +491,7 @@ ipcMain.handle('of:open-image', async (e) => {
 
 ipcMain.handle('of:read-path', async (e, p) => readDoc(winOf(e).__app, p));
 
-ipcMain.handle('of:save', async (e, { bytes, text, path: target, ask, suggestedName, ext, filterName }) => {
+ipcMain.handle('of:save', async (e, { bytes, text, path: target, ask, suggestedName, ext, filterName, password }) => {
   const w = winOf(e);
   const id = w.__app;
   let out = target;
@@ -488,7 +507,9 @@ ipcMain.handle('of:save', async (e, { bytes, text, path: target, ask, suggestedN
     out = r.filePath;
     if (!path.extname(out)) out += `.${useExt}`;
   }
-  await fs.writeFile(out, text != null ? text : Buffer.from(bytes));
+  let data = text != null ? text : Buffer.from(bytes);
+  if (password && text == null && ['docx', 'xlsx', 'xlsm', 'pptx'].includes(path.extname(out).slice(1).toLowerCase())) data = await require('officecrypto-tool').encrypt(data, { password });
+  await fs.writeFile(out, data);
   if (APPS[id].exts.includes(path.extname(out).slice(1).toLowerCase())) await addRecent(id, out);
   return { path: out, name: path.basename(out) };
 });
@@ -636,6 +657,26 @@ ipcMain.handle('of:render-slides', async (e, { pres, base = 'Diapositiva' }) => 
     }
   } finally { renderWaiters.delete(win.webContents.id); win.destroy(); }
   return { folder, files };
+});
+
+// Cuadros para exportar a video: cada estado {i, step} como PNG del tamaño pedido
+ipcMain.handle('of:render-frames', async (e, { pres, states, width }) => {
+  const { w, h } = pres.size; const z = (width || w) / w; const W = Math.round(w * z), H = Math.round(h * z);
+  const win = new BrowserWindow({ width: W, height: H, show: false, useContentSize: true, frame: false, webPreferences: { preload: path.join(ROOT, 'preload', 'office.js'), contextIsolation: true, sandbox: true, offscreen: true, zoomFactor: z } });
+  await win.loadURL(i18n.withLang('app://suite/apps/impresiona/index.html?render=1'));
+  win.webContents.setZoomFactor(z);
+  win.webContents.send('audience-msg', { type: 'load', pres });
+  const frames = [];
+  try {
+    for (const st of states) {
+      const ready = new Promise((res) => renderWaiters.set(win.webContents.id, res));
+      win.webContents.send('audience-msg', { type: 'render', i: st.i, step: st.step });
+      await Promise.race([ready, new Promise((res) => setTimeout(res, 4000))]);
+      const img = await win.webContents.capturePage({ x: 0, y: 0, width: W, height: H });
+      frames.push(new Uint8Array(img.resize({ width: W, height: H }).toPNG()));
+    }
+  } finally { renderWaiters.delete(win.webContents.id); win.destroy(); }
+  return { width: W, height: H, frames };
 });
 
 // ---------------------------------------------------------------- arranque

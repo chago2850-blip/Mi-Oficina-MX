@@ -221,3 +221,8 @@ body[data-app="impresiona"] .tpl, body[data-app="calcula"] .tpl { width: 190px; 
 body[data-theme="dark"] .gallery .gi { background: #f7f7fb; border-color: #3a3a4a; color: #1f1f2e; }
 body[data-theme="dark"] .gallery .gi.on { background: #ece9ff; }
 body[data-theme="dark"] .gallery .gi small { color: #5c5c70; }
+.topbar .qat { display: flex; align-items: center; gap: 2px; }
+.topbar .qa.qa-more { width: 18px; opacity: .8; }
+.protect-box { margin-top: 28px; padding-top: 6px; border-top: 1px solid var(--line); }
+.protect-box h2 { margin: 10px 0 4px; }
+.protect-box .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }

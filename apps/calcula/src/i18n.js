@@ -1,6 +1,7 @@
 // Traduce nombres de funciones y errores entre español (lo que ve el usuario) e inglés (lo que se guarda). GPL-3.0
 import { esES } from 'hyperformula/i18n/languages';
 import { getLang, t } from '../../shared/i18n.js';
+import { ES_NAMES } from './fx3.js';
 // Con la interfaz en inglés, las fórmulas se muestran con los nombres en inglés (como Excel en inglés);
 // en español se pueden escribir en cualquiera de los dos idiomas.
 
@@ -10,7 +11,7 @@ const EXTRA = {
   DATEDIF: 'SIFECHA', SEQUENCE: 'SECUENCIA', LET: 'LET', IFS: 'SI.CONJUNTO', SWITCH: 'CAMBIAR', TEXTJOIN: 'UNIRCADENAS', CONCAT: 'CONCAT', IFERROR: 'SI.ERROR', IFNA: 'SI.ND',
   XMATCH: 'COINCIDIRX', SUMIFS: 'SUMAR.SI.CONJUNTO', AVERAGEIFS: 'PROMEDIO.SI.CONJUNTO', MAXIFS: 'MAX.SI.CONJUNTO', MINIFS: 'MIN.SI.CONJUNTO', TODAY: 'HOY', NOW: 'AHORA',
 };
-export const EN_TO_ES = { ...esES.functions, ...EXTRA };
+export const EN_TO_ES = { ...esES.functions, ...EXTRA, ...ES_NAMES };
 export const ES_TO_EN = Object.fromEntries(Object.entries(EN_TO_ES).map(([en, es]) => [es.toUpperCase(), en]));
 export const ERR_ES = { ...esES.errors, CYCLE: '#¡CIRCULAR!' };
 const ERR_EN = { CYCLE: '#CYCLE!', DIV_BY_ZERO: '#DIV/0!', ERROR: '#ERROR!', NA: '#N/A', NAME: '#NAME?', NUM: '#NUM!', REF: '#REF!', SPILL: '#SPILL!', VALUE: '#VALUE!' };
@@ -115,6 +116,27 @@ export const FUNCTION_HELP = [
   ['Financieras', 'NPV', 'Valor neto actual.', 'VNA(tasa; valor1; …)'],
   ['Financieras', 'IRR', 'Tasa interna de retorno.', 'TIR(valores; [estimar])'],
   ['Financieras', 'RATE', 'Tasa de interés por periodo.', 'TASA(nper; pago; va; …)'],
+  ['Matriz dinámica', 'LAMBDA', 'Crea una función con parámetros; se usa dentro de MAP, REDUCE, SCAN, BYROW, BYCOL y MAKEARRAY.', 'LAMBDA(parámetro1; …; cálculo)'],
+  ['Matriz dinámica', 'MAP', 'Aplica una LAMBDA a cada valor de una matriz.', 'MAP(matriz; LAMBDA(x; cálculo))'],
+  ['Matriz dinámica', 'REDUCE', 'Acumula los valores de una matriz con una LAMBDA.', 'REDUCE(inicial; matriz; LAMBDA(acum; x; cálculo))'],
+  ['Matriz dinámica', 'SCAN', 'Como REDUCE, pero devuelve cada resultado intermedio.', 'SCAN(inicial; matriz; LAMBDA(acum; x; cálculo))'],
+  ['Matriz dinámica', 'BYROW', 'Aplica una LAMBDA a cada fila.', 'BYROW(matriz; LAMBDA(fila; cálculo))'],
+  ['Matriz dinámica', 'BYCOL', 'Aplica una LAMBDA a cada columna.', 'BYCOL(matriz; LAMBDA(columna; cálculo))'],
+  ['Matriz dinámica', 'MAKEARRAY', 'Crea una matriz calculando cada celda con una LAMBDA.', 'MAKEARRAY(filas; columnas; LAMBDA(f; c; cálculo))'],
+  ['Matriz dinámica', 'LET', 'Da nombre a resultados intermedios dentro de una fórmula.', 'LET(nombre1; valor1; …; cálculo)'],
+  ['Matriz dinámica', 'VSTACK', 'Apila matrices una debajo de otra.', 'APILARV(matriz1; matriz2; …)'],
+  ['Matriz dinámica', 'HSTACK', 'Pone matrices una al lado de otra.', 'APILARH(matriz1; matriz2; …)'],
+  ['Matriz dinámica', 'TAKE', 'Toma las primeras (o últimas) filas y columnas.', 'TOMAR(matriz; filas; [columnas])'],
+  ['Matriz dinámica', 'DROP', 'Quita las primeras (o últimas) filas y columnas.', 'EXCLUIR(matriz; filas; [columnas])'],
+  ['Matriz dinámica', 'TOCOL', 'Convierte una matriz en una sola columna.', 'ENCOL(matriz)'],
+  ['Matriz dinámica', 'TOROW', 'Convierte una matriz en una sola fila.', 'ENFILA(matriz)'],
+  ['Matriz dinámica', 'CHOOSECOLS', 'Devuelve las columnas indicadas.', 'ELEGIRCOLS(matriz; col1; …)'],
+  ['Matriz dinámica', 'CHOOSEROWS', 'Devuelve las filas indicadas.', 'ELEGIRFILAS(matriz; fila1; …)'],
+  ['Matriz dinámica', 'WRAPROWS', 'Reparte una lista en filas de n elementos.', 'AJUSTARFILAS(vector; n; [relleno])'],
+  ['Matriz dinámica', 'SEQUENCE', 'Crea una lista de números consecutivos.', 'SECUENCIA(filas; [columnas]; [inicio]; [paso])'],
+  ['Texto', 'TEXTBEFORE', 'Texto antes de un delimitador.', 'TEXTOANTES(texto; delimitador; [instancia])'],
+  ['Texto', 'TEXTAFTER', 'Texto después de un delimitador.', 'TEXTODESPUES(texto; delimitador; [instancia])'],
+  ['Búsqueda', 'IMAGE', 'Muestra una imagen de internet dentro de la celda.', 'IMAGEN(dirección)'],
 ].map(([cat, en, desc, syntax]) => ({
   en, esName: EN_TO_ES[en] || en, catEs: cat, descEs: desc, syntaxEs: syntax.replace(/;/g, ','),
   get es() { return getLang() === 'en' ? this.en : this.esName; },
@@ -122,7 +144,7 @@ export const FUNCTION_HELP = [
   get desc() { return t(this.descEs); },
   get syntax() { return getLang() === 'en' ? syntaxEn(this.syntaxEs) : this.syntaxEs; },
 }));
-const PARAM_EN = { número: 'number', número1: 'number1', número2: 'number2', rango: 'range', rango1: 'range1', criterio: 'criteria', criterio1: 'criteria1', rango_suma: 'sum_range', rango_promedio: 'average_range', decimales: 'num_digits', divisor: 'divisor', potencia: 'power', matriz: 'array', matriz1: 'array1', matriz2: 'array2', inferior: 'bottom', superior: 'top', valor: 'value', valor1: 'value1', ref: 'ref', orden: 'order', prueba_lógica: 'logical_test', valor_si_verdadero: 'value_if_true', valor_si_falso: 'value_if_false', prueba1: 'test1', valor_si_error: 'value_if_error', lógico: 'logical', lógico1: 'logical1', tabla: 'table', columna: 'col_index', fila: 'row_index', FALSO: 'FALSE', matriz_búsqueda: 'lookup_array', matriz_devuelta: 'return_array', si_no_se_encuentra: 'if_not_found', tipo: 'type', índice: 'index', incluir: 'include', texto: 'text', texto1: 'text1', separador: 'delimiter', ignorar_vacías: 'ignore_empty', inicio: 'start', texto_original: 'old_text', texto_nuevo: 'new_text', formato: 'format', texto_buscado: 'find_text', dentro_de: 'within_text', año: 'year', mes: 'month', día: 'day', fecha: 'date', fin: 'end', unidad: 'unit', festivos: 'holidays', meses: 'months', tasa: 'rate', va: 'pv', vf: 'fv', pago: 'pmt', valores: 'values', estimar: 'guess' };
+const PARAM_EN = { parámetro1: 'parameter1', cálculo: 'calculation', acum: 'acc', fila: 'row', filas: 'rows', columnas: 'columns', col1: 'col1', fila1: 'row1', vector: 'vector', relleno: 'pad_with', nombre1: 'name1', instancia: 'instance', delimitador: 'delimiter', dirección: 'source', paso: 'step', f: 'r', c: 'c', x: 'x', n: 'n', número: 'number', número1: 'number1', número2: 'number2', rango: 'range', rango1: 'range1', criterio: 'criteria', criterio1: 'criteria1', rango_suma: 'sum_range', rango_promedio: 'average_range', decimales: 'num_digits', divisor: 'divisor', potencia: 'power', matriz: 'array', matriz1: 'array1', matriz2: 'array2', inferior: 'bottom', superior: 'top', valor: 'value', valor1: 'value1', ref: 'ref', orden: 'order', prueba_lógica: 'logical_test', valor_si_verdadero: 'value_if_true', valor_si_falso: 'value_if_false', prueba1: 'test1', valor_si_error: 'value_if_error', lógico: 'logical', lógico1: 'logical1', tabla: 'table', columna: 'col_index', fila: 'row_index', FALSO: 'FALSE', matriz_búsqueda: 'lookup_array', matriz_devuelta: 'return_array', si_no_se_encuentra: 'if_not_found', tipo: 'type', índice: 'index', incluir: 'include', texto: 'text', texto1: 'text1', separador: 'delimiter', ignorar_vacías: 'ignore_empty', inicio: 'start', texto_original: 'old_text', texto_nuevo: 'new_text', formato: 'format', texto_buscado: 'find_text', dentro_de: 'within_text', año: 'year', mes: 'month', día: 'day', fecha: 'date', fin: 'end', unidad: 'unit', festivos: 'holidays', meses: 'months', tasa: 'rate', va: 'pv', vf: 'fv', pago: 'pmt', valores: 'values', estimar: 'guess' };
 function syntaxEn(s) {
   const m = /^([^(]+)\((.*)\)$/.exec(s); if (!m) return s;
   const name = ES_TO_EN[m[1].toUpperCase()] || m[1];

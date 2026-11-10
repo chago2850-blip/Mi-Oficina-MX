@@ -1,5 +1,6 @@
 // Modelo del libro de Calcula Datos: valores y fórmulas en HyperFormula (GPLv3), formato aparte. GPL-3.0
 import { HyperFormula } from 'hyperformula';
+import './fx3.js'; // funciones nuevas (LAMBDA, MAP, TOMAR, IMAGEN…)
 import { toEnglish, toSpanish, errorText } from './i18n.js';
 import { getLang } from '../../shared/i18n.js';
 import { parseInput, formatValue } from './format.js';
@@ -21,7 +22,7 @@ const key = (r, c) => `${r},${c}`;
 const sameMeta = (a, b) => a.styles.size === b.styles.size && [...a.styles].every(([k, v]) => b.styles.get(k) === v)
   && JSON.stringify([[...a.colW], [...a.rowH], [...a.hiddenRows], a.merges, a.freeze, a.charts, a.nRows === b.nRows, a.name]) === JSON.stringify([[...b.colW], [...b.rowH], [...b.hiddenRows], b.merges, b.freeze, b.charts, true, b.name])
   && !!a.filter === !!b.filter
-  && JSON.stringify([a.cf, a.validations, [...a.notes], a.protected, a.printArea, a.pageSetup]) === JSON.stringify([b.cf, b.validations, [...b.notes], b.protected, b.printArea, b.pageSetup]);
+  && JSON.stringify([a.cf, a.validations, [...a.notes], a.protected, a.printArea, a.pageSetup, a.x3]) === JSON.stringify([b.cf, b.validations, [...b.notes], b.protected, b.printArea, b.pageSetup, b.x3]);
 
 export class Sheet {
   constructor(id, name) {
@@ -34,6 +35,7 @@ export class Sheet {
     this.filter = null; // { range, col criteria: Map col -> Set de valores ocultos }
     this.charts = []; // { id, type, range, title, x, y, w, h }
     this.cf = []; this.validations = []; this.notes = new Map(); this.protected = null; this.printArea = null; this.pageSetup = {}; this.pivot = null;
+    this.x3 = { sparklines: [], rowGroups: [], colGroups: [], slicers: [] }; // fase 3: minigráficos, esquema y segmentaciones
     this.nRows = 1000; this.nCols = 52;
   }
   cw(c) { return this.colW.get(c) ?? DEF_W; }
@@ -45,6 +47,7 @@ export class Sheet {
       merges: this.merges.map((m) => ({ ...m })), freeze: { ...this.freeze }, filter: this.filter ? { range: { ...this.filter.range }, hidden: new Map([...this.filter.hidden].map(([k, v]) => [k, new Set(v)])) } : null,
       charts: this.charts.map((c) => ({ ...c })), nRows: this.nRows, nCols: this.nCols, name: this.name,
       cf: this.cf.map((c) => ({ ...c })), validations: this.validations.map((v) => ({ ...v })), notes: new Map(this.notes), protected: this.protected, printArea: this.printArea, pageSetup: { ...this.pageSetup }, pivot: this.pivot,
+      x3: JSON.parse(JSON.stringify(this.x3 || {})),
     };
   }
   setMeta(m) { Object.assign(this, m); }
@@ -263,7 +266,7 @@ export class Workbook {
         name: s.name, data: this.hf.getSheetSerialized(s.id),
         styles: [...s.styles], colW: [...s.colW], rowH: [...s.rowH], hiddenRows: [...s.hiddenRows], merges: s.merges, freeze: s.freeze,
         charts: s.charts, filter: s.filter ? { range: s.filter.range, hidden: [...s.filter.hidden].map(([k, v]) => [k, [...v]]) } : null,
-        cf: s.cf, validations: s.validations, notes: [...s.notes], protected: s.protected, printArea: s.printArea, pageSetup: s.pageSetup, pivot: s.pivot,
+        cf: s.cf, validations: s.validations, notes: [...s.notes], protected: s.protected, printArea: s.printArea, pageSetup: s.pageSetup, pivot: s.pivot, x3: s.x3,
       })),
     };
   }
@@ -276,6 +279,7 @@ export class Workbook {
       s.merges = d.merges || []; s.freeze = d.freeze || { rows: 0, cols: 0 }; s.charts = d.charts || [];
       s.filter = d.filter ? { range: d.filter.range, hidden: new Map(d.filter.hidden.map(([k, v]) => [k, new Set(v)])) } : null;
       s.cf = d.cf || []; s.validations = d.validations || []; s.notes = new Map(d.notes || []); s.protected = d.protected || null; s.printArea = d.printArea || null; s.pageSetup = d.pageSetup || {}; s.pivot = d.pivot || null;
+      if (d.x3) s.x3 = { sparklines: [], rowGroups: [], colGroups: [], slicers: [], ...d.x3 };
       const u = this.usedRange(s); s.nRows = Math.max(1000, u.r2 + 200); s.nCols = Math.max(52, u.c2 + 20);
     }
     this.active = Math.min(j.active || 0, this.sheets.length - 1);

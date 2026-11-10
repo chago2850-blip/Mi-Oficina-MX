@@ -7,6 +7,7 @@ import { readXlsx, writeXlsx, parseCsv, toCsv } from './xlsx.js';
 import { toSpanish, FUNCTION_HELP } from './i18n.js';
 import { FORMATS, changeDecimals, parseInput, formatValue } from './format.js';
 import * as F from './features.js';
+import * as F3 from './fase3.js';
 import { readOds, writeOds } from './ods.js';
 import { injectVba } from './xlsx.js';
 
@@ -212,6 +213,7 @@ function applyFilter() {
   for (let r = f.range.r1 + 1; r <= f.range.r2; r++) {
     for (const [c, hidden] of f.hidden) { if (hidden.has(wb.display(r, c).text)) { s.hiddenRows.add(r); break; } }
   }
+  for (const r of F3.outlineHiddenRows(s)) s.hiddenRows.add(r);
 }
 function filterMenu(c, pos) {
   const s = wb.sheet, f = s.filter;
@@ -341,7 +343,7 @@ const PALETTE = ['#0E9C74', '#5B48E8', '#DC3A63', '#F08A24', '#1F8FD6', '#8E6CD9
 const charts = new Map(); // id -> instancia echarts
 
 function chartData(ch, s = wb.sheet) {
-  const g = parseRange(ch.range); if (!g) return null;
+  const g = F3.resolveRange(ch.range, s); if (!g) return null;
   const val = (r, c) => wb.value(r, c, s);
   const headerRow = [...Array(g.c2 - g.c1 + 1).keys()].some((i) => typeof val(g.r1, g.c1 + i) === 'string') && g.r2 > g.r1;
   const catCol = [...Array(g.r2 - g.r1 + 1).keys()].slice(headerRow ? 1 : 0).some((i) => typeof val(g.r1 + i, g.c1) === 'string') || (g.c2 > g.c1 && headerRow && typeof val(g.r1, g.c1) !== 'number' && val(g.r1, g.c1) == null);
@@ -368,6 +370,7 @@ function mountCharts() {
   grid.chartLayer.replaceChildren();
   for (const ch of wb.sheet.charts) mountChart(ch);
   grid.positionCharts();
+  F3.renderSlicers();
 }
 function mountChart(ch) {
   const el = h('div', { class: 'chartbox', 'data-id': ch.id, style: { width: `${ch.w}px`, height: `${ch.h}px` }, tabindex: 0 });
@@ -425,7 +428,7 @@ async function chartDialog(ch, title) {
 async function editChart(ch) {
   const v = await chartDialog(ch, 'Editar gráfico');
   if (!v) return;
-  if (!parseRange(v.range)) { toast('Rango no válido', { error: true }); return; }
+  if (!F3.resolveRange(v.range)) { toast('Rango no válido', { error: true }); return; }
   act('Editar gráfico', () => Object.assign(ch, v), { hf: false });
   refreshCharts();
 }
@@ -659,6 +662,17 @@ async function onCommand(cmd, arg) {
     case 'protectBook': return F.protectBook();
     case 'unlockCells': return F.toggleUnlock();
     case 'pivot': return F.pivotDialog();
+    case 'goalSeek': return F3.goalSeek();
+    case 'solver': return F3.solver();
+    case 'sparkline': return F3.sparklineDialog(arg || 'line');
+    case 'clearSparklines': return F3.clearSparklines();
+    case 'group': return F3.group(false);
+    case 'ungroup': return F3.group(true);
+    case 'hideDetail': return F3.showDetail(false);
+    case 'showDetail': return F3.showDetail(true);
+    case 'slicer': return F3.insertSlicer();
+    case 'sparklineCol': return F3.sparklineDialog('column');
+    case 'sparklineWin': return F3.sparklineDialog('winloss');
     case 'refreshPivot': return F.refreshPivot();
     case 'pageSetup': return F.pageSetupDialog();
     case 'printArea': return F.setPrintArea(false);
@@ -741,6 +755,8 @@ const TABS = [
   { id: 'insert', label: 'Insertar', groups: [
     { label: 'Tablas', items: [{ cmd: 'pivot', label: 'Tabla dinámica', icon: 'layout', size: 'lg' }, { cmd: 'tableStyle', label: 'Tabla', icon: 'table', size: 'lg', menu: () => F.tableStyleMenu() }] },
     { label: 'Gráficos', items: [{ cmd: 'insertChart', label: 'Gráfico recomendado', icon: 'chart', size: 'lg' }, { cmd: 'charts', label: 'Todos los gráficos', icon: 'chartPie', size: 'lg', menu: chartMenu }] },
+    { label: 'Minigráficos', items: [{ stack: [{ cmd: 'sparkline', label: 'Línea', icon: 'chartLine', showLabel: true }, { cmd: 'sparklineCol', label: 'Columna', icon: 'chart', showLabel: true }, { cmd: 'sparklineWin', label: 'Ganancia o pérdida', icon: 'decDec', showLabel: true }] }] },
+    { label: 'Filtros', items: [{ cmd: 'slicer', label: 'Segmentación de datos', icon: 'filter', size: 'lg' }] },
     { label: 'Funciones', items: [{ cmd: 'insertFunction', label: 'Función', icon: 'func', size: 'lg' }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
     { label: 'Hojas', items: [{ cmd: 'newSheet', label: 'Hoja nueva', icon: 'sheetAdd', size: 'lg' }] },
   ] },
@@ -754,6 +770,8 @@ const TABS = [
   { id: 'data', label: 'Datos', groups: [
     { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }] },
     { label: 'Herramientas de datos', items: [{ cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
+    { label: 'Previsión', items: [{ cmd: 'whatIf', label: 'Análisis de hipótesis', icon: 'func', size: 'lg', menu: () => [{ label: 'Buscar objetivo…', run: () => onCommand('goalSeek') }, { label: 'Solver…', run: () => onCommand('solver') }] }] },
+    { label: 'Esquema', items: [{ stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }] }, { stack: [{ cmd: 'hideDetail', label: 'Ocultar detalle', icon: 'minus', showLabel: true }, { cmd: 'showDetail', label: 'Mostrar detalle', icon: 'plus', showLabel: true }] }] },
     { label: 'Exportar', items: [{ cmd: 'exportCsv', label: 'Guardar CSV', icon: 'words', size: 'lg' }, { cmd: 'exportOds', label: 'Guardar ODS', icon: 'sheet', size: 'lg' }] },
   ] },
   { id: 'review', label: 'Revisar', groups: [
@@ -770,6 +788,8 @@ const TABS = [
 shell = new OfficeShell({ appId: 'calcula', appName: 'Calcula Datos', logo: '../shared/img/calcula.svg', tabs: TABS, adapter });
 buildWorkspace(shell.workspace);
 F.initFeatures({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g) });
+F3.init({ wb, grid, shell, act, refresh, applyFilter, mountCharts, refreshCharts });
+{ const pc = grid.positionCharts.bind(grid); grid.positionCharts = () => { pc(); F3.positionSlicers(); }; }
 statusInfo = h('span', { class: 'selstats' });
 zoom = shell.zoomControl({ value: 100, min: 50, max: 250, onChange: (v) => { grid.zoom = v / 100; grid.updateSpacer(); grid.syncScroll(); grid.draw(); } });
 shell.status.append(h('span', {}, 'Listo'), h('div', { class: 'grow' }), statusInfo, zoom);
@@ -788,4 +808,4 @@ shell.start();
 // Al cambiar el idioma, las fórmulas y errores se vuelven a mostrar en el idioma nuevo
 onLang(() => { grid.invalidate(); grid.draw(); refresh(); });
 
-window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F };
+window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3 };

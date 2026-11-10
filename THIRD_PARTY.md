@@ -17,6 +17,11 @@ Mi Oficina MX se distribuye bajo la **GPL-3.0-or-later**. Incluye estas bibliote
 | [pdf-lib](https://pdf-lib.js.org/) | Editar PDF (PapelPDF) | MIT |
 | [qpdf-wasm](https://github.com/neslinesli93/qpdf-wasm) | Cifrar y comprimir PDF | Apache-2.0 |
 | [Tesseract.js](https://tesseract.projectnaptha.com/) | OCR sin conexión | Apache-2.0 |
+| [Temml](https://temml.org/) | Ecuaciones (LaTeX → MathML) | MIT |
+| [jsdiff](https://github.com/kpdecker/jsdiff) | Comparar documentos | BSD-3-Clause |
+| [webm-muxer](https://github.com/Vanilagy/webm-muxer) | Exportar presentaciones a video | MIT |
+| [officecrypto-tool](https://github.com/zurmokeeper/officecrypto-tool) (con crypto-js, xml2js y cfb) | Cifrar y abrir archivos de Office con contraseña | MIT · Apache-2.0 (cfb) |
+| [word-extractor](https://github.com/morungos/node-word-extractor) | Abrir .doc de Word 97-2003 | MIT |
 | [esbuild](https://esbuild.github.io/) | Empaquetar la interfaz (solo desarrollo) | MIT |
 
 **PapelPDF** es del mismo autor y se publicó originalmente bajo MIT; dentro de esta suite se distribuye bajo la GPL-3.0.

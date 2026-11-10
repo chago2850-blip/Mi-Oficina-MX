@@ -282,12 +282,12 @@ export function renderSide() {
     const list = [...C.state.comments].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
     if (!list.length) body.append(h('p', { class: 'sp-empty' }, 'Selecciona texto y pulsa “Nuevo comentario” (Revisar).'));
     list.forEach((c) => {
-      const replies = h('div', { class: 'cm-replies' }, ...c.replies.map((r) => h('div', { class: 'cm-reply' }, h('b', {}, r.author), h('small', {}, fmtDate(r.date)), h('p', {}, r.text))));
+      const replies = h('div', { class: 'cm-replies' }, ...c.replies.map((r) => h('div', { class: 'cm-reply' }, h('b', {}, r.author), h('small', {}, fmtDate(r.date)), h('p', {}, r.text), reactionsRow(r))));
       const reply = h('input', { placeholder: 'Responder…' });
       reply.addEventListener('keydown', (e) => { if (e.key === 'Enter' && reply.value.trim()) { c.replies.push({ author: author(), date: nowIso(), text: reply.value.trim() }); C.shell.markDirty(); renderSide(); } });
       body.append(h('div', { class: `cmcard${c.resolved ? ' resolved' : ''}`, 'data-card': c.id, onclick: (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') { focusComment(c.id); const el = C.editor.querySelector(`.cm[data-cid="${c.id}"]`); if (el) scrollToNode(el.closest('p,h1,h2,h3,li,td') || el); } } },
         h('div', { class: 'cm-top' }, h('span', { class: 'avatar' }, (c.author || '?')[0].toUpperCase()), h('div', {}, h('b', {}, c.author), h('small', {}, fmtDate(c.date)))),
-        h('p', { class: 'cm-text' }, c.text), replies,
+        h('p', { class: 'cm-text' }, c.text), reactionsRow(c), replies,
         c.resolved ? null : reply,
         h('div', { class: 'cm-actions' },
           h('button', { class: 'btn ghost', onclick: () => { c.resolved = !c.resolved; C.shell.markDirty(); renderSide(); } }, c.resolved ? 'Reabrir' : 'Resolver'),
@@ -306,6 +306,24 @@ export function renderSide() {
   }
   sidePanel.replaceChildren(tabs, body);
 }
+
+// Reacciones (👍 ❤️ 🎉 😮 👀) en comentarios y respuestas
+const EMOJIS = ['👍', '❤️', '🎉', '😮', '👀'];
+function reactionsRow(item) {
+  const me = author();
+  const re = item.reactions || {};
+  const toggle = (em) => {
+    const list = new Set(re[em] || []);
+    if (list.has(me)) list.delete(me); else list.add(me);
+    item.reactions = { ...re, [em]: [...list] }; if (!list.size) delete item.reactions[em];
+    C.shell.markDirty(); renderSide();
+  };
+  const row = h('div', { class: 'cm-reacts' }, ...Object.entries(re).filter(([, who]) => who.length).map(([em, who]) =>
+    h('button', { class: `react${who.includes(me) ? ' mine' : ''}`, title: who.join(', '), onclick: (e) => { e.stopPropagation(); toggle(em); } }, `${em} ${who.length}`)));
+  row.append(h('button', { class: 'react add', title: 'Reaccionar', onclick: (e) => { e.stopPropagation(); dropdown(e.currentTarget, EMOJIS.map((em) => ({ label: em, run: () => toggle(em) }))); } }, '☺+'));
+  return row;
+}
+export { reactionsRow };
 
 // ------------------------------------------------------------------ notas al pie
 function bindFootnotes() {

@@ -29,6 +29,7 @@ export async function htmlToOdt(editorEl, settings) {
   const styleXml = [];
   const pictures = [];
   let fnNum = 0, enNum = 0;
+  const formulas = [];
   const textStyle = (f) => {
     const props = [];
     if (f.bold) props.push('fo:font-weight="bold"'); if (f.italic) props.push('fo:font-style="italic"');
@@ -71,6 +72,17 @@ export async function htmlToOdt(editorEl, settings) {
       if (tag === 'BR') { out += '<text:line-break/>'; continue; }
       if (tag === 'DEL') continue; // se guardan los cambios ya aceptados
       if (tag === 'IMG') { out += await image(n); continue; }
+      if (n.classList?.contains('eq')) {
+        // Ecuación: objeto de fórmula ODF incrustado (MathML)
+        const m = n.querySelector('math'); if (!m) continue;
+        const k = formulas.length + 1; const dir = `Object ${k}`;
+        let xml = new XMLSerializer().serializeToString(m); if (!/xmlns=/.test(xml.slice(0, xml.indexOf('>')))) xml = xml.replace('<math', '<math xmlns="http://www.w3.org/1998/Math/MathML"');
+        formulas.push(dir);
+        zip.file(`${dir}/content.xml`, `<?xml version="1.0" encoding="UTF-8"?>${xml}`);
+        const wcm = px2cm(Math.max(20, (n.offsetWidth || n.textContent.length * 9) + 6)), hcm = px2cm(Math.max(16, (n.offsetHeight || 22) + 4));
+        out += `<draw:frame draw:name="Fórmula${k}" text:anchor-type="as-char" svg:width="${wcm}" svg:height="${hcm}"><draw:object xlink:href="./${dir}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>`;
+        continue;
+      }
       if (tag === 'SUP' && n.classList.contains('en')) { const t = settings.endnotes?.[n.dataset.fid]; if (t != null) { enNum++; out += `<text:note text:id="edn${enNum}" text:note-class="endnote"><text:note-citation>${roman(enNum)}</text:note-citation><text:note-body><text:p text:style-name="Endnote">${x(t)}</text:p></text:note-body></text:note>`; } continue; }
       if (tag === 'SUP' && n.classList.contains('fn')) { const t = settings.footnotes?.[n.dataset.fid]; if (t != null) { fnNum++; out += `<text:note text:id="ftn${fnNum}" text:note-class="footnote"><text:note-citation>${fnNum}</text:note-citation><text:note-body><text:p text:style-name="Footnote">${x(t)}</text:p></text:note-body></text:note>`; } continue; }
       if (n.classList?.contains('mf')) { out += x(`«${n.dataset.f}»`); continue; }
@@ -177,7 +189,7 @@ ${heading(1, 16, '#2F2496')}${heading(2, 13, '#3D30B5')}${heading(3, 12, '#3D30B
 <office:master-styles><style:master-page style:name="Standard" style:page-layout-name="PL1">${settings.header ? `<style:header><text:p>${x(settings.header)}</text:p></style:header>` : ''}${settings.footer || (settings.pageNumbers && settings.pageNumbers !== 'none') ? `<style:footer><text:p>${x(settings.footer || '')}${settings.pageNumbers && settings.pageNumbers !== 'none' ? ` ${t('Página')} <text:page-number text:select-page="current"/>` : ''}</text:p></style:footer>` : ''}</style:master-page></office:master-styles></office:document-styles>`;
   const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta ${NSDECL} office:version="1.3"><office:meta><meta:generator>Escribiente · Mi Oficina MX</meta:generator><dc:title>${x(settings.title)}</dc:title><dc:creator>${x(settings.author)}</dc:creator><dc:subject>${x(settings.subject)}</dc:subject><meta:keyword>${x(settings.keywords)}</meta:keyword><dc:date>${new Date().toISOString()}</dc:date></office:meta></office:document-meta>`;
   zip.file('content.xml', content); zip.file('styles.xml', styles); zip.file('meta.xml', meta);
-  zip.file('META-INF/manifest.xml', `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>${pictures.map((p) => `<manifest:file-entry manifest:full-path="${p}" manifest:media-type="image/${p.split('.').pop().replace('jpg', 'jpeg').replace('svg', 'svg+xml')}"/>`).join('')}</manifest:manifest>`);
+  zip.file('META-INF/manifest.xml', `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>${pictures.map((p) => `<manifest:file-entry manifest:full-path="${p}" manifest:media-type="image/${p.split('.').pop().replace('jpg', 'jpeg').replace('svg', 'svg+xml')}"/>`).join('')}${formulas.map((d) => `<manifest:file-entry manifest:full-path="${d}/" manifest:version="1.3" manifest:media-type="application/vnd.oasis.opendocument.formula"/><manifest:file-entry manifest:full-path="${d}/content.xml" manifest:media-type="text/xml"/>`).join('')}</manifest:manifest>`);
   return zip.generateAsync({ type: 'uint8array', mimeType: 'application/vnd.oasis.opendocument.text', compression: 'DEFLATE' });
 }
 
@@ -234,6 +246,13 @@ export async function odtToHtml(bytes) {
         if (href && zip.file(href)) {
           if (!imgs[href]) { const ext = href.split('.').pop().toLowerCase(); const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', gif: 'image/gif' }[ext] || 'image/png'; imgs[href] = `data:${mime};base64,${await zip.file(href).async('base64')}`; }
           const w = Math.round(lenToPx(A(n, 'svg', 'width')) || 300); out += `<img src="${imgs[href]}" width="${w}" alt="">`;
+        } else if (n.getElementsByTagNameNS(NS.draw, 'object')[0]) {
+          // Fórmula incrustada -> ecuación editable
+          const href = A(n.getElementsByTagNameNS(NS.draw, 'object')[0], 'xlink', 'href').replace(/^\.\//, '');
+          const src = await zip.file(`${href}/content.xml`)?.async('string');
+          const md = src && new DOMParser().parseFromString(src, 'application/xml');
+          const math = md?.documentElement?.localName === 'math' ? md.documentElement : md?.getElementsByTagNameNS('http://www.w3.org/1998/Math/MathML', 'math')[0];
+          if (math) { const tex = [...math.getElementsByTagName('*')].find((a) => a.localName === 'annotation')?.textContent || ''; out += `<span class="eq" contenteditable="false" data-tex="${e(tex)}">${new XMLSerializer().serializeToString(math).replace(/ xmlns(:\w+)?="[^"]*"/g, '').replace(/<(\/?)\w+:/g, '<$1')}</span>`; }
         } else { const tb = n.getElementsByTagNameNS(NS.draw, 'text-box')[0]; if (tb) for (const p of tb.children) out += await inline(p); }
         continue;
       }

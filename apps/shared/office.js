@@ -256,6 +256,7 @@ export class OfficeShell {
     const dark = this.prefs.theme === 'dark' || (this.prefs.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.body.dataset.theme = dark ? 'dark' : 'light';
     if (this.prefs.uiLang) setLang(this.prefs.uiLang);
+    this.renderQat();
     this.adapter.onPrefs?.(this.prefs);
   }
   async optionsDialog() {
@@ -278,10 +279,11 @@ export class OfficeShell {
   buildTop() {
     this.top.append(
       h('div', { class: 'brand', title: 'Mostrar Mi Oficina MX', onclick: () => api?.showLauncher() }, h('img', { src: this.logo, alt: '' }), this.appName),
-      h('button', { class: 'qa', title: 'Guardar (Ctrl+S)', html: icon('save', 18), onclick: () => this.command('save') }),
-      h('button', { class: 'qa', title: 'Deshacer (Ctrl+Z)', html: icon('undo', 18), onclick: () => this.command('undo') }),
-      h('button', { class: 'qa', title: 'Rehacer (Ctrl+Y)', html: icon('redo', 18), onclick: () => this.command('redo') }),
     );
+    // Barra de acceso rápido (personalizable desde la flecha ▾)
+    this.qatEl = h('div', { class: 'qat' });
+    this.top.append(this.qatEl);
+    this.renderQat();
     this.docNameEl = h('div', { class: 'docname' });
     this.top.append(this.docNameEl);
     this.searchBox = h('input', { class: 'search', placeholder: 'Buscar (Ctrl+F)', 'aria-label': 'Buscar en el documento' });
@@ -345,6 +347,8 @@ export class OfficeShell {
         case 'about': return this.about();
         case 'options': return this.optionsDialog();
         case 'properties': return this.showBackstage('info');
+        case 'protectFile': return this.protectDialog();
+        case 'customizeQat': return this.customizeQat();
         case 'find': this.searchBox.focus(); this.searchBox.select(); return this.adapter.onCommand('find', arg);
         default: return this.adapter.onCommand(cmd, arg);
       }
@@ -352,6 +356,23 @@ export class OfficeShell {
       console.error(err);
       toast(`Ocurrió un error: ${err.message || err}`, { error: true, ms: 6000 });
     }
+  }
+
+  // Cifrado con contraseña (AES-256, formato estándar de Office); solo para .docx, .xlsx y .pptx
+  async protectDialog() {
+    const v = await form('Cifrar con contraseña', [
+      { type: 'note', label: 'Se pedirá la contraseña para abrir el archivo en Mi Oficina MX, Microsoft Office o LibreOffice. Si la olvidas, no se puede recuperar.' },
+      { name: 'p', label: 'Contraseña', type: 'password' }, { name: 'p2', label: 'Repetir contraseña', type: 'password' },
+    ], 'Cifrar');
+    if (!v) return false;
+    if (!v.p) { toast('Escribe una contraseña.', { error: true }); return false; }
+    if (v.p !== v.p2) { toast('Las contraseñas no coinciden.', { error: true }); return false; }
+    this.doc.password = v.p;
+    if (this.doc.path && this.doc.ext !== this.adapter.saveExt) { this.doc.path = null; this.doc.ext = this.adapter.saveExt; this.doc.name = this.doc.name.replace(/\.[^.]+$/, '') + '.' + this.adapter.saveExt; }
+    this.markDirty(); this.updateTitle();
+    toast('Contraseña lista. Se aplicará al guardar.');
+    if (document.querySelector('.backstage')) this.showBackstage('info');
+    return true;
   }
 
   async newFromMenu() {
@@ -381,6 +402,17 @@ export class OfficeShell {
   }
 
   async loadFile(f) {
+    if (f.encrypted) {
+      // Archivo protegido: se pide la contraseña hasta acertar o cancelar
+      let msg = '';
+      for (;;) {
+        const v = await form(t('Documento protegido'), [{ type: 'note', label: tf('«{0}» necesita una contraseña para abrirse.', f.name) + (msg ? ` ${t(msg)}` : '') }, { name: 'p', label: 'Contraseña', type: 'password' }], 'Abrir');
+        if (!v) return;
+        const d = await api.decrypt({ path: f.path, password: v.p });
+        if (d && !d.error) { f = d; break; }
+        msg = 'Contraseña incorrecta.';
+      }
+    }
     const veil = h('div', { class: 'modal-back' }, h('div', { class: 'modal', style: { padding: '18px 24px', minWidth: '240px' } }, `Abriendo ${f.name}…`));
     document.body.append(veil);
     try {
@@ -388,7 +420,7 @@ export class OfficeShell {
       const info = await this.adapter.load(f);
       if (info?.props) this.props = { ...info.props };
       const nativeSave = this.adapter.writable ? this.adapter.writable.includes(f.ext) : f.ext === this.adapter.saveExt;
-      this.doc = { name: f.name, path: nativeSave ? f.path : null, ext: nativeSave ? f.ext : this.adapter.saveExt, dirty: false, started: true };
+      this.doc = { name: f.name, path: nativeSave ? f.path : null, ext: nativeSave ? f.ext : this.adapter.saveExt, dirty: false, started: true, password: f.password || null };
       if (!nativeSave) this.doc.name = f.name.replace(/\.[^.]+$/, '') + '.' + this.adapter.saveExt;
       this.updateTitle();
       this.hideBackstage();
@@ -407,7 +439,7 @@ export class OfficeShell {
     const res = await api.save({
       ...(typeof data === 'string' ? { text: data } : { bytes: data }),
       path: ask ? null : this.doc.path, ask: ask || !this.doc.path,
-      suggestedName: this.doc.name.replace(/\.[^.]+$/, '') + '.' + ext, ext,
+      suggestedName: this.doc.name.replace(/\.[^.]+$/, '') + '.' + ext, ext, password: this.doc.password || undefined,
     });
     if (!res) return false;
     this.doc.path = res.path; this.doc.name = res.name; this.doc.ext = res.name.split('.').pop().toLowerCase();
@@ -560,8 +592,46 @@ export class OfficeShell {
     left.append(h('button', { class: 'btn primary', onclick: () => { fields.forEach(([k]) => { this.props[k] = inputs[k].value.trim(); }); this.markDirty(); toast('Propiedades actualizadas (se guardan con el archivo)'); } }, 'Aplicar'));
     const right = h('div', {}, h('h2', { style: { marginTop: 0 } }, 'Datos'), tbl);
     if (this.doc.path) right.append(h('p', {}, h('button', { class: 'btn', onclick: () => api.showInFolder(this.doc.path) }, 'Mostrar en la carpeta')));
+    const prot = h('div', { class: 'protect-box' }, h('h2', {}, 'Proteger documento'),
+      h('p', { class: 'muted' }, this.doc.password ? 'Este documento pide una contraseña para abrirse.' : 'Cualquier persona con el archivo puede abrirlo.'),
+      h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: () => this.protectDialog() }, this.doc.password ? 'Cambiar contraseña' : 'Cifrar con contraseña'),
+        this.doc.password ? h('button', { class: 'btn', onclick: () => { this.doc.password = null; this.markDirty(); toast('Se quitó la contraseña. Guarda para aplicar.'); this.showBackstage('info'); } }, 'Quitar contraseña') : null));
+    right.append(prot);
     grid.append(left, right);
     main.append(grid);
+  }
+
+  // -------------------------------------------------------------- barra de acceso rápido
+  qatCatalog() {
+    return [
+      { cmd: 'save', label: 'Guardar', icon: 'save', kbd: 'Ctrl+S' }, { cmd: 'undo', label: 'Deshacer', icon: 'undo', kbd: 'Ctrl+Z' }, { cmd: 'redo', label: 'Rehacer', icon: 'redo', kbd: 'Ctrl+Y' },
+      { cmd: 'new', label: 'Nuevo', icon: 'new' }, { cmd: 'open', label: 'Abrir', icon: 'open', kbd: 'Ctrl+O' }, { cmd: 'print', label: 'Imprimir', icon: 'print', kbd: 'Ctrl+P' },
+      { cmd: 'exportPdf', label: 'Exportar a PDF', icon: 'pdf' }, ...(this.adapter.qatExtra || []),
+    ];
+  }
+  qatList() { const q = this.prefs?.qat?.[this.appId]; return Array.isArray(q) ? q : ['save', 'undo', 'redo']; }
+  renderQat() {
+    if (!this.qatEl) return;
+    const cat = this.qatCatalog();
+    this.qatEl.replaceChildren(...this.qatList().map((c) => cat.find((x) => x.cmd === c)).filter(Boolean).map((it) =>
+      h('button', { class: 'qa', 'data-qat': it.cmd, title: `${it.label}${it.kbd ? ` (${it.kbd})` : ''}`, html: icon(it.icon, 18), onclick: () => this.command(it.cmd) })),
+    h('button', { class: 'qa qa-more', title: 'Personalizar barra de acceso rápido', html: icon('chevronDown', 14), onclick: (e) => this.qatMenu(e.currentTarget) }));
+  }
+  qatMenu(anchor) {
+    const on = new Set(this.qatList());
+    dropdown(anchor, [
+      ...this.qatCatalog().map((it) => ({ label: `${on.has(it.cmd) ? '✓ ' : '\u2003 '}${t(it.label)}`, icon: it.icon, run: () => this.setQat(on.has(it.cmd) ? [...on].filter((c) => c !== it.cmd) : [...on, it.cmd]) })),
+      '-', { label: 'Restablecer', run: () => this.setQat(['save', 'undo', 'redo']) },
+    ]);
+  }
+  async customizeQat() { this.qatMenu(this.qatEl.querySelector('.qa-more')); }
+  async setQat(list) {
+    const order = this.qatCatalog().map((x) => x.cmd);
+    list = [...new Set(list)].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    const qat = { ...(this.prefs.qat || {}), [this.appId]: list };
+    this.prefs = { ...this.prefs, qat };
+    this.renderQat();
+    if (api?.setPrefs) await api.setPrefs({ qat });
   }
 
   // -------------------------------------------------------------- barra de estado con zoom

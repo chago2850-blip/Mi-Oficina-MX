@@ -57,3 +57,12 @@ body.printing #printRoot { display: block; padding: 0; background: #fff; }
 .ptable td { padding: 1px 4px; overflow: hidden; border: 1px solid #E8E9EE; }
 .note-tip { position: absolute; z-index: 8; max-width: 240px; background: #FFF8C5; color: #333; border: 1px solid #E5D36A; border-radius: 4px; padding: 6px 8px; font-size: 12px; box-shadow: var(--shadow); white-space: pre-wrap; pointer-events: none; }
 .ptable.nogrid td { border-color: transparent; }
+/* fase 3: segmentación de datos */
+.slicer { position: absolute; background: #fff; border: 1px solid #C9CDD8; border-radius: 8px; box-shadow: 0 4px 16px rgba(20,22,40,.12); padding: 0 0 6px; pointer-events: auto; cursor: move; font-size: 12.5px; }
+.slicer .sl-head { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid #ECEDF2; }
+.slicer .sl-head b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1D2030; }
+.slicer .sl-head button { border: 0; background: none; cursor: pointer; color: #6B6F80; border-radius: 4px; padding: 2px 4px; }
+.slicer .sl-head button:hover { background: #F1F2F6; }
+.slicer .sl-items { display: grid; gap: 4px; padding: 6px 8px 0; max-height: 220px; overflow: auto; }
+.slicer .sl-item { text-align: left; border: 1px solid #D5D8E2; background: #F6F7FA; color: #6B6F80; border-radius: 5px; padding: 4px 8px; cursor: pointer; }
+.slicer .sl-item.on { background: #DFF5EE; border-color: #0E9C74; color: #0A4A3A; font-weight: 600; }

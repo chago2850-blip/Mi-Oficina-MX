@@ -168,3 +168,13 @@ body.audience-mode, body.render-mode { margin: 0; background: #000; overflow: hi
 body.render-mode { background: #fff; }
 .show-stage.aud { position: fixed; inset: 0; }
 body.render-mode .show-stage.aud { display: block; }
+/* fase 3: multimedia, trayectorias y ensayo */
+.obj.t-media video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; border-radius: 2px; }
+.obj.t-media.t-audio { display: grid; place-items: center; color: #fff; background: radial-gradient(circle at 35% 30%, #F2738F, #C9234F); border-radius: 50%; }
+.obj.t-media.t-audio audio { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: 260px; margin-top: 6px; }
+.obj .media-play { position: absolute; left: 10px; bottom: 10px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; cursor: pointer; z-index: 2; }
+.obj video::cue { font-family: Inter, sans-serif; font-size: 22px; }
+.obj .path-prev { position: absolute; pointer-events: none; overflow: visible; z-index: 3; }
+.slide.m-thumb .path-prev, .slide.m-print .path-prev, .slide.m-show .path-prev { display: none; }
+.show .rehearse { position: fixed; left: 16px; top: 14px; z-index: 5; display: flex; gap: 10px; background: rgba(20,22,32,.82); color: #fff; padding: 6px 12px; border-radius: 8px; font: 600 14px Inter, sans-serif; font-variant-numeric: tabular-nums; }
+.show .rehearse .rh-total { opacity: .65; }

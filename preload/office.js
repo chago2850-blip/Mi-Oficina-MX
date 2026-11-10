@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('oficina', {
   openDialog: (opts) => ipcRenderer.invoke('of:open-dialog', opts || {}),
   openImage: () => ipcRenderer.invoke('of:open-image'),
   readPath: (p) => ipcRenderer.invoke('of:read-path', p),
+  decrypt: (p) => ipcRenderer.invoke('of:decrypt', p),
   pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch { return null; } },
   save: (opts) => ipcRenderer.invoke('of:save', opts),
   exportPdf: (opts) => ipcRenderer.invoke('of:export-pdf', opts || {}),
@@ -33,5 +34,6 @@ contextBridge.exposeInMainWorld('oficina', {
   onAudience: (fn) => ipcRenderer.on('audience-msg', (_e, m) => fn(m)),
   onAudienceClosed: (fn) => ipcRenderer.on('audience-closed', () => fn()),
   renderSlides: (p) => ipcRenderer.invoke('of:render-slides', p),
+  renderFrames: (p) => ipcRenderer.invoke('of:render-frames', p),
   renderReady: (i) => ipcRenderer.invoke('of:render-ready', i),
 });

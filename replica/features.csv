@@ -23,12 +23,12 @@ Cinta con pestañas y pestañas contextuales,compartido,must,yes,yes,patrón de 
 Portapapeles con pegado especial (solo texto / formato),compartido,must,yes,yes,clic derecho → Pegar solo texto
 Revisión ortográfica en español e inglés,compartido,must,yes,yes,diccionarios Hunspell libres
 Comentarios con respuestas,compartido,should,yes,yes,Escribiente (se importan de docx con sus respuestas); notas de celda en Calcula Datos
-Reacciones en comentarios,compartido,could,yes,no,novedad de Office 2024
+Reacciones en comentarios,compartido,could,yes,partial,"👍 ❤️ 🎉 😮 👀 en comentarios y respuestas de Escribiente; se guardan en la recuperación y el HTML, no dentro del .docx"
 Abrir y guardar ODF (odt ods odp),compartido,should,yes,yes,escritor/lector propio; fórmulas OpenFormula
-Barra de acceso rápido personalizable,compartido,could,yes,no,
+Barra de acceso rápido personalizable,compartido,could,yes,yes,"por app, desde la flecha junto a Guardar/Deshacer"
 Plantillas propias incluidas,compartido,should,yes,yes,escritas desde cero
 Propiedades del documento (autor título),compartido,should,yes,yes,"título, autor, asunto y palabras clave; se guardan en docx/xlsx/pptx"
-Contraseña para abrir el archivo,compartido,could,yes,no,cifrado OOXML
+Contraseña para abrir el archivo,compartido,could,yes,yes,"cifrado estándar de Office (AES-256) en .docx, .xlsx y .pptx; abre archivos cifrados por Office"
 Escribir y editar texto con fuente tamaño color negrita cursiva subrayado,escribiente,must,yes,yes,
 Párrafo: alineación sangría interlineado espaciado,escribiente,must,yes,yes,
 Viñetas y listas numeradas multinivel,escribiente,must,yes,yes,
@@ -53,16 +53,16 @@ Control de cambios (aceptar/rechazar),escribiente,should,yes,yes,también se imp
 Panel de navegación por títulos,escribiente,should,yes,yes,
 Copiar formato (brocha),escribiente,should,yes,yes,
 Símbolos y caracteres especiales,escribiente,should,yes,yes,
-Ecuaciones,escribiente,could,yes,no,
+Ecuaciones,escribiente,could,yes,partial,LaTeX con vista previa; se guardan como ecuación de Word (OMML) y fórmula ODF; las ecuaciones de un .docx ajeno aún no se leen
 Combinar correspondencia desde CSV/XLSX,escribiente,should,yes,yes,"vista previa y salida a docx, pdf o documento"
-Etiquetas y sobres,escribiente,could,yes,no,
-Citas y bibliografía,escribiente,could,yes,no,
-Comparar dos documentos,escribiente,could,yes,no,
+Etiquetas y sobres,escribiente,could,yes,yes,"Avery 5160, 5163, L7163 y sobres DL, C5, núm. 10; combinan con los destinatarios"
+Citas y bibliografía,escribiente,could,yes,yes,fuentes y estilo APA
+Comparar dos documentos,escribiente,could,yes,yes,el resultado queda como control de cambios
 Marca de agua y color de página,escribiente,should,yes,yes,
-Modo enfoque / lectura,escribiente,could,yes,no,
-Abrir doc binario antiguo,escribiente,could,yes,no,modo compatibilidad
-Exportar a txt html y markdown,escribiente,could,yes,partial,txt y html; markdown solo se abre
-SmartArt,escribiente,could,yes,no,
+Modo enfoque / lectura,escribiente,could,yes,yes,
+Abrir doc binario antiguo,escribiente,could,yes,partial,"se recupera el texto, encabezados y notas; el formato se pierde (modo compatibilidad)"
+Exportar a txt html y markdown,escribiente,could,yes,yes,
+SmartArt,escribiente,could,yes,partial,"lista, proceso, ciclo, jerarquía y pirámide editables; en .docx se guardan como imagen"
 Cuadrícula con celdas filas columnas y varias hojas,calcula datos,must,yes,yes,canvas para 100k+ filas
 Barra de fórmulas y cuadro de nombres,calcula datos,must,yes,yes,
 Fórmulas con referencias relativas absolutas y entre hojas,calcula datos,must,yes,yes,HyperFormula
@@ -90,19 +90,19 @@ Tablas con formato,calcula datos,should,yes,yes,
 Tablas dinámicas,calcula datos,should,yes,yes,"suma, cuenta, promedio, mín, máx; actualizar"
 Funciones estadísticas financieras lógicas e información,calcula datos,should,yes,yes,~400 en HyperFormula
 Funciones de matriz dinámica (FILTRAR UNICOS ORDENAR LET),calcula datos,should,yes,yes,
-LAMBDA MAP REDUCE APILARV,calcula datos,could,yes,no,funciones 2024
+LAMBDA MAP REDUCE APILARV,calcula datos,could,yes,yes,"LAMBDA, LET, MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY, APILARV/H, TOMAR, EXCLUIR, ENCOL, ENFILA, ELEGIRCOLS/FILAS, AJUSTARFILAS, TEXTOANTES/DESPUES; LAMBDA con nombre pendiente"
 Administrador de nombres,calcula datos,should,yes,yes,
 Comentarios y notas en celdas,calcula datos,should,yes,yes,notas
 Proteger hoja y libro,calcula datos,should,yes,yes,sin contraseña cifrada
 Área de impresión y ajustar a página,calcula datos,should,yes,yes,
-Buscar objetivo,calcula datos,could,yes,no,
-Minigráficos (sparklines),calcula datos,could,yes,no,
+Buscar objetivo,calcula datos,could,yes,yes,
+Minigráficos (sparklines),calcula datos,could,yes,yes,"línea, columna y ganancia/pérdida; en .xlsx los recupera Calcula Datos"
 Más tipos de gráfico (dispersión área combinado),calcula datos,should,yes,yes,
-Gráficos que siguen matrices dinámicas,calcula datos,could,yes,no,novedad 2024
-Función IMAGEN,calcula datos,could,yes,no,
-Segmentación de datos,calcula datos,could,yes,no,
-Solver,calcula datos,could,yes,no,
-Agrupar y esquema,calcula datos,could,yes,no,
+Gráficos que siguen matrices dinámicas,calcula datos,could,yes,yes,rango con # (p. ej. A4#)
+Función IMAGEN,calcula datos,could,yes,yes,https:// o data:image
+Segmentación de datos,calcula datos,could,yes,yes,
+Solver,calcula datos,could,yes,yes,"búsqueda directa con restricciones, enteros y binarios; hasta 30 variables"
+Agrupar y esquema,calcula datos,could,yes,yes,filas y columnas; se guarda como esquema nativo de Excel
 Abrir xlsm sin ejecutar macros,calcula datos,should,yes,yes,las macros nunca se ejecutan; se conservan al guardar como xlsm
 Diapositivas: añadir duplicar eliminar reordenar,impresiona,must,yes,yes,
 Panel de miniaturas y vista Normal,impresiona,must,yes,yes,
@@ -128,12 +128,12 @@ Tamaño 16:9 y 4:3,impresiona,should,yes,yes,
 Fondo de diapositiva,impresiona,should,yes,yes,
 Puntero láser y pluma en presentación,impresiona,should,yes,yes,
 Exportar diapositivas a imágenes,impresiona,should,yes,yes,PNG
-Video y audio en diapositivas,impresiona,could,yes,no,
-Transición Transformación (Morph),impresiona,could,yes,no,
-Trayectorias de animación,impresiona,could,yes,no,
-Exportar a video,impresiona,could,yes,no,
-Subtítulos en video y audio,impresiona,could,yes,no,
-Ensayar intervalos,impresiona,could,yes,no,
+Video y audio en diapositivas,impresiona,could,yes,yes,se guardan dentro del .pptx
+Transición Transformación (Morph),impresiona,could,yes,yes,se guarda en el .pptx (datos de Impresiona); PowerPoint la muestra como cambio sin efecto
+Trayectorias de animación,impresiona,could,yes,yes,"derecha, izquierda, arriba, abajo, arco, círculo y onda; se guardan en el .pptx (datos de Impresiona)"
+Exportar a video,impresiona,could,yes,yes,WebM (VP9) con transiciones y pasos de animación
+Subtítulos en video y audio,impresiona,could,yes,yes,WebVTT o SRT; se guardan en el .pptx (datos de Impresiona)
+Ensayar intervalos,impresiona,could,yes,yes,y avance automático; se guardan en el .pptx
 Macros VBA,compartido,skip,yes,skip,reimplementar VBA es enorme y riesgoso; se conservan sin ejecutar
 Coautoría en tiempo real y OneDrive,compartido,skip,yes,skip,servicio en la nube de Microsoft
 Copilot y Designer,compartido,skip,yes,skip,servicio de IA de pago de Microsoft

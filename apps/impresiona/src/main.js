@@ -4,15 +4,16 @@ import { THEMES, LAYOUTS, themeById, layoutObjects, PLACEHOLDER } from './themes
 import { readPptx, writePptx } from './pptx.js';
 import { readCoreProps } from '../../shared/coreprops.js';
 import { CHART_TYPES, parseChartData, chartDataText, chartSvg } from './charts.js';
-import { runShow, runPresenter, runAudience, EXIT_TYPES } from './show.js';
+import { runShow, runPresenter, runAudience, EXIT_TYPES, PATH_TYPES } from './show.js';
+import * as F3 from './fase3.js';
 import { readOdp, writeOdp } from './odp.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const FONTS = ['Inter', 'Calibri', 'Arial', 'Georgia', 'Verdana', 'Trebuchet MS', 'Times New Roman', 'Courier New'];
 const SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 54, 60, 72, 96];
-const TRANSITIONS = [['none', 'Ninguna'], ['fade', 'Desvanecer'], ['push', 'Empujar'], ['wipe', 'Barrido'], ['cover', 'Cubrir'], ['zoom', 'Zoom']];
-const ANIMS = [['none', 'Ninguna'], ['appear', 'Aparecer'], ['fade', 'Desvanecer'], ['fly', 'Entrar desde abajo'], ['zoom', 'Acercar'], ['wipe', 'Barrido'], ['fadeOut', 'Salida: desvanecer'], ['flyOut', 'Salida: hacia abajo'], ['zoomOut', 'Salida: alejar']];
+const TRANSITIONS = [['none', 'Ninguna'], ['fade', 'Desvanecer'], ['push', 'Empujar'], ['wipe', 'Barrido'], ['cover', 'Cubrir'], ['zoom', 'Zoom'], ['morph', 'Transformación']];
+const ANIMS = [['none', 'Ninguna'], ['appear', 'Aparecer'], ['fade', 'Desvanecer'], ['fly', 'Entrar desde abajo'], ['zoom', 'Acercar'], ['wipe', 'Barrido'], ['fadeOut', 'Salida: desvanecer'], ['flyOut', 'Salida: hacia abajo'], ['zoomOut', 'Salida: alejar'], ['pathRight', 'Trayectoria: derecha'], ['pathLeft', 'Trayectoria: izquierda'], ['pathUp', 'Trayectoria: arriba'], ['pathDown', 'Trayectoria: abajo'], ['pathArc', 'Trayectoria: arco'], ['pathCircle', 'Trayectoria: círculo'], ['pathWave', 'Trayectoria: onda']];
 const ANIM_NAMES = Object.fromEntries(ANIMS);
 
 // ------------------------------------------------------------------ estado
@@ -79,7 +80,9 @@ function renderSlide(s, mode = 'thumb') {
   for (const o of list) {
     const st = o.style || {};
     const box = h('div', { class: `obj t-${o.type}${o.role ? ` r-${o.role}` : ''}${o.__m ? ' mobj' : ''}`, 'data-id': o.__m ? null : o.id, style: { left: `${o.x}px`, top: `${o.y}px`, width: `${o.w}px`, height: `${o.h}px`, transform: o.rot ? `rotate(${o.rot}deg)` : '' } });
-    if (o.anim && o.anim.type !== 'none' && !EXIT_TYPES.includes(o.anim.type) && mode === 'show' && !o.__m) box.classList.add('anim-wait');
+    if (o.anim && o.anim.type !== 'none' && !EXIT_TYPES.includes(o.anim.type) && !PATH_TYPES.includes(o.anim.type) && mode === 'show' && !o.__m) box.classList.add('anim-wait');
+    if (o.type === 'media') F3.mediaBox(o, mode, box);
+    if (mode === 'edit' && o.anim && !o.__m) F3.pathPreview(o, box);
     if (o.type === 'chart') box.innerHTML = chartSvg(o, th);
     if (o.anim && o.anim.type !== 'none' && mode === 'edit') box.append(h('span', { class: 'anim-badge', title: ANIM_NAMES[o.anim.type] }, String(o.anim.order || '')));
     if (o.type === 'image') box.append(h('img', { src: o.src, alt: '', draggable: 'false' }));
@@ -591,7 +594,7 @@ function addSlide(layout) {
   const lay = layout || (slide()?.layout === 'title' ? 'content' : slide()?.layout || 'content');
   commit('Nueva diapositiva', () => { pres.slides.splice(cur + 1, 0, newSlide(lay === 'blank' && !layout ? 'content' : lay)); cur += 1; selected.clear(); });
 }
-function duplicateSlide() { commit('Duplicar diapositiva', () => { const c = clone(slide()); c.id = uid(); c.objects.forEach((o) => { o.id = uid(); }); pres.slides.splice(cur + 1, 0, c); cur += 1; }); }
+function duplicateSlide() { commit('Duplicar diapositiva', () => { const c = clone(slide()); c.id = uid(); c.objects.forEach((o) => { o.mk = o.mk || o.id; o.id = uid(); }); pres.slides.splice(cur + 1, 0, c); cur += 1; }); }
 function deleteSlide() {
   if (pres.slides.length === 1) { commit('Eliminar diapositiva', () => { pres.slides[0] = newSlide('title'); }); return; }
   commit('Eliminar diapositiva', () => { pres.slides.splice(cur, 1); cur = Math.min(cur, pres.slides.length - 1); selected.clear(); });
@@ -655,6 +658,8 @@ function reflect() {
   rb.setOn('alignLeft', al === 'left'); rb.setOn('alignCenter', al === 'center'); rb.setOn('alignRight', al === 'right');
   if (one) { rb.setValue('fontSize', String(one.style?.size || 20)); rb.setValue('fontName', one.style?.font || (one.role === 'title' ? theme().titleFont : theme().bodyFont)); }
   rb.setContextual('format', selected.size > 0);
+  rb.setContextual('media', selObjs().some((o) => o.type === 'media'));
+  rb.setOn('useTimings', pres.useTimings !== false && pres.slides.some((s) => s.advanceAfter > 0));
   $$('.themegal .gi').forEach((g) => g.classList.toggle('on', g.dataset.theme === pres.theme));
   $$('.transgal .gi').forEach((g) => g.classList.toggle('on', g.dataset.t === (slide()?.transition?.type || 'none')));
   $$('.animgal .gi').forEach((g) => g.classList.toggle('on', g.dataset.a === (one?.anim?.type || 'none')));
@@ -676,9 +681,9 @@ function onStageContext(e) {
 }
 
 // ------------------------------------------------------------------ presentar
+function prepareShow() { if (editing) stopEditing(); if (masterMode) toggleMaster(false); }
 function present(from = 0) {
-  if (editing) stopEditing();
-  if (masterMode) toggleMaster(false);
+  prepareShow();
   runShow({ renderSlide, getPres: () => pres, from, onEnd: (i) => goto(Math.min(i, pres.slides.length - 1)) });
 }
 async function presenter(from = cur) {
@@ -783,6 +788,15 @@ async function onCommand(cmd, arg) {
     case 'duplicateSlide': return duplicateSlide();
     case 'deleteSlide': return deleteSlide();
     case 'present': return present(0);
+    case 'insertVideo': return F3.insertMedia('video');
+    case 'insertAudio': return F3.insertMedia('audio');
+    case 'captions': return F3.captionsDialog(selObjs()[0]);
+    case 'mediaOptions': return F3.mediaOptions(selObjs()[0]);
+    case 'pathDistance': return F3.pathDistance(selObjs());
+    case 'rehearse': return F3.rehearse();
+    case 'useTimings': return F3.setUseTimings(pres.useTimings === false);
+    case 'clearTimings': return F3.clearTimings();
+    case 'exportVideo': return F3.exportVideoDialog();
     case 'presentCurrent': return present(cur);
     case 'textbox': return addTextBox();
     case 'insertImage': return insertImage();
@@ -898,6 +912,7 @@ const TABS = [
     { label: 'Diapositivas', items: [{ cmd: 'newSlideMenu', label: 'Nueva diapositiva', icon: 'slideAdd', size: 'lg', menu: () => layoutMenu(false) }] },
     { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
     { label: 'Imágenes', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }] },
+    { label: 'Multimedia', items: [{ cmd: 'insertVideo', label: 'Video', icon: 'present', size: 'lg' }, { cmd: 'insertAudio', label: 'Audio', icon: 'notes', size: 'lg' }] },
     { label: 'Ilustraciones', items: [{ cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: shapeMenu }, { cmd: 'chart', label: 'Gráfico', icon: 'chart', size: 'lg' }] },
     { label: 'Encabezado y pie', items: [{ cmd: 'footer', label: 'Pie y número', icon: 'footer', size: 'lg' }] },
     { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }] },
@@ -913,16 +928,20 @@ const TABS = [
   ] },
   { id: 'anim', label: 'Animaciones', groups: [
     { label: 'Animación del objeto (entrada y salida)', items: [{ render: animGallery }] },
-    { label: 'Avanzado', items: [{ cmd: 'animPanel', label: 'Panel de animación', icon: 'layout', size: 'lg' }] },
+    { label: 'Avanzado', items: [{ cmd: 'animPanel', label: 'Panel de animación', icon: 'layout', size: 'lg' }, { cmd: 'pathDistance', label: 'Distancia de la trayectoria', icon: 'arrow', size: 'lg' }] },
   ] },
   { id: 'show', label: 'Presentación', groups: [
     { label: 'Iniciar', items: [{ cmd: 'present', label: 'Desde el principio', icon: 'present', size: 'lg', kbd: 'F5' }, { cmd: 'presentCurrent', label: 'Desde la actual', icon: 'presentCur', size: 'lg', kbd: 'Mayús+F5' }, { cmd: 'presenter', label: 'Vista del moderador', icon: 'notes', size: 'lg', kbd: 'Alt+F5' }] },
-    { label: 'Exportar', items: [{ cmd: 'exportImages', label: 'Imágenes PNG', icon: 'image', size: 'lg' }] },
+    { label: 'Configurar', items: [{ cmd: 'rehearse', label: 'Ensayar intervalos', icon: 'recover', size: 'lg' }, { stack: [{ cmd: 'useTimings', label: 'Usar intervalos', icon: 'check', showLabel: true }, { cmd: 'clearTimings', label: 'Borrar intervalos', icon: 'trash', showLabel: true }] }] },
+    { label: 'Exportar', items: [{ cmd: 'exportImages', label: 'Imágenes PNG', icon: 'image', size: 'lg' }, { cmd: 'exportVideo', label: 'Video', icon: 'present', size: 'lg' }] },
   ] },
   { id: 'view', label: 'Vista', groups: [
     { label: 'Vistas', items: [{ cmd: 'sorter', label: 'Clasificador', icon: 'columns', size: 'lg' }, { cmd: 'master', label: 'Patrón de diapositivas', icon: 'layout', size: 'lg' }] },
     { label: 'Secciones', items: [{ stack: [{ cmd: 'addSection', label: 'Agregar sección', icon: 'plus', showLabel: true }, { cmd: 'renameSection', label: 'Cambiar nombre', icon: 'textbox', showLabel: true }] }] },
     { label: 'Zoom', items: [{ cmd: 'zoomReset', label: 'Ajustar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomIn', label: 'Acercar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomOut', label: 'Alejar', icon: 'zoomOut', size: 'lg' }] },
+  ] },
+  { id: 'media', label: 'Reproducción', contextual: true, groups: [
+    { label: 'Opciones', items: [{ cmd: 'mediaOptions', label: 'Opciones de reproducción', icon: 'present', size: 'lg' }, { cmd: 'captions', label: 'Subtítulos', icon: 'textbox', size: 'lg' }] },
   ] },
   { id: 'format', label: 'Formato de forma', contextual: true, groups: [
     { label: 'Estilos', items: [{ cmd: 'fill', label: 'Relleno', icon: 'fill', size: 'lg', color: true, colorValue: '#DC3A63' }, { cmd: 'stroke', label: 'Contorno', icon: 'rect', size: 'lg', color: true, colorValue: '#1D2030' }] },
@@ -935,6 +954,7 @@ const MODE = new URLSearchParams(location.search);
 if (MODE.get('audience') === '1' || MODE.get('render') === '1') {
   runAudience({ renderSlide, setPres: (p) => { pres = p; }, getPres: () => pres, api, render: MODE.get('render') === '1' });
 } else {
+F3.init({ getPres: () => pres, slide: () => slide(), commit, select, center, uid, renderAll, runShow, renderSlide, prepareShow, goto: (i) => goto(Math.min(i, pres.slides.length - 1)), docName: () => shell.doc.name });
 shell = new OfficeShell({ appId: 'impresiona', appName: 'Impresiona', logo: '../shared/img/impresiona.svg', tabs: TABS, adapter });
 shell.ribbon.onRender = () => setTimeout(reflect, 0);
 buildWorkspace(shell.workspace);
@@ -948,4 +968,4 @@ makePres('blank'); renderAll();
 shell.start();
 addEventListener('keydown', (e) => { if (e.altKey && e.key === 'F5') { e.preventDefault(); presenter(cur); } });
 }
-window.__impresiona = { get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto };
+window.__impresiona = { get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, F3, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto };

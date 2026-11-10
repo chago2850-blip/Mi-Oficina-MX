@@ -1,7 +1,7 @@
 {
   "name": "mi-oficina-mx",
   "productName": "Mi Oficina MX",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Suite ofimática libre y multiplataforma: Escribiente, Calcula Datos, Impresiona y PapelPDF.",
   "main": "main.js",
   "author": {
@@ -26,13 +26,16 @@
   "dependencies": {
     "@neslinesli93/qpdf-wasm": "0.3.1",
     "docx": "9.5.1",
+    "officecrypto-tool": "0.0.19",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "4.10.38",
-    "tesseract.js": "7.0.0"
+    "tesseract.js": "7.0.0",
+    "word-extractor": "1.0.4"
   },
   "devDependencies": {
     "@tesseract.js-data/eng": "1.0.0",
     "@tesseract.js-data/spa": "1.0.0",
+    "diff": "9.0.0",
     "echarts": "6.1.0",
     "electron": "33.2.1",
     "electron-builder": "25.1.8",
@@ -41,7 +44,9 @@
     "hyperformula": "3.5.0",
     "mammoth": "1.13.0",
     "pptxgenjs": "4.0.1",
-    "pptxtojson": "2.2.0"
+    "pptxtojson": "2.2.0",
+    "temml": "0.14.0",
+    "webm-muxer": "5.1.4"
   },
   "build": {
     "appId": "mx.santiagomiguel.mioficina",
@@ -87,6 +92,13 @@
         "description": "Documento de texto",
         "role": "Editor",
         "icon": "build/apps/escribiente"
+      },
+      {
+        "ext": "doc",
+        "name": "Documento de Word 97-2003",
+        "description": "Documento de Word 97-2003",
+        "role": "Editor",
+        "icon": "build/apps/doc"
       },
       {
         "ext": "odt",

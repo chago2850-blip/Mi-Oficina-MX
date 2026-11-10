@@ -156,6 +156,7 @@ export class Grid {
         const m = s.mergeAt(r, c);
         if (m && (m.r1 !== r || m.c1 !== c)) continue;
         if (this.editing && this.editing.r === r && this.editing.c === c) continue;
+        if (this.skipText?.(r, c)) continue;
         const d = wb.display(r, c);
         if (!d.text) continue;
         const st = this.eff(r, c);
@@ -175,6 +176,8 @@ export class Grid {
       const X = Math.round(rc.x) + 0.5, Y = Math.round(rc.y) + 0.5, X2 = Math.round(rc.x + rc.w) + 0.5, Y2 = Math.round(rc.y + rc.h) + 0.5;
       if (b.t) line(X, Y, X2, Y, b.t); if (b.b) line(X, Y2, X2, Y2, b.b); if (b.l) line(X, Y, X, Y2, b.l); if (b.r) line(X2, Y, X2, Y2, b.r);
     }
+    // minigráficos, imágenes y otros dibujos sobre las celdas
+    this.overlay?.(ctx, r1, r2, c1, c2);
     // indicador de notas
     if (s.notes?.size) for (const k of s.notes.keys()) { const [r, c] = k.split(',').map(Number); if (r < r1 || r > r2 || c < c1 || c > c2) continue; const rc = this.cellRect(r, c); ctx.fillStyle = '#D93025'; ctx.beginPath(); ctx.moveTo(rc.x + rc.w - 7, rc.y + 1); ctx.lineTo(rc.x + rc.w, rc.y + 1); ctx.lineTo(rc.x + rc.w, rc.y + 8); ctx.fill(); }
     // botones de filtro
@@ -306,6 +309,7 @@ export class Grid {
     ctx.fillStyle = '#C3C7D3'; ctx.beginPath(); ctx.moveTo(HDR_W - 4, HDR_H - 4); ctx.lineTo(HDR_W - 4, 8); ctx.lineTo(HDR_W - 16, HDR_H - 4); ctx.fill();
     ctx.fillStyle = '#CDD0DA'; ctx.fillRect(0, HDR_H - 1, W, 1); ctx.fillRect(HDR_W - 1, 0, 1, H);
     ctx.textAlign = 'start';
+    this.headerOverlay?.(ctx, W, H);
   }
 
   // ------------------------------------------------------------------ selección
@@ -619,6 +623,7 @@ export class Grid {
     if (e.button !== 0) return;
     closeDropdown();
     const x = e.offsetX / this.zoom, y = e.offsetY / this.zoom;
+    if (this.overlayClick?.(x, y, e)) { e.preventDefault(); return; }
     if (this.listBtn && x >= this.listBtn.x && x <= this.listBtn.x + this.listBtn.w && y >= this.listBtn.y && y <= this.listBtn.y + this.listBtn.h) { e.preventDefault(); this.onListButton?.(this.sel.r, this.sel.c, { left: e.clientX, top: e.clientY }); return; }
     const s = this.s;
     // ¿filtro?

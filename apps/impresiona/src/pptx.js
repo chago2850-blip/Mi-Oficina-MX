@@ -1,4 +1,5 @@
 // Abrir y guardar .pptx para Impresiona (pptxtojson para leer, PptxGenJS para escribir). GPL-3.0
+import JSZip from 'jszip';
 import { parse } from 'pptxtojson';
 import PptxGenJS from 'pptxgenjs';
 import { themeById } from './themes.js';
@@ -17,7 +18,8 @@ const SHAPES = { rect: 'rect', roundRect: 'roundRect', ellipse: 'ellipse', trian
 
 export async function readPptx(bytes, uid) {
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const json = await parse(buf, { imageMode: 'base64', videoMode: 'none', audioMode: 'none' });
+  const json = await parse(buf, { imageMode: 'base64', videoMode: 'blob', audioMode: 'blob' });
+  const media = [];
   const W = Math.round(json.size.width * PT_PX), H = Math.round(json.size.height * PT_PX);
   const warnings = new Set();
   const conv = (el, ox = 0, oy = 0) => {
@@ -48,7 +50,8 @@ export async function readPptx(bytes, uid) {
       return [{ ...base, type: 'chart', chartType: type, title: '', data: { cats, series: series.map((sr) => ({ name: String(sr.key ?? 'Serie'), values: sr.values.map((v) => (typeof v.y === 'number' ? v.y : Number(v.y) || null)) })) } }];
     }
     else if (el.type === 'diagram') warnings.add('los diagramas SmartArt no se pudieron editar');
-    else if (el.type === 'video' || el.type === 'audio') warnings.add('los videos y audios no se incluyen todavía');
+    else if ((el.type === 'video' || el.type === 'audio') && el.blob) { const o = { ...base, type: 'media', kind: el.type, src: el.blob, autoplay: false, loop: false, captions: [], style: {} }; media.push(o); return [o]; }
+    else if (el.type === 'video' || el.type === 'audio') warnings.add('algunos videos o audios vinculados (no incrustados) no se incluyeron');
     return [];
   };
   const slides = json.slides.map((s) => {
@@ -57,7 +60,14 @@ export async function readPptx(bytes, uid) {
     const bgImage = s.fill?.type === 'image' ? s.fill.value?.picBase64 : null;
     return { id: uid(), layout: 'blank', bg: bg || null, bgImage: bgImage || null, notes: noteText(s.note), transition: s.transition ? { type: mapTransition(s.transition.type), dur: Math.max(0.3, (s.transition.duration || 700) / 1000) } : { type: 'none', dur: 0.6 }, objects };
   });
-  return { pres: { size: { w: W, h: H }, theme: 'claro', slides: slides.length ? slides : [] }, warnings: [...warnings] };
+  // los videos y audios incrustados llegan como blob: se guardan como datos dentro de la presentación
+  for (const o of media) {
+    try { const b = await (await fetch(o.src)).blob(); o.src = await new Promise((res) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.readAsDataURL(b); }); } catch { o.src = ''; }
+  }
+  for (const s of slides) s.objects = s.objects.filter((o) => o.type !== 'media' || o.src);
+  const imported = { size: { w: W, h: H }, theme: 'claro', slides: slides.length ? slides : [] };
+  const merged = await applySuiteMeta(bytes, imported);
+  return { pres: merged || imported, warnings: merged ? [] : [...warnings] };
 }
 function noteText(n) {
   if (!n) return '';
@@ -163,6 +173,8 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
         slide.addChart(CT[o.chartType] || 'bar', data, { ...pos, barDir: o.chartType === 'bar' ? 'bar' : 'col', title: o.title || undefined, showTitle: !!o.title, showLegend: d.series.length > 1 || o.chartType === 'pie' || o.chartType === 'doughnut', legendPos: 'b', chartColors: [th.accent, th.accent2, 'F08A24', '1F8FD6', '2FB4A8', '8E6CD9'].map((c) => c.replace('#', '')), catAxisLabelColor: th.text.replace('#', ''), valAxisLabelColor: th.text.replace('#', ''), titleColor: th.title.replace('#', ''), dataLabelColor: th.text.replace('#', '') });
       } else if (o.type === 'image' && o.src) {
         slide.addImage({ data: o.src, ...pos });
+      } else if (o.type === 'media' && o.src?.startsWith('data:')) {
+        slide.addMedia({ type: o.kind === 'audio' ? 'audio' : 'video', data: o.src.replace(/^data:/, ''), ...pos });
       } else if (o.type === 'table') {
         const rows = o.rows.map((r) => r.filter((c) => !c.hidden).map((c) => ({ text: c.text, options: { fill: c.bg ? { color: c.bg.replace('#', '') } : undefined, color: c.color ? c.color.replace('#', '') : undefined, bold: c.bold, colspan: c.cs > 1 ? c.cs : undefined, rowspan: c.rs > 1 ? c.rs : undefined } })));
         slide.addTable(rows, { ...pos, fontSize: st.size || 14, border: { type: 'solid', pt: 0.75, color: '9AA0B4' }, autoPage: false });
@@ -175,5 +187,51 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
   }
   void renderSlideImage;
   const ab = await p.write({ outputType: 'arraybuffer' });
-  return new Uint8Array(ab);
+  return addSuiteMeta(new Uint8Array(ab), pres);
+}
+
+// ------------------------------------------------------------------ datos propios de Impresiona dentro del .pptx
+// PowerPoint no guarda todo lo que usa Impresiona (animaciones, trayectorias, Transformación, intervalos,
+// patrón, secciones, subtítulos). Se guardan en docProps/impresiona.json junto con una huella de cada
+// diapositiva; al abrir, solo se usan para las diapositivas que nadie cambió en otro programa.
+const fnv = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16); };
+const slideFiles = (zip) => Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)).sort((a, b) => Number(/(\d+)\.xml/.exec(a)[1]) - Number(/(\d+)\.xml/.exec(b)[1]));
+async function addSuiteMeta(bytes, pres) {
+  try {
+    const zip = await JSZip.loadAsync(bytes);
+    const hashes = await Promise.all(slideFiles(zip).map(async (f) => fnv(await zip.file(f).async('string'))));
+    const strip = (o) => (o.src ? { ...o, src: '@' } : o);
+    const meta = { app: 'Impresiona', v: 1, hashes, pres: { ...pres, master: pres.master ? { ...pres.master, objects: pres.master.objects.map(strip) } : pres.master, slides: pres.slides.map((s) => ({ ...s, bgImage: s.bgImage ? '@' : s.bgImage, objects: s.objects.map(strip) })) } };
+    zip.file('docProps/impresiona.json', JSON.stringify(meta));
+    let ct = await zip.file('[Content_Types].xml').async('string');
+    if (!/Extension="json"/.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="json" ContentType="application/json"/>');
+    zip.file('[Content_Types].xml', ct);
+    return await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+  } catch (e) { console.warn('meta', e); return bytes; }
+}
+async function applySuiteMeta(bytes, imported) {
+  try {
+    const zip = await JSZip.loadAsync(bytes);
+    const f = zip.file('docProps/impresiona.json'); if (!f) return null;
+    const meta = JSON.parse(await f.async('string'));
+    const hashes = await Promise.all(slideFiles(zip).map(async (x) => fnv(await zip.file(x).async('string'))));
+    if (!meta?.pres?.slides || hashes.length !== imported.slides.length) return null;
+    const mp = meta.pres; const mCount = (mp.master?.objects || []).filter((o) => o.src).length;
+    const fill = (objs, srcs) => { let k = 0; for (const o of objs) if (o.src === '@') o.src = srcs[k++] || ''; };
+    if (mp.master) fill(mp.master.objects, (imported.slides[0]?.objects || []).filter((o) => o.src).map((o) => o.src).slice(0, mCount));
+    const out = [];
+    for (let i = 0; i < hashes.length; i++) {
+      const ms = mp.slides[i];
+      if (ms && meta.hashes[i] === hashes[i]) {
+        fill(ms.objects, imported.slides[i].objects.filter((o) => o.src).map((o) => o.src).slice(mCount));
+        if (ms.bgImage === '@') ms.bgImage = imported.slides[i].bgImage || null;
+        ms.objects = ms.objects.filter((o) => o.src !== '');
+        out.push(ms);
+      } else {
+        // diapositiva cambiada fuera de Impresiona: se usa lo importado (sin el patrón horneado)
+        const s = imported.slides[i]; if (mCount) s.objects = s.objects.slice((mp.master?.objects || []).length); out.push(s);
+      }
+    }
+    return { ...mp, size: imported.size, slides: out };
+  } catch (e) { console.warn('meta', e); return null; }
 }

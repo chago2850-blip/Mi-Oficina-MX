@@ -72,7 +72,15 @@ export async function readXlsx(wb, bytes) {
     const v = (ws.views || [])[0];
     if (v && v.state === 'frozen') s.freeze = { rows: v.ySplit || 0, cols: v.xSplit || 0 };
     const u = wb.usedRange(s); s.nRows = Math.max(1000, u.r2 + 200); s.nCols = Math.max(52, u.c2 + 20);
-    if (meta?.sheets?.[ws.name]) { const ms = meta.sheets[ws.name]; s.charts = ms.charts || []; if (ms.pivot) s.pivot = ms.pivot; if (ms.cf) s.cf = ms.cf; }
+    if (meta?.sheets?.[ws.name]) { const ms = meta.sheets[ws.name]; s.charts = ms.charts || []; if (ms.pivot) s.pivot = ms.pivot; if (ms.cf) s.cf = ms.cf; if (ms.x3) s.x3 = { ...s.x3, ...ms.x3 }; }
+    // esquema (filas y columnas agrupadas) de Excel
+    if (!s.x3.rowGroups.length && !s.x3.colGroups.length) {
+      const grp = (levels, hiddenAt) => { const out = []; let a = null; levels.forEach((lv, i) => { if (lv > 0 && a == null) a = i; if ((lv === 0 || i === levels.length - 1) && a != null) { const b = lv > 0 ? i : i - 1; const coll = hiddenAt(a); out.push({ id: Math.random().toString(36).slice(2, 9), a, b, collapsed: coll }); a = null; } }); return out; };
+      const rl = []; ws.eachRow({ includeEmpty: true }, (row, rn) => { rl[rn - 1] = row.outlineLevel || 0; });
+      s.x3.rowGroups = grp(Array.from(rl, (v) => v || 0), (a) => s.hiddenRows.has(a));
+      const cl = (ws.columns || []).map((col) => col?.outlineLevel || 0);
+      s.x3.colGroups = grp(cl, (a) => s.colW.get(a) === 0);
+    }
     // formato condicional nativo (si no venía de Calcula Datos)
     if (!s.cf.length) s.cf = readCf(ws);
     // validaciones
@@ -153,7 +161,10 @@ export async function writeXlsx(wb, props = {}) {
     const ps = s.pageSetup || {};
     ws.pageSetup = { paperSize: 1, orientation: ps.orientation === 'landscape' ? 'landscape' : 'portrait', fitToPage: ps.fit === 'width' || ps.fit === 'page', fitToWidth: 1, fitToHeight: ps.fit === 'page' ? 1 : 0, showGridLines: ps.gridlines !== false, ...(s.printArea ? { printArea: s.printArea } : {}), ...(ps.titleRows ? { printTitlesRow: ps.titleRows } : {}) };
     if (s.protected) await ws.protect(s.protected.password || '', { selectLockedCells: true, selectUnlockedCells: true });
-    if (s.charts.length || s.pivot || s.cf.some((r) => r.type === 'dup' || r.type === 'text')) meta.sheets[s.name] = { charts: s.charts, pivot: s.pivot || undefined, cf: s.cf };
+    for (const g of s.x3?.rowGroups || []) for (let r = g.a; r <= g.b; r++) ws.getRow(r + 1).outlineLevel = 1;
+    for (const g of s.x3?.colGroups || []) for (let c = g.a; c <= g.b; c++) ws.getColumn(c + 1).outlineLevel = 1;
+    const x3 = s.x3 && (s.x3.sparklines.length || s.x3.slicers.length || s.x3.rowGroups.length || s.x3.colGroups.length || s.x3.solver) ? s.x3 : undefined;
+    if (s.charts.length || s.pivot || x3 || s.cf.some((r) => r.type === 'dup' || r.type === 'text')) meta.sheets[s.name] = { charts: s.charts, pivot: s.pivot || undefined, cf: s.cf, x3 };
   }
   for (const n of wb.names || []) { try { x.definedNames.add(n.expr.replace(/^=/, ''), n.name); } catch { /* */ } }
   if (wb.protectedStructure) meta.protectedStructure = true;

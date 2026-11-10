@@ -1,10 +1,11 @@
 // Escribiente — procesador de textos de Mi Oficina MX. GPL-3.0-or-later
-import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, esc, api, closeDropdown, localizeHtml, tf } from '../../shared/office.js';
+import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, esc, api, closeDropdown, localizeHtml, tf, t } from '../../shared/office.js';
 import { TEMPLATES, thumb } from './templates.js';
 import { htmlToDocx } from './docx-out.js';
 import { docxToHtml, textToHtml, markdownToHtml, sanitize, htmlToText } from './docx-in.js';
 import { readCoreProps } from '../../shared/coreprops.js';
 import * as F from './features.js';
+import * as F3 from './fase3.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -734,13 +735,13 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador del archivo
 function snapshotSettings() {
-  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, track: state.track, watermark: state.watermark, pageColor: state.pageColor };
+  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor };
 }
 function setContent(html, settings) {
   editor.innerHTML = html || '<p><br></p>';
   if (settings) {
     if (settings.page) Object.assign(state.page, settings.page);
-    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'track', 'watermark', 'pageColor'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
     editor.classList.toggle('tracking', !!state.track);
   }
   selectImage(null);
@@ -751,8 +752,8 @@ function setContent(html, settings) {
 
 const adapter = {
   i18nSkip: '#pages, .doc, .fnmeasure, .cm-text, .cmcard .reply-text, .nav-item',
-  exts: ['docx', 'odt', 'txt', 'html', 'htm', 'md'],
-  writable: ['docx', 'odt', 'html', 'htm', 'txt'],
+  exts: ['docx', 'odt', 'doc', 'txt', 'html', 'htm', 'md'],
+  writable: ['docx', 'odt', 'html', 'htm', 'txt', 'md'],
   saveExt: 'docx',
   docIcon: 'doc',
   homeHint: 'Escribe cartas, reportes y documentos que se abren en cualquier procesador de textos.',
@@ -762,12 +763,13 @@ const adapter = {
     { ext: 'odt', ic: 'doc', label: 'Documento ODF (.odt)', desc: 'Formato abierto, compatible con LibreOffice y otros procesadores.' },
     { ext: 'html', ic: 'link', label: 'Página web (.html)', desc: 'Para publicar en internet o abrir en el navegador.' },
     { ext: 'txt', ic: 'words', label: 'Texto sin formato (.txt)', desc: 'Solo el texto, sin estilos ni imágenes.' },
+    { ext: 'md', ic: 'words', label: 'Markdown (.md)', desc: 'Texto con títulos, listas, negritas y tablas, para GitHub, blogs y notas.' },
   ],
   async newDoc(tplId) {
     const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0];
     state.page = { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 };
     state.header = ''; state.footer = ''; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
-    Object.assign(state, { comments: [], footnotes: {}, endnotes: {}, track: false, watermark: null, pageColor: null, merge: null });
+    Object.assign(state, { comments: [], footnotes: {}, endnotes: {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
     editor.classList.remove('tracking');
     setContent(localizeHtml(t.html()));
     editor.focus();
@@ -779,15 +781,26 @@ const adapter = {
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
       state.header = ''; state.footer = ''; state.pageNumbers = 'none';
-      Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
     }
     if (f.ext === 'odt') {
       const r = await odtToHtml(f.bytes);
-      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { props: r.props };
+    }
+    if (f.ext === 'doc') {
+      // Documento binario antiguo de Word: se recupera el texto (modo compatibilidad)
+      const d = f.doc || {};
+      Object.assign(state, { header: (d.headers || '').trim().split('\n')[0] || '', footer: (d.footers || '').trim().split('\n')[0] || '', pageNumbers: 'none', comments: [], footnotes: {}, endnotes: {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
+      const paras = String(d.body || '').replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      let html = textToHtml(paras);
+      const notes = [d.footnotes, d.endnotes].map((x) => String(x || '').trim()).filter(Boolean);
+      if (notes.length) html += `<h2>${esc(t('Notas'))}</h2>${textToHtml(notes.join('\n'))}`;
+      setContent(html);
+      return { warnings: [t('Documento de Word 97-2003 (.doc): se recuperó el texto; el formato se pierde (modo compatibilidad)')] };
     }
     if (f.ext === 'txt') { setContent(textToHtml(text())); return {}; }
     if (f.ext === 'md') { setContent(markdownToHtml(text())); return {}; }
@@ -802,6 +815,7 @@ const adapter = {
   },
   async serialize(ext) {
     if (ext === 'txt') return htmlToText(editor);
+    if (ext === 'md') return F3.htmlToMarkdown(editor);
     if (ext === 'html' || ext === 'htm') return exportHtml();
     if (ext === 'odt') return htmlToOdt(editor, { ...snapshotSettings(), ...shell.docProps() });
     return htmlToDocx(editor, { ...snapshotSettings(), ...shell.docProps() });
@@ -912,6 +926,16 @@ async function onCommand(cmd, arg) {
     case 'revRejectAll': return F.reviewAction('rejectAll');
     case 'footnote': return F.insertFootnote();
     case 'endnote': return F.insertEndnote();
+    case 'equation': return F3.insertEquation();
+    case 'smartart': return F3.insertSmartArt();
+    case 'sources': return F3.manageSources();
+    case 'bibliography': return F3.updateBibliography();
+    case 'compare': return F3.compareDocuments();
+    case 'labels': return F3.labels();
+    case 'envelope': return F3.envelope();
+    case 'focusMode': return F3.focusMode();
+    case 'readingMode': return F3.readingMode();
+    case 'exportMd': return shell.saveAsFormat('md', 'Markdown');
     case 'textbox': return F.insertTextBox();
     case 'cols1': return F.setColumns(1);
     case 'cols2': return F.setColumns(2);
@@ -979,11 +1003,11 @@ const TABS = [
     id: 'insert', label: 'Insertar', groups: [
       { label: 'Páginas', items: [{ cmd: 'pageBreak', label: 'Salto de página', icon: 'pageBreak', size: 'lg', kbd: 'Ctrl+Enter' }] },
       { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
-      { label: 'Ilustraciones', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }, { cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: () => F.shapeMenu() }] },
+      { label: 'Ilustraciones', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }, { cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: () => F.shapeMenu() }, { cmd: 'smartart', label: 'SmartArt', icon: 'layout', size: 'lg' }] },
       { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }] },
       { label: 'Vínculos', items: [{ cmd: 'insertLink', label: 'Vínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
       { label: 'Encabezado y pie', items: [{ cmd: 'headerFooter', label: 'Encabezado y pie', icon: 'header', size: 'lg' }, { cmd: 'headerFooter', label: 'Número de página', icon: 'pageNum', size: 'lg' }] },
-      { label: 'Símbolos', items: [{ cmd: 'symbol', label: 'Símbolo', icon: 'symbol', size: 'lg' }, { cmd: 'hr', label: 'Línea horizontal', icon: 'hr', size: 'lg' }] },
+      { label: 'Símbolos', items: [{ cmd: 'equation', label: 'Ecuación', icon: 'func', size: 'lg' }, { cmd: 'symbol', label: 'Símbolo', icon: 'symbol', size: 'lg' }, { cmd: 'hr', label: 'Línea horizontal', icon: 'hr', size: 'lg' }] },
     ],
   },
   {
@@ -1007,10 +1031,12 @@ const TABS = [
     id: 'refs', label: 'Referencias', groups: [
       { label: 'Tabla de contenido', items: [{ cmd: 'toc', label: 'Índice / actualizar', icon: 'styles', size: 'lg' }] },
       { label: 'Notas al pie', items: [{ cmd: 'footnote', label: 'Insertar nota al pie', icon: 'sup', size: 'lg' }, { cmd: 'endnote', label: 'Insertar nota al final', icon: 'sup' }] },
+      { label: 'Citas y bibliografía', items: [{ cmd: 'cite', label: 'Insertar cita', icon: 'comment', size: 'lg', menu: () => F3.citeMenu() }, { stack: [{ cmd: 'sources', label: 'Administrar fuentes', icon: 'folder', showLabel: true }, { cmd: 'bibliography', label: 'Bibliografía', icon: 'styles', showLabel: true }] }] },
     ],
   },
   {
     id: 'mail', label: 'Correspondencia', groups: [
+      { label: 'Crear', items: [{ cmd: 'envelope', label: 'Sobres', icon: 'doc', size: 'lg' }, { cmd: 'labels', label: 'Etiquetas', icon: 'table', size: 'lg' }] },
       { label: 'Iniciar combinación', items: [{ cmd: 'recipients', label: 'Elegir destinatarios', icon: 'open', size: 'lg' }] },
       { label: 'Escribir e insertar campos', items: [{ cmd: 'fields', label: 'Insertar campo', icon: 'textbox', size: 'lg', menu: () => F.fieldMenu() }] },
       { label: 'Vista previa', items: [{ cmd: 'mergePreview', label: 'Vista previa', icon: 'find', size: 'lg' }, { stack: [{ cmd: 'mergePrev', label: 'Anterior', icon: 'undo', showLabel: true }, { cmd: 'mergeNext', label: 'Siguiente', icon: 'redo', showLabel: true }] }] },
@@ -1022,11 +1048,13 @@ const TABS = [
       { label: 'Revisión', items: [{ cmd: 'spell', label: 'Ortografía', icon: 'spell', size: 'lg' }, { cmd: 'wordCount', label: 'Contar palabras', icon: 'words', size: 'lg' }] },
       { label: 'Comentarios', items: [{ cmd: 'comment', label: 'Nuevo comentario', icon: 'comment', size: 'lg' }, { cmd: 'showComments', label: 'Mostrar comentarios', icon: 'notes', size: 'lg' }] },
       { label: 'Seguimiento', items: [{ cmd: 'track', label: 'Control de cambios', icon: 'replace', size: 'lg' }, { cmd: 'showChanges', label: 'Panel de revisiones', icon: 'words', size: 'lg' }] },
+      { label: 'Comparar', items: [{ cmd: 'compare', label: 'Comparar', icon: 'columns', size: 'lg' }] },
       { label: 'Cambios', items: [{ stack: [{ cmd: 'revAccept', label: 'Aceptar', icon: 'check', showLabel: true, menu: null }, { cmd: 'revReject', label: 'Rechazar', icon: 'close', showLabel: true }, { cmd: 'revAcceptAll', label: 'Aceptar todos', icon: 'check', showLabel: true }] }, { stack: [{ cmd: 'revPrev', label: 'Anterior', icon: 'undo', showLabel: true }, { cmd: 'revNext', label: 'Siguiente', icon: 'redo', showLabel: true }, { cmd: 'revRejectAll', label: 'Rechazar todos', icon: 'trash', showLabel: true }] }] },
     ],
   },
   {
     id: 'view', label: 'Vista', groups: [
+      { label: 'Vistas', items: [{ cmd: 'readingMode', label: 'Modo lectura', icon: 'doc', size: 'lg' }, { cmd: 'focusMode', label: 'Modo enfoque', icon: 'zoomIn', size: 'lg' }] },
       { label: 'Mostrar', items: [{ cmd: 'navPane', label: 'Panel de navegación', icon: 'styles', size: 'lg' }] },
       { label: 'Zoom', items: [{ cmd: 'zoomReset', label: '100 %', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomWidth', label: 'Ancho de página', icon: 'columns', size: 'lg' }, { cmd: 'zoomPage', label: 'Página completa', icon: 'doc', size: 'lg' }] },
     ],
@@ -1076,6 +1104,7 @@ F.initFeatures({
   editor, state, shell, scroller, ruler, pagesEl, schedulePaginate, paginate, insertHTMLAtCursor, restoreSelection, saveSelection, selectedBlocks, currentBlock, applySpanStyle,
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
+F3.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, schedulePaginate, paginate, setContent: (html, s) => setContent(html, s), zoomWidth: () => onCommand('zoomWidth'), setZoom: (v) => zoom.set(v) });
 adapter.onPrefs = (p) => { editor.spellcheck = p.spellcheck !== false; };
 statusPages = h('span', {}, 'Página 1 de 1');
 statusWords = h('button', { class: 'sb-btn', title: 'Contar palabras', onclick: () => onCommand('wordCount') }, '0 palabras');
@@ -1087,4 +1116,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F };
+window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, saveSelection, insertCite: (s) => F3.insertCitation(s) };

@@ -31,13 +31,15 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 ![Calcula Datos](docs/calcula.png)
 ![Impresiona](docs/impresiona.png)
 
-## Funciones (versión 0.2.1)
+## Funciones (versión 0.3)
 
 **Común a las tres apps:** cinta con pestañas, inicio con plantillas y recientes, guardar / guardar como, exportar a PDF, imprimir, deshacer y rehacer, buscar y reemplazar, arrastrar y soltar archivos, **recuperación automática** si la app se cierra sin guardar, revisión ortográfica en español e inglés, y el botón para volver a la dona.
 
 **Nuevo en la 0.2 para toda la suite:** abrir y guardar **ODF** (`.odt`, `.ods`, `.odp`), **modo oscuro** (sigue al sistema o se elige), **Preferencias** (idioma, nombre del autor, tema e intervalo de autoguardado) y **Propiedades del documento** (título, autor, asunto, palabras clave).
 
 **Interfaz en español e inglés (0.2.1):** el idioma se elige en *Preferencias* (en la dona) o en *Archivo → Opciones*, y cambia al momento, sin reiniciar: cinta, menús, diálogos, avisos, plantillas nuevas y PapelPDF. Con *Igual que el sistema* se usa español si el sistema está en español y si no, inglés. En inglés, Calcula Datos muestra las fórmulas con los nombres en inglés (`=SUM()`, `=IF()`), como Excel en inglés; el archivo guardado es el mismo en ambos idiomas.
+
+**Nuevo en la 0.3 para toda la suite:** **cifrar con contraseña** (`.docx`, `.xlsx` y `.pptx` con el cifrado estándar de Office, AES-256; también abre los archivos cifrados por Office) y **barra de acceso rápido** personalizable en cada app.
 
 **Escribiente**
 - Páginas reales (Carta, Oficio México, Legal, A4, A5), orientación y márgenes; la vista en pantalla y el PDF tienen las mismas páginas
@@ -47,6 +49,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Encabezado, pie y números de página; índice automático; contador de palabras
 - Plantillas: carta formal, reporte y currículum
 - **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie y al final**, **tabulaciones** (izquierda, centro, derecha) en la regla, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
+- **0.3:** **ecuaciones** (escritas en LaTeX con vista previa; en el `.docx` quedan como ecuaciones de Word y en el `.odt` como fórmulas), **citas y bibliografía** (APA), **comparar documentos** (el resultado queda como control de cambios), **etiquetas y sobres** (también con los destinatarios de la combinación), **diagramas** tipo SmartArt (lista, proceso, ciclo, jerarquía y pirámide), **modo lectura** y **modo enfoque**, reacciones en comentarios, exportar a **Markdown** y abrir documentos `.doc` de Word 97-2003 (se recupera el texto)
 
 **Calcula Datos**
 - Cuadrícula rápida (dibujada en canvas), varias hojas, inmovilizar paneles, cambiar ancho/alto, autoajuste
@@ -57,6 +60,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Gráficos de columnas, barras, líneas, área, circular y dispersión
 - Plantillas: presupuesto mensual, ventas por mes y lista de asistencia
 - **0.2:** **formato condicional** (reglas, barras de datos, escalas de color, íconos), **validación** con listas desplegables, administrador de nombres, notas en celdas, tablas con formato, **tablas dinámicas**, proteger hoja y libro, área de impresión y ajustar a página, y abrir `.xlsm` sin ejecutar macros (se conservan al guardar)
+- **0.3:** funciones **LAMBDA**, LET, MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY, APILARV/APILARH, TOMAR, EXCLUIR, ENCOL, ENFILA, ELEGIRCOLS/ELEGIRFILAS, AJUSTARFILAS, TEXTOANTES/TEXTODESPUES e **IMAGEN**; **buscar objetivo** y **Solver** (con restricciones, enteros y binarios); **minigráficos** (línea, columna y ganancia/pérdida); **agrupar y esquema** de filas y columnas (esquema nativo de Excel); **segmentación de datos**; y gráficos que siguen matrices dinámicas (rango `A4#`)
 
 **Impresiona**
 - Diapositivas con diseños (título, contenido, dos contenidos, sección…), 8 temas originales, fondo, tamaño 16:9 o 4:3
@@ -66,6 +70,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Notas del orador, reordenar arrastrando las miniaturas
 - Plantillas: plan de negocio, clase y avance de proyecto
 - **0.2:** **gráficos** (se guardan como gráficos nativos del `.pptx`), animaciones de salida y **panel de animaciones** (al hacer clic / con la anterior / después), **patrón de diapositivas** con pie, número y fecha, clasificador con secciones, **vista del moderador** con ventana para el público en la segunda pantalla, pluma durante la presentación y exportar cada diapositiva como PNG
+- **0.3:** **video y audio** en las diapositivas (se guardan dentro del `.pptx`) con **subtítulos** WebVTT o SRT, transición **Transformación** (Morph), **trayectorias de animación**, **ensayar intervalos** con avance automático y **exportar a video** (WebM) con transiciones y pasos de animación. Las animaciones, trayectorias, intervalos, patrón, secciones y subtítulos se conservan al guardar y abrir el `.pptx`
 
 **PapelPDF** — la app completa del repositorio [PapelPDF](https://github.com/chago2850-blip/PapelPDF): anotar, editar, formularios, firma, organizar páginas, convertir, contraseña, redacción y OCR sin conexión.
 
@@ -102,6 +107,7 @@ npm start                     # abre la suite (la dona)
 node test/formats.test.mjs    # pruebas de formatos de número y fórmulas en español
 npm i --no-save playwright@1.49.1 && xvfb-run -a node test/e2e.mjs   # punta a punta (Linux sin pantalla)
 xvfb-run -a node test/e2e-fase2.mjs              # funciones de la fase 2 (OFICINA_LANG=en para probar en inglés)
+xvfb-run -a node test/e2e-fase3.mjs              # funciones de la fase 3
 python3 scripts/i18n/merge.py                     # regenera apps/shared/i18n-en.js desde scripts/i18n/en-*.py
 xvfb-run -a node test/i18n-crawl.mjs              # recorre la interfaz en inglés y lista textos sin traducir
 npm run dist:linux            # AppImage + deb + rpm
@@ -130,9 +136,9 @@ replica/                mapa de funciones y pantallas del proyecto
 
 ## Lo que falta (siguientes versiones)
 
-Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. La fase 2 está completa (todas las funciones *should*). Lo que sigue para la 0.3 son las funciones de prioridad *could* (SmartArt, ecuaciones, Power Query, coautoría, entre otras).
+Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. Las fases 1, 2 y 3 están completas: todas las funciones *must*, *should* y *could* del mapa, cuatro de ellas con alcance parcial (ver abajo). Lo que queda fuera a propósito (*skip*) son las funciones en la nube: coautoría en tiempo real, Copilot, OneDrive y cuentas.
 
-**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y al final, tabulaciones, comentarios con sus respuestas, control de cambios y alineación, pero no siempre los colores ni las fuentes de cada palabra; el patrón de Impresiona se aplana dentro de cada diapositiva al guardar en `.pptx`; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
+**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y al final, tabulaciones, comentarios con sus respuestas, control de cambios y alineación, pero no siempre los colores ni las fuentes de cada palabra; las ecuaciones de un `.docx` hecho en Word todavía no se leen (las de Escribiente sí se guardan para Word); los diagramas tipo SmartArt se guardan en el `.docx` como imagen; al abrir un `.doc` antiguo se pierde el formato; las reacciones a comentarios no se guardan dentro del `.docx`; PowerPoint ve el patrón de Impresiona aplanado en cada diapositiva y la transición Transformación como un cambio sin efecto; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
 
 ## Licencia
 
