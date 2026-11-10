@@ -99,6 +99,7 @@ const P = {
   launcher: 'M12 3a9 9 0 110 18a9 9 0 010-18 M12 8a4 4 0 110 8a4 4 0 010-8',
   info: 'M12 3a9 9 0 110 18a9 9 0 010-18 M12 11v6 M12 7.5h.1',
   close: 'M6 6l12 12 M18 6L6 18',
+  blank: 'M0 0',
   check: 'M4 12l5 5L20 6',
   plus: 'M12 5v14 M5 12h14',
   minus: 'M5 12h14',

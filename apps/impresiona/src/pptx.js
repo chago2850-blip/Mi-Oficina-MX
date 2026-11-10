@@ -66,6 +66,7 @@ export async function readPptx(bytes, uid) {
   }
   for (const s of slides) s.objects = s.objects.filter((o) => o.type !== 'media' || o.src);
   const imported = { size: { w: W, h: H }, theme: 'claro', slides: slides.length ? slides : [] };
+  try { const z = await JSZip.loadAsync(bytes); const px = await z.file('ppt/presentation.xml')?.async('string'); const m = /<p:presentation\b[^>]*\sfirstSlideNum="(\d+)"/.exec(px || ''); if (m) imported.firstNum = Number(m[1]); } catch { /* */ }
   const merged = await applySuiteMeta(bytes, imported);
   return { pres: merged || imported, warnings: merged ? [] : [...warnings] };
 }
@@ -182,7 +183,7 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
     }
     const idx = pres.slides.indexOf(s);
     if (pres.master?.footer) slide.addText(pres.master.footer, { x: 0.4, y: H - 0.45, w: W * 0.6, h: 0.3, fontSize: 10, color: th.text.replace('#', ''), fontFace: th.bodyFont });
-    if (pres.master?.showNumber) slide.addText(String(idx + 1), { x: W - 1.2, y: H - 0.45, w: 0.8, h: 0.3, fontSize: 10, align: 'right', color: th.text.replace('#', ''), fontFace: th.bodyFont });
+    if (pres.master?.showNumber) slide.addText(String(idx + (pres.firstNum ?? 1)), { x: W - 1.2, y: H - 0.45, w: 0.8, h: 0.3, fontSize: 10, align: 'right', color: th.text.replace('#', ''), fontFace: th.bodyFont });
     if (s.notes) slide.addNotes(s.notes);
   }
   void renderSlideImage;
@@ -203,6 +204,9 @@ async function addSuiteMeta(bytes, pres) {
     const strip = (o) => (o.src ? { ...o, src: '@' } : o);
     const meta = { app: 'Impresiona', v: 1, hashes, pres: { ...pres, master: pres.master ? { ...pres.master, objects: pres.master.objects.map(strip) } : pres.master, slides: pres.slides.map((s) => ({ ...s, bgImage: s.bgImage ? '@' : s.bgImage, objects: s.objects.map(strip) })) } };
     zip.file('docProps/impresiona.json', JSON.stringify(meta));
+    // "Numerar desde" también para PowerPoint
+    const pf = zip.file('ppt/presentation.xml');
+    if (pf && (pres.firstNum ?? 1) !== 1) { let px = await pf.async('string'); px = px.replace(/\sfirstSlideNum="\d+"/, '').replace(/<p:presentation\b/, `<p:presentation firstSlideNum="${pres.firstNum}"`); zip.file('ppt/presentation.xml', px); }
     let ct = await zip.file('[Content_Types].xml').async('string');
     if (!/Extension="json"/.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="json" ContentType="application/json"/>');
     zip.file('[Content_Types].xml', ct);
@@ -232,6 +236,6 @@ async function applySuiteMeta(bytes, imported) {
         const s = imported.slides[i]; if (mCount) s.objects = s.objects.slice((mp.master?.objects || []).length); out.push(s);
       }
     }
-    return { ...mp, size: imported.size, slides: out };
+    return { ...mp, size: imported.size, firstNum: imported.firstNum ?? mp.firstNum, slides: out };
   } catch (e) { console.warn('meta', e); return null; }
 }

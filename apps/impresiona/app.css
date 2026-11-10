@@ -189,3 +189,12 @@ body.render-mode .show-stage.aud { display: block; }
 .show .rec-dot { position: fixed; right: 18px; top: 14px; z-index: 5; display: flex; align-items: center; gap: 6px; background: rgba(20,22,32,.82); color: #fff; padding: 5px 12px; border-radius: 999px; font: 700 13px Inter, sans-serif; letter-spacing: .06em; }
 .show .rec-dot i { width: 10px; height: 10px; border-radius: 50%; background: #E5383B; animation: recblink 1s steps(2) infinite; }
 @keyframes recblink { 50% { opacity: .25; } }
+
+/* ---------- Tamaño de diapositiva ---------- */
+.ss { display: flex; gap: 18px; align-items: flex-start; }
+.ss-main { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.ss-main .field { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.ss-main select, .ss-main input { width: 100%; }
+.ss-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ss-prev { width: 100px; height: 100px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--chrome); margin-top: 20px; }
+.ss-page { background: #fff; border: 1px solid var(--line-2); box-shadow: var(--shadow); transition: width .15s, height .15s; }

@@ -135,6 +135,34 @@ try {
     const kept = await w.evaluate(() => { const p = window.__impresiona.pres; return { cam: p.slides.some((s) => s.objects.some((o) => o.type === 'camera')), nar: !!p.slides[0].narration?.src }; });
     assert.deepEqual(kept, { cam: true, nar: true });
     log('Impresiona: la cámara y la narración se conservan en el .pptx');
+    // Diseño → Tamaño de diapositiva: menú con la marca y ajustes avanzados
+    await w.evaluate(() => window.__shell.ribbon.show('design'));
+    await w.click('.ribbon [data-cmd="size"]'); await wait(200);
+    const menu = await w.evaluate(() => [...document.querySelectorAll('.dropdown .mi')].map((b) => [b.textContent.trim(), b.querySelector('path')?.getAttribute('d') === 'M4 12l5 5L20 6']));
+    assert.equal(menu.length, 3, JSON.stringify(menu)); assert.ok(menu[1][1] && !menu[0][1], JSON.stringify(menu));
+    await w.locator('.dropdown .mi').nth(2).click(); await wait(300);
+    const before = await w.evaluate(() => { const p = window.__impresiona.pres; return { ...p.size, n: p.slides.length }; });
+    await w.selectOption('.modal [name="preset"]', 'a4');
+    await w.selectOption('.modal [name="orient"]', 'port');
+    assert.equal(await w.inputValue('.modal [name="w"]'), '19.05'); assert.equal(await w.inputValue('.modal [name="h"]'), '27.517');
+    await w.fill('.modal [name="first"]', '5');
+    await w.click('.modal .btn.primary'); await wait(500);
+    const after = await w.evaluate(() => { const p = window.__impresiona.pres; const out = p.slides.flatMap((s) => s.objects).filter((o) => o.x < -1 || o.y < -1 || o.x + o.w > p.size.w + 1 || o.y + o.h > p.size.h + 1).length; return { size: p.size, name: p.sizeName, first: p.firstNum, out }; });
+    assert.deepEqual(after, { size: { w: 720, h: 1040 }, name: 'a4', first: 5, out: 0 }, JSON.stringify([before, after]));
+    // ancho a mano → Personalizado
+    await startDialog(w, 'slideSize'); await w.waitForSelector('.modal [name="w"]');
+    await w.fill('.modal [name="w"]', '20'); await w.dispatchEvent('.modal [name="w"]', 'input');
+    assert.equal(await w.inputValue('.modal [name="preset"]'), 'custom');
+    await w.click('.modal .btn:not(.primary)'); await wait(200);
+    // se guarda en el .pptx (tamaño y "numerar desde" también para PowerPoint)
+    await w.evaluate(() => window.__shell.save()); await wait(500);
+    const zp = await JSZip.loadAsync(fs.readFileSync(path.join(out, `${UNTITLED}.pptx`)));
+    const px = await zp.file('ppt/presentation.xml').async('string');
+    assert.ok(/firstSlideNum="5"/.test(px), px.slice(0, 400));
+    const sz = /<p:sldSz cx="(\d+)" cy="(\d+)"/.exec(px); assert.ok(sz && Math.abs(Number(sz[1]) / 360000 - 19.05) < 0.05 && Math.abs(Number(sz[2]) / 360000 - 27.517) < 0.05, sz?.[0]);
+    await reopen(w, path.join(out, `${UNTITLED}.pptx`)); await wait(800);
+    assert.deepEqual(await w.evaluate(() => { const p = window.__impresiona.pres; return [p.size.w, p.size.h, p.firstNum, p.sizeName]; }), [720, 1040, 5, 'a4']);
+    log('Impresiona: tamaño de diapositiva con ajustes avanzados (A4 vertical, numerar desde 5) y se guarda en el .pptx');
     await closeApp('impresiona'); await wait(600);
   }
   if (!only || only === 'calcula') {

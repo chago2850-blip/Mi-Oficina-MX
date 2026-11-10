@@ -7,6 +7,7 @@ import { CHART_TYPES, parseChartData, chartDataText, chartSvg } from './charts.j
 import { runShow, runPresenter, runAudience, EXIT_TYPES, PATH_TYPES } from './show.js';
 import * as F3 from './fase3.js';
 import * as F4 from './fase4.js';
+import * as SZ from './slidesize.js';
 import { readOdp, writeOdp } from './odp.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -112,7 +113,7 @@ function renderSlide(s, mode = 'thumb') {
   if (mst && !isMaster) {
     const idx = pres.slides.indexOf(s);
     if (mst.footer) el.append(h('div', { class: 'master-footer', style: { color: th.text } }, mst.footer));
-    if (mst.showNumber && idx >= 0) el.append(h('div', { class: 'master-num', style: { color: th.text } }, String(idx + 1)));
+    if (mst.showNumber && idx >= 0) el.append(h('div', { class: 'master-num', style: { color: th.text } }, String(idx + (pres.firstNum ?? 1))));
     if (mst.showDate) el.append(h('div', { class: 'master-date', style: { color: th.text } }, new Date().toLocaleDateString('es-MX')));
   }
   if (isMaster && mode === 'edit') el.append(h('div', { class: 'master-banner' }, 'Patrón: lo que pongas aquí aparece en todas las diapositivas'));
@@ -776,7 +777,7 @@ const adapter = {
   beforePrint() { if (editing) stopEditing(); buildPrint(); },
   afterPrint() { $('#printRoot').replaceChildren(); },
   focus() {},
-  stats() { return [['Diapositivas', pres.slides.length], ['Tamaño', pres.size.w / pres.size.h > 1.5 ? 'Panorámica 16:9' : 'Estándar 4:3'], ['Tema', theme().name]]; },
+  stats() { return [['Diapositivas', pres.slides.length], ['Tamaño', SZ.sizeLabel(pres)], ['Tema', theme().name]]; },
   onDropFile(file) { if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => addImage(rd.result); rd.readAsDataURL(file); return true; } return false; },
   onCommand,
 };
@@ -830,8 +831,9 @@ async function onCommand(cmd, arg) {
     case 'delete': return deleteSelected();
     case 'background': return commit('Fondo', () => { slide().bg = arg === 'transparent' ? null : arg; slide().bgImage = null; });
     case 'bgAll': return commit('Fondo', () => { const bg = slide().bg; pres.slides.forEach((s) => { s.bg = bg; }); });
-    case 'size169': return setSize(960, 540);
-    case 'size43': return setSize(720, 540);
+    case 'size169': return setSize(pres.size.w >= pres.size.h ? 960 : 540, pres.size.w >= pres.size.h ? 540 : 960, { sizeName: 'screen169' });
+    case 'size43': return setSize(pres.size.w >= pres.size.h ? 960 : 720, pres.size.w >= pres.size.h ? 720 : 960, { sizeName: 'screen43' });
+    case 'slideSize': return slideSizeDialog();
     case 'applyTransAll': return commit('Transición', () => { const t = clone(slide().transition || { type: 'none', dur: 0.6 }); pres.slides.forEach((s) => { s.transition = clone(t); }); toast('Transición aplicada a todas las diapositivas'); });
     case 'transDur': { const v = await form('Duración de la transición', [{ name: 'd', label: 'Segundos', type: 'number', step: 0.1, value: slide().transition?.dur || 0.6, min: 0.1, max: 5 }]); if (v) commit('Duración', () => { slide().transition = { ...(slide().transition || { type: 'fade' }), dur: v.d }; }); return; }
     case 'previewTrans': return present(cur);
@@ -853,14 +855,29 @@ async function onCommand(cmd, arg) {
     default: return undefined;
   }
 }
-function setSize(w, hh) {
-  if (pres.size.w === w && pres.size.h === hh) return;
+function setSize(w, hh, { sizeName = null, firstNum, mode = 'fit' } = {}) {
+  const numChange = firstNum != null && firstNum !== (pres.firstNum ?? 1);
+  if (pres.size.w === w && pres.size.h === hh && !numChange && (!sizeName || sizeName === pres.sizeName)) return;
   commit('Tamaño de diapositiva', () => {
-    const k = w / pres.size.w;
-    pres.slides.forEach((s) => s.objects.forEach((o) => { o.x = Math.round(o.x * k); o.w = Math.round(o.w * k); }));
-    pres.size = { w, h: hh };
+    SZ.resizePres(pres, w, hh, mode, objStyle, theme());
+    if (sizeName) pres.sizeName = sizeName; else delete pres.sizeName;
+    if (firstNum != null) pres.firstNum = firstNum;
   });
   fitMode = true; fit();
+}
+async function slideSizeDialog() {
+  const v = await SZ.slideSizeDialog(pres);
+  if (v) setSize(v.w, v.h, v);
+}
+function sizeMenu() {
+  const cur = SZ.currentPreset(pres).id;
+  const mark = (on) => (on ? 'check' : 'blank');
+  return [
+    { label: 'Estándar (4:3)', icon: mark(cur === 'screen43'), run: () => onCommand('size43') },
+    { label: 'Panorámica (16:9)', icon: mark(cur === 'screen169'), run: () => onCommand('size169') },
+    '-',
+    { label: 'Ajustes avanzados…', icon: 'pageSetup', run: () => onCommand('slideSize') },
+  ];
 }
 async function findText(q, replace = false) {
   const v = q ? { q } : await form(replace ? 'Reemplazar' : 'Buscar', [{ name: 'q', label: 'Buscar' }, ...(replace ? [{ name: 'r', label: 'Reemplazar con' }] : [])]);
@@ -928,7 +945,7 @@ const TABS = [
   ] },
   { id: 'design', label: 'Diseño', groups: [
     { label: 'Temas', items: [{ render: themeGallery }] },
-    { label: 'Personalizar', items: [{ cmd: 'size', label: 'Tamaño de diapositiva', icon: 'pageSetup', size: 'lg', menu: () => [{ label: 'Panorámica (16:9)', run: () => onCommand('size169') }, { label: 'Estándar (4:3)', run: () => onCommand('size43') }] }, { cmd: 'background', label: 'Fondo', icon: 'background', size: 'lg', color: true, colorValue: '#FFFFFF', colorOpts: { noneLabel: 'Fondo del tema' } }, { cmd: 'bgAll', label: 'Fondo a todas', icon: 'slideDup', size: 'lg' }] },
+    { label: 'Personalizar', items: [{ cmd: 'size', label: 'Tamaño de diapositiva', icon: 'pageSetup', size: 'lg', menu: sizeMenu }, { cmd: 'background', label: 'Fondo', icon: 'background', size: 'lg', color: true, colorValue: '#FFFFFF', colorOpts: { noneLabel: 'Fondo del tema' } }, { cmd: 'bgAll', label: 'Fondo a todas', icon: 'slideDup', size: 'lg' }] },
   ] },
   { id: 'trans', label: 'Transiciones', groups: [
     { label: 'Vista previa', items: [{ cmd: 'previewTrans', label: 'Vista previa', icon: 'present', size: 'lg' }] },

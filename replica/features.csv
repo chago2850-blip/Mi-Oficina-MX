@@ -147,3 +147,4 @@ Videos de Microsoft Stream/SharePoint,impresiona,skip,yes,skip,servicio de Micro
 Nombres y logotipos de Microsoft,compartido,skip,yes,skip,marcas registradas
 Accesibilidad (lector de pantalla y teclado),compartido,should,yes,yes,"roles ARIA, flechas en la cinta, F6 entre zonas, foco visible, anuncio de la celda activa; auditado con axe-core (sin problemas serios, contraste AA)"
 Rendimiento con archivos grandes,compartido,should,yes,yes,"CSV de 100 000 filas en ~2 s, documento de 300 páginas en <1 s; medido con test/perf.mjs"
+Tamaño de diapositiva con ajustes avanzados,impresiona,should,yes,yes,"tamaños de PowerPoint, ancho/alto en cm, orientación, numerar desde, asegurar ajuste o maximizar; se guarda en el .pptx"

@@ -76,6 +76,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - **0.2:** **gráficos** (se guardan como gráficos nativos del `.pptx`), animaciones de salida y **panel de animaciones** (al hacer clic / con la anterior / después), **patrón de diapositivas** con pie, número y fecha, clasificador con secciones, **vista del moderador** con ventana para el público en la segunda pantalla, pluma durante la presentación y exportar cada diapositiva como PNG
 - **0.3:** **video y audio** en las diapositivas (se guardan dentro del `.pptx`) con **subtítulos** WebVTT o SRT, transición **Transformación** (Morph), **trayectorias de animación**, **ensayar intervalos** con avance automático y **exportar a video** (WebM) con transiciones y pasos de animación. Las animaciones, trayectorias, intervalos, patrón, secciones y subtítulos se conservan al guardar y abrir el `.pptx`
 - **0.4:** **cámara en vivo** dentro de la diapositiva (círculo, rectángulo redondeado o rectángulo, con espejo y borde, como Cameo) y **grabar la presentación con narración**: tu voz y el tiempo de cada diapositiva quedan guardados, la presentación avanza sola con la narración y el video exportado lleva el audio
+- **0.4.1:** **Diseño → Tamaño de diapositiva → Ajustes avanzados**: tamaños predefinidos (pantalla 16:9, 16:10 y 4:3, panorámica, carta, contabilidad, A3, A4, B4, B5, 35 mm, transparencia, banner o personalizado), ancho y alto en cm, orientación horizontal o vertical, numerar las diapositivas desde cualquier número y elegir si el contenido se ajusta o se maximiza. Se guarda en el `.pptx` para PowerPoint
 
 **PapelPDF** — la app completa del repositorio [PapelPDF](https://github.com/chago2850-blip/PapelPDF): anotar, editar, formularios, firma, organizar páginas, convertir, contraseña, redacción y OCR sin conexión.
 
@@ -85,12 +86,12 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 
 | Sistema | Archivo | Cómo |
 | --- | --- | --- |
-| Windows 10/11 | `Mi.Oficina.MX.Setup.0.4.0.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
-| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.4.0-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
-| macOS Intel | `MiOficinaMX-0.4.0-x64.dmg` | Igual que el anterior. |
-| Ubuntu, Debian, Mint | `mi-oficina-mx_0.4.0_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.4.0_amd64.deb` |
-| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.4.0.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.4.0.x86_64.rpm` |
-| Cualquier Linux | `Mi.Oficina.MX-0.4.0.AppImage` | `chmod +x Mi.Oficina.MX-0.4.0.AppImage` y ábrelo |
+| Windows 10/11 | `Mi.Oficina.MX.Setup.0.4.1.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
+| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.4.1-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
+| macOS Intel | `MiOficinaMX-0.4.1-x64.dmg` | Igual que el anterior. |
+| Ubuntu, Debian, Mint | `mi-oficina-mx_0.4.1_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.4.1_amd64.deb` |
+| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.4.1.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.4.1.x86_64.rpm` |
+| Cualquier Linux | `Mi.Oficina.MX-0.4.1.AppImage` | `chmod +x Mi.Oficina.MX-0.4.1.AppImage` y ábrelo |
 
 El instalador asocia los archivos `.docx`, `.xlsx`, `.csv`, `.pptx` y `.pdf`: con doble clic se abren en la app correcta.
 

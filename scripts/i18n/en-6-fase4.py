@@ -50,6 +50,14 @@ D = {
 '{0} pasos': '{0} steps', '{0} filas': '{0} rows', 'Actualizar': 'Refresh', 'Editar': 'Edit', 'Eliminar': 'Delete', 'Cerrar': 'Close', 'Consulta': 'Query',
 'Todavía no hay consultas. Usa “Obtener datos” para crear una.': 'No queries yet. Use “Get data” to create one.',
 'fórmula': 'formula',
+# Impresiona: tamaño de diapositiva
+'Estándar (4:3)': 'Standard (4:3)', 'Panorámica (16:9)': 'Widescreen (16:9)', 'Ajustes avanzados…': 'Advanced settings…', 'Tamaño de diapositiva': 'Slide size', 'Tamaño de la diapositiva': 'Slide size',
+'Presentación en pantalla (16:9)': 'On-screen show (16:9)', 'Panorámica (33.87 × 19.05 cm)': 'Widescreen (33.87 × 19.05 cm)', 'Presentación en pantalla (4:3)': 'On-screen show (4:3)', 'Presentación en pantalla (16:10)': 'On-screen show (16:10)',
+'Papel carta (8.5 × 11 pulg.)': 'Letter paper (8.5 × 11 in)', 'Papel de contabilidad (11 × 17 pulg.)': 'Ledger paper (11 × 17 in)', 'Hoja A3 (297 × 420 mm)': 'A3 paper (297 × 420 mm)', 'Hoja A4 (210 × 297 mm)': 'A4 paper (210 × 297 mm)',
+'Hoja B4 (ICO) (250 × 353 mm)': 'B4 (ISO) paper (250 × 353 mm)', 'Hoja B5 (ICO) (176 × 250 mm)': 'B5 (ISO) paper (176 × 250 mm)', 'Diapositivas de 35 mm': '35 mm slides', 'Transparencia': 'Overhead', 'Banner': 'Banner', 'Personalizado': 'Custom',
+'Ancho (cm)': 'Width (cm)', 'Alto (cm)': 'Height (cm)', 'Orientación de la diapositiva': 'Slide orientation', 'Horizontal': 'Landscape', 'Vertical': 'Portrait', 'Numerar las diapositivas desde': 'Number slides from',
+'Al cambiar el tamaño, el contenido': 'When resizing, the content', 'Asegurar ajuste (todo el contenido cabe)': 'Ensure fit (all content fits)', 'Maximizar (el contenido llena la diapositiva)': 'Maximize (content fills the slide)',
+'El ancho y el alto deben estar entre {0} y {1} cm.': 'Width and height must be between {0} and {1} cm.',
 # Suite
 'Cinta de opciones': 'Ribbon', 'Contraer la cinta (Ctrl+F1)': 'Collapse the ribbon (Ctrl+F1)',
 }
