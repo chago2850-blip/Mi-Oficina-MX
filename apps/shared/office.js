@@ -39,13 +39,24 @@ export function modal({ title, body, buttons = [{ label: 'Aceptar', value: true,
     const prev = document.activeElement;
     const content = typeof body === 'string' ? h('div', { html: body }) : body;
     const footer = h('footer');
-    const box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', style: width ? { width } : null },
-      h('header', {}, title), h('div', { class: 'body' }, content), footer);
+    const tid = `mt${Math.random().toString(36).slice(2, 8)}`;
+    const box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': tid, style: width ? { width } : null },
+      h('header', { id: tid }, title), h('div', { class: 'body' }, content), footer);
     const back = h('div', { class: 'modal-back' }, box);
     const close = (v) => { back.remove(); document.removeEventListener('keydown', onKey, true); prev?.focus?.(); resolve(v); };
     buttons.forEach((b) => footer.append(h('button', { class: `btn${b.primary ? ' primary' : ''}`, onclick: () => close(typeof b.value === 'function' ? b.value(content) : b.value) }, b.label)));
     const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); close(null); }
+      // solo responde el cuadro de arriba, y no si Esc ya cerró un menú desplegable
+      if (e.defaultPrevented || back !== [...document.querySelectorAll('.modal-back')].pop()) return;
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(null); return; }
+      // el foco no sale del cuadro con Tab
+      if (e.key === 'Tab') {
+        const f = [...box.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter((x) => !x.disabled && x.offsetParent !== null);
+        if (!f.length) return;
+        const i = f.indexOf(document.activeElement);
+        if (e.shiftKey && (i <= 0)) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && (i === f.length - 1 || i < 0)) { e.preventDefault(); f[0].focus(); }
+        return;
+      }
       if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && !e.target.matches('button')) {
         const p = buttons.find((b) => b.primary);
         if (p) { e.preventDefault(); close(typeof p.value === 'function' ? p.value(content) : p.value); }
@@ -95,6 +106,12 @@ export const confirmBox = (title, text, ok = 'Aceptar') => modal({ title, body: 
 // ------------------------------------------------------------------ menús desplegables
 let openDrop = null;
 export function closeDropdown() { openDrop?.remove(); openDrop = null; }
+// Anuncia un texto a los lectores de pantalla (región aria-live oculta)
+let liveBox = null; let liveT = 0;
+export function announce(text) {
+  if (!liveBox) { liveBox = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }); document.body.append(liveBox); }
+  clearTimeout(liveT); liveT = setTimeout(() => { liveBox.textContent = text; }, 120);
+}
 export function dropdown(anchor, content) {
   closeDropdown();
   const d = h('div', { class: 'dropdown' });
@@ -115,7 +132,7 @@ export function dropdown(anchor, content) {
   return d;
 }
 document.addEventListener('mousedown', (e) => { if (openDrop && !openDrop.contains(e.target)) closeDropdown(); }, true);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openDrop) { closeDropdown(); e.stopPropagation(); } }, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openDrop) { closeDropdown(); e.stopPropagation(); e.preventDefault(); } }, true);
 addEventListener('blur', closeDropdown);
 
 export const PALETTE = [
@@ -152,16 +169,28 @@ export class Ribbon {
   render() {
     this.el.innerHTML = '';
     this.el.classList.add('ribbon');
-    const tabsRow = h('div', { class: 'tabs', role: 'tablist' });
-    tabsRow.append(h('button', { class: 'tab file', onclick: () => this.onFile() }, 'Archivo'));
+    // Accesibilidad: las pestañas forman un tablist con navegación por flechas (tabindex itinerante);
+    // "Archivo" y "Contraer" quedan fuera del tablist
+    const tabsRow = h('div', { class: 'tabs' });
+    tabsRow.append(h('button', { class: 'tab file', 'aria-haspopup': 'dialog', onclick: () => this.onFile() }, 'Archivo'));
+    const list = h('div', { class: 'tablist', role: 'tablist', 'aria-label': 'Cinta de opciones' });
     this.tabEls = {};
     for (const t of this.tabs) {
-      const b = h('button', { class: `tab${t.contextual ? ' contextual' : ''}`, role: 'tab', 'aria-selected': String(t.id === this.active), 'data-tab': t.id, onclick: () => this.show(t.id), hidden: t.contextual && !this.visibleContextual.has(t.id) ? true : null }, t.label);
+      const on = t.id === this.active;
+      const b = h('button', { class: `tab${t.contextual ? ' contextual' : ''}`, role: 'tab', id: `rtab-${t.id}`, 'aria-controls': 'rpanel', 'aria-selected': String(on), tabindex: on ? '0' : '-1', 'data-tab': t.id, onclick: () => this.show(t.id), hidden: t.contextual && !this.visibleContextual.has(t.id) ? true : null }, t.label);
       this.tabEls[t.id] = b;
-      tabsRow.append(b);
+      list.append(b);
     }
-    tabsRow.append(h('div', { class: 'spacer' }), h('button', { class: 'collapse', title: 'Contraer la cinta (Ctrl+F1)', html: icon('chevronDown', 16), onclick: () => this.toggleCollapse() }));
-    this.panel = h('div', { class: 'panel', role: 'tabpanel' });
+    list.addEventListener('keydown', (e) => {
+      const vis = Object.values(this.tabEls).filter((x) => !x.hidden); const i = vis.indexOf(document.activeElement); if (i < 0) return;
+      let j = null;
+      if (e.key === 'ArrowRight') j = (i + 1) % vis.length; else if (e.key === 'ArrowLeft') j = (i - 1 + vis.length) % vis.length; else if (e.key === 'Home') j = 0; else if (e.key === 'End') j = vis.length - 1;
+      else if (e.key === 'ArrowDown') { e.preventDefault(); this.panel.querySelector('button:not([disabled]), select, input')?.focus(); return; }
+      if (j == null) return;
+      e.preventDefault(); this.show(vis[j].dataset.tab); vis[j].focus();
+    });
+    tabsRow.append(list, h('div', { class: 'spacer' }), h('button', { class: 'collapse', title: 'Contraer la cinta (Ctrl+F1)', 'aria-label': 'Contraer la cinta (Ctrl+F1)', html: icon('chevronDown', 16), onclick: () => this.toggleCollapse() }));
+    this.panel = h('div', { class: 'panel', role: 'tabpanel', id: 'rpanel', 'aria-labelledby': `rtab-${this.active}` });
     this.el.append(tabsRow, this.panel);
     this.renderPanel();
   }
@@ -169,7 +198,8 @@ export class Ribbon {
   show(id) {
     this.active = id;
     if (this.el.classList.contains('collapsed')) this.toggleCollapse();
-    Object.entries(this.tabEls).forEach(([k, b]) => b.setAttribute('aria-selected', String(k === id)));
+    Object.entries(this.tabEls).forEach(([k, b]) => { b.setAttribute('aria-selected', String(k === id)); b.tabIndex = k === id ? 0 : -1; });
+    this.panel.setAttribute('aria-labelledby', `rtab-${id}`);
     this.renderPanel();
   }
   setContextual(id, visible) {
@@ -194,7 +224,7 @@ export class Ribbon {
     if (it.row) { const r = h('div', { class: 'row' }); it.row.forEach((x) => r.append(this.renderItem(x))); return r; }
     if (it.render) { const n = it.render(); if (it.id) this.controls.set(it.id, n); return n; }
     if (it.select) {
-      const s = h('select', { class: 'rsel', title: it.title || it.label, style: { width: it.select.width || 'auto' } });
+      const s = h('select', { class: 'rsel', title: it.title || it.label, 'aria-label': it.title || it.label, style: { width: it.select.width || 'auto' } });
       it.select.options.forEach((o) => { const [v, l] = Array.isArray(o) ? o : [o, o]; s.append(h('option', { value: v }, l)); });
       s.addEventListener('mousedown', () => this.onBeforeSelect?.());
       s.addEventListener('change', () => this.onCommand(it.cmd, s.value));
@@ -330,6 +360,13 @@ export class OfficeShell {
     addEventListener('keydown', (e) => {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key === 'F1') { e.preventDefault(); this.ribbon.toggleCollapse(); }
+      // F6 / Mayús+F6: recorre las zonas de la ventana (cinta, documento, barra de estado)
+      if (e.key === 'F6' && !document.querySelector('.modal-back')) {
+        e.preventDefault();
+        const zones = [() => this.ribbon.el.querySelector('[role="tab"][aria-selected="true"]'), () => this.adapter.focusTarget?.() || this.workspace.querySelector('[contenteditable="true"], canvas[tabindex], [tabindex="0"], button'), () => this.status.querySelector('button, input, select')].map((f) => f()).filter(Boolean);
+        const cur = zones.findIndex((z) => z === document.activeElement || z.contains?.(document.activeElement) || (z.closest && document.activeElement && z.closest('.ribbon, .workspace, .statusbar') === document.activeElement.closest('.ribbon, .workspace, .statusbar')));
+        zones[(cur + (e.shiftKey ? -1 : 1) + zones.length) % zones.length]?.focus();
+      }
       if (e.key === 'Escape' && !this.backstage?.hidden && this.backstage && this.doc.started) this.hideBackstage();
     });
     addEventListener('beforeunload', () => { this.autosave(); });

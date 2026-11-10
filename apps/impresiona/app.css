@@ -178,3 +178,14 @@ body.render-mode .show-stage.aud { display: block; }
 .slide.m-thumb .path-prev, .slide.m-print .path-prev, .slide.m-show .path-prev { display: none; }
 .show .rehearse { position: fixed; left: 16px; top: 14px; z-index: 5; display: flex; gap: 10px; background: rgba(20,22,32,.82); color: #fff; padding: 6px 12px; border-radius: 8px; font: 600 14px Inter, sans-serif; font-variant-numeric: tabular-nums; }
 .show .rehearse .rh-total { opacity: .65; }
+/* fase 4: cámara en vivo y grabación */
+.obj.t-camera { overflow: hidden; background: #1E2030; }
+.obj.t-camera.cam-circle { border-radius: 50%; }
+.obj.t-camera.cam-rounded { border-radius: 14%; }
+.obj.t-camera video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.obj.t-camera video.mirror { transform: scaleX(-1); }
+.obj.t-camera .cam-ph { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 4px; color: #C9CCDD; background: radial-gradient(circle at 40% 35%, #3A3E58, #1E2030); font: 600 13px Inter, sans-serif; text-align: center; }
+.obj.t-camera .cam-err { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font: 600 13px Inter, sans-serif; text-align: center; padding: 8px; }
+.show .rec-dot { position: fixed; right: 18px; top: 14px; z-index: 5; display: flex; align-items: center; gap: 6px; background: rgba(20,22,32,.82); color: #fff; padding: 5px 12px; border-radius: 999px; font: 700 13px Inter, sans-serif; letter-spacing: .06em; }
+.show .rec-dot i { width: 10px; height: 10px; border-radius: 50%; background: #E5383B; animation: recblink 1s steps(2) infinite; }
+@keyframes recblink { 50% { opacity: .25; } }

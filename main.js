@@ -8,7 +8,7 @@
 //
 // Sin telemetría, sin cuentas, sin red.
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, protocol, Tray, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, protocol, Tray, nativeImage, screen, session } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const fss = require('fs');
@@ -450,9 +450,7 @@ async function readDoc(id, p) {
 }
 function isEncrypted(buf) { try { return require('officecrypto-tool').isEncrypted(buf); } catch { return false; } }
 async function readBinaryDoc(buf) {
-  const WordExtractor = require('word-extractor');
-  const d = await new WordExtractor().extract(buf);
-  return { body: d.getBody(), headers: d.getHeaders({ includeFooters: false }), footers: d.getFooters(), footnotes: d.getFootnotes(), endnotes: d.getEndnotes() };
+  return require('./main/doc-reader').readDocRich(buf);
 }
 ipcMain.handle('of:decrypt', async (e, { path: p, password }) => {
   const buf = await fs.readFile(p);
@@ -490,6 +488,14 @@ ipcMain.handle('of:open-image', async (e) => {
 });
 
 ipcMain.handle('of:read-path', async (e, p) => readDoc(winOf(e).__app, p));
+// Orígenes de datos (Obtener y transformar): se eligen y leen sin abrirlos en otra app ni agregarlos a recientes
+ipcMain.handle('of:pick-data', async (e, { filters, title } = {}) => {
+  const r = await dialog.showOpenDialog(winOf(e), { title: title || 'Obtener datos', properties: ['openFile'], filters: [...(filters || []), { name: 'Todos los archivos', extensions: ['*'] }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const p = r.filePaths[0];
+  return { path: p, name: path.basename(p), bytes: new Uint8Array(await fs.readFile(p)) };
+});
+ipcMain.handle('of:read-data', async (_e, p) => { try { return { path: p, name: path.basename(p), bytes: new Uint8Array(await fs.readFile(p)) }; } catch { return null; } });
 
 ipcMain.handle('of:save', async (e, { bytes, text, path: target, ask, suggestedName, ext, filterName, password }) => {
   const w = winOf(e);
@@ -680,9 +686,31 @@ ipcMain.handle('of:render-frames', async (e, { pres, states, width }) => {
 });
 
 // ---------------------------------------------------------------- arranque
+// Diccionarios de ortografía incluidos en el instalador: se copian al perfil para que Chromium no
+// tenga que descargarlos (revisión ortográfica sin internet en Windows y Linux)
+function installDictionaries() {
+  try {
+    const src = app.isPackaged ? path.join(process.resourcesPath, 'dict') : path.join(__dirname, 'build', 'dict');
+    if (!fss.existsSync(src)) return;
+    const dst = path.join(app.getPath('userData'), 'Dictionaries');
+    fss.mkdirSync(dst, { recursive: true });
+    for (const f of fss.readdirSync(src)) {
+      if (!f.endsWith('.bdic')) continue;
+      const to = path.join(dst, f);
+      const a = fss.statSync(path.join(src, f));
+      if (!fss.existsSync(to) || fss.statSync(to).size !== a.size) fss.copyFileSync(path.join(src, f), to);
+    }
+  } catch (e) { console.warn('diccionarios', e.message); }
+}
 app.whenReady().then(() => {
+  installDictionaries();
   loadPrefs();
   applyLang();
+  // Permisos: solo cámara y micrófono (Impresiona), pantalla completa y portapapeles, y solo para la suite
+  const okPerm = new Set(['media', 'fullscreen', 'clipboard-read', 'clipboard-sanitized-write']);
+  const fromSuite = (u) => /^app:\/\/suite\//.test(u || '');
+  session.defaultSession.setPermissionRequestHandler((wc, perm, cb, details) => cb(okPerm.has(perm) && fromSuite(details?.requestingUrl || wc?.getURL())));
+  session.defaultSession.setPermissionCheckHandler((wc, perm, origin) => okPerm.has(perm) && (fromSuite(origin) || fromSuite(wc?.getURL())));
   require('electron').nativeTheme.themeSource = prefs.theme === 'auto' ? 'system' : prefs.theme;
   registerAppProtocol();
   if (!isMac) Menu.setApplicationMenu(null);

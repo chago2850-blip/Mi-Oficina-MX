@@ -100,6 +100,7 @@ export async function readXlsx(wb, bytes) {
     try { wb.hf.addNamedExpression(dn.name, `=${ref}`); wb.names.push({ name: dn.name, expr: `=${ref}` }); } catch { /* */ }
   }
   if (meta?.protectedStructure) wb.protectedStructure = true;
+  if (Array.isArray(meta?.queries)) wb.queries = meta.queries.map((q) => ({ ...q, sheetId: undefined }));
   // macros: se guardan tal cual para no perderlas al guardar como .xlsm
   try { const z = await JSZip.loadAsync(bytes); const vba = z.file('xl/vbaProject.bin'); if (vba) { wb.vba = await vba.async('uint8array'); warnings.push('las macros se conservan, pero no se ejecutan'); } } catch { /* */ }
   wb.active = 0;
@@ -168,7 +169,8 @@ export async function writeXlsx(wb, props = {}) {
   }
   for (const n of wb.names || []) { try { x.definedNames.add(n.expr.replace(/^=/, ''), n.name); } catch { /* */ } }
   if (wb.protectedStructure) meta.protectedStructure = true;
-  if (Object.keys(meta.sheets).length || meta.protectedStructure) {
+  if (wb.queries?.length) meta.queries = wb.queries;
+  if (Object.keys(meta.sheets).length || meta.protectedStructure || meta.queries) {
     // Los gráficos se guardan en una hoja oculta para que Calcula Datos los recupere al abrir el archivo.
     const ms = x.addWorksheet(META_SHEET, { state: 'veryHidden' });
     ms.getCell('A1').value = JSON.stringify(meta);

@@ -19,6 +19,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (m) => console.log(`✔ ${m}`);
 const exe = process.env.OFICINA_EXE;
 const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] } : { args: [root, `--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out, OFICINA_LANG: process.env.OFICINA_LANG || 'es' } });
+// errores de JavaScript en cualquier ventana: la prueba falla si aparece alguno
+const pageErrors = [];
+const watch = (w) => { w.on('pageerror', (e) => pageErrors.push(`${w.url().split('/').slice(-2).join('/')}: ${e.message}`)); w.on('console', (m) => { if (m.type() === 'error' && !/favicon|Autofill|dictionary|Dictionar|getUserMedia|Requested device not found/i.test(m.text())) pageErrors.push(`${w.url().split('/').slice(-2).join('/')} console: ${m.text().slice(0, 300)}`); }); };
+app.on('window', watch); app.windows().forEach(watch);
 async function waitWindow(pred, ms = 15000) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) { for (const w of app.windows()) { try { if (pred(w.url())) return w; } catch { /* */ } } await wait(150); }
@@ -291,8 +295,10 @@ try {
       const t = window.__impresiona.pres.slides.flatMap((x) => x.objects).find((o) => o.anim?.type === 'pathRight');
       const el = document.querySelector(`.show [data-id="${t.id}"]`);
       await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
-      for (let k = 0; k < 40 && !/150, 0\)$/.test(getComputedStyle(el).transform); k++) await new Promise((r) => setTimeout(r, 100));
-      return getComputedStyle(el).transform;
+      // la capa puede volver a dibujarse: se busca el objeto en cada vuelta
+      const cur = () => document.querySelector(`.show .show-layer:last-child [data-id="${t.id}"]`) || document.querySelector(`.show [data-id="${t.id}"]`) || el;
+      for (let k = 0; k < 40 && !/150, 0\)$/.test(getComputedStyle(cur()).transform); k++) await new Promise((r) => setTimeout(r, 100));
+      return getComputedStyle(cur()).transform;
     });
     assert.ok(/matrix\(1, 0, 0, 1, 150, 0\)/.test(tr), `trayectoria: ${tr}`);
     const morphing = await w.evaluate(() => { window.__show.next(); return [...document.querySelectorAll('.show .show-layer:last-child .obj')].some((el) => el.getAnimations().length > 0); });
@@ -356,6 +362,7 @@ try {
     log('Suite: cifrar con contraseña (AES-256, compatible con Office) y abrir pidiendo la contraseña');
     await closeApp('escribiente'); await wait(600);
   }
+  assert.deepEqual(pageErrors, [], `errores en las ventanas:\n${pageErrors.join('\n')}`);
   console.log('\nTodas las pruebas de la fase 3 pasaron.');
 } catch (err) {
   console.error('✘', err);

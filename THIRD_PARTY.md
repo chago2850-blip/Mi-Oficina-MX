@@ -22,7 +22,9 @@ Mi Oficina MX se distribuye bajo la **GPL-3.0-or-later**. Incluye estas bibliote
 | [webm-muxer](https://github.com/Vanilagy/webm-muxer) | Exportar presentaciones a video | MIT |
 | [officecrypto-tool](https://github.com/zurmokeeper/officecrypto-tool) (con crypto-js, xml2js y cfb) | Cifrar y abrir archivos de Office con contraseña | MIT · Apache-2.0 (cfb) |
 | [word-extractor](https://github.com/morungos/node-word-extractor) | Abrir .doc de Word 97-2003 | MIT |
+| Diccionarios Hunspell de Chromium: español ([RLA-ES](https://github.com/sbosio/rla-es)) e inglés ([SCOWL](http://wordlist.aspell.net/)) | Revisión ortográfica sin internet | GPL-3.0 / LGPL-3.0 / MPL-1.1 (es) · licencia SCOWL, tipo BSD (en) |
 | [esbuild](https://esbuild.github.io/) | Empaquetar la interfaz (solo desarrollo) | MIT |
+| [axe-core](https://github.com/dequelabs/axe-core) | Auditoría de accesibilidad en las pruebas (solo desarrollo) | MPL-2.0 |
 
 **PapelPDF** es del mismo autor y se publicó originalmente bajo MIT; dentro de esta suite se distribuye bajo la GPL-3.0.
 

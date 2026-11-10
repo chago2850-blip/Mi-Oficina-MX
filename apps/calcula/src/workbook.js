@@ -76,7 +76,7 @@ export class Workbook {
     for (const s of this.sheets) this.hf.removeSheet(s.id);
     this.sheets = []; this.active = 0; this.undoStack = []; this.redoStack = [];
     for (const n of this.names || []) { try { this.hf.removeNamedExpression(n.name); } catch { /* */ } }
-    this.names = []; this.protectedStructure = false; this.vba = null;
+    this.names = []; this.protectedStructure = false; this.vba = null; this.queries = [];
     this.hf.clearUndoStack?.(); this.hf.clearRedoStack?.();
   }
   addSheet(name) {
@@ -179,7 +179,7 @@ export class Workbook {
   usedRange(s = this.sheet) {
     const dims = this.hf.getSheetDimensions(s.id);
     let r2 = dims.height - 1, c2 = dims.width - 1;
-    for (const k of s.styles.keys()) { const [r, c] = k.split(',').map(Number); if (r > r2) r2 = r; if (c > c2) c2 = c; }
+    for (const k of s.styles.keys()) { const i = k.indexOf(','); const r = +k.slice(0, i); const c = +k.slice(i + 1); if (r > r2) r2 = r; if (c > c2) c2 = c; }
     return { r1: 0, c1: 0, r2: Math.max(0, r2), c2: Math.max(0, c2), empty: dims.height === 0 && s.styles.size === 0 };
   }
   // Región contigua con datos alrededor de una celda (como Ctrl+A / ordenar)
@@ -261,7 +261,7 @@ export class Workbook {
   // ---------------- serializar para recuperación
   toJSON() {
     return {
-      v: 1, active: this.active, names: this.names || [], protectedStructure: !!this.protectedStructure,
+      v: 1, active: this.active, names: this.names || [], protectedStructure: !!this.protectedStructure, queries: this.queries || [],
       sheets: this.sheets.map((s) => ({
         name: s.name, data: this.hf.getSheetSerialized(s.id),
         styles: [...s.styles], colW: [...s.colW], rowH: [...s.rowH], hiddenRows: [...s.hiddenRows], merges: s.merges, freeze: s.freeze,
@@ -284,6 +284,7 @@ export class Workbook {
     }
     this.active = Math.min(j.active || 0, this.sheets.length - 1);
     this.protectedStructure = !!j.protectedStructure;
+    this.queries = (j.queries || []).map((q) => ({ ...q, sheetId: undefined }));
     for (const n of j.names || []) { try { this.hf.addNamedExpression(n.name, n.expr); this.names.push(n); } catch { /* */ } }
     this.hf.clearUndoStack?.(); this.undoStack = []; this.redoStack = [];
   }

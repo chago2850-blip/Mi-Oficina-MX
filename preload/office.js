@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('oficina', {
   openDialog: (opts) => ipcRenderer.invoke('of:open-dialog', opts || {}),
   openImage: () => ipcRenderer.invoke('of:open-image'),
   readPath: (p) => ipcRenderer.invoke('of:read-path', p),
+  pickData: (opts) => ipcRenderer.invoke('of:pick-data', opts || {}),
+  readData: (p) => ipcRenderer.invoke('of:read-data', p),
   decrypt: (p) => ipcRenderer.invoke('of:decrypt', p),
   pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch { return null; } },
   save: (opts) => ipcRenderer.invoke('of:save', opts),

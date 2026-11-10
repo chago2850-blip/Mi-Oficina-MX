@@ -8,6 +8,7 @@ import {
 } from 'docx';
 import JSZip from 'jszip';
 import { t } from '../../shared/i18n.js';
+import { collectMeta, META_DOCX } from './meta.js';
 
 const PX_TWIP = 15; // 1 px (96 ppp) = 15 twips
 const ptFromCss = (v) => {
@@ -354,7 +355,15 @@ export async function htmlToDocx(editorEl, settings) {
   });
   const blob = await Packer.toBlob(doc);
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  return b.endIds.size ? addEndnotes(bytes, [...b.endIds].map(([fid, k]) => [k, settings.endnotes[fid] || ''])) : bytes;
+  const withNotes = b.endIds.size ? await addEndnotes(bytes, [...b.endIds].map(([fid, k]) => [k, settings.endnotes[fid] || ''])) : bytes;
+  const meta = collectMeta(editorEl, settings);
+  if (!meta) return withNotes;
+  const zip = await JSZip.loadAsync(withNotes);
+  zip.file(META_DOCX, JSON.stringify(meta));
+  let ct = await zip.file('[Content_Types].xml').async('string');
+  if (!/Extension="json"/.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="json" ContentType="application/json"/>');
+  zip.file('[Content_Types].xml', ct);
+  return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
 }
 
 // docx (la biblioteca) no genera notas al final: se agregan al paquete después.

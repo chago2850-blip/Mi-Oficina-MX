@@ -31,7 +31,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 ![Calcula Datos](docs/calcula.png)
 ![Impresiona](docs/impresiona.png)
 
-## Funciones (versión 0.3)
+## Funciones (versión 0.4)
 
 **Común a las tres apps:** cinta con pestañas, inicio con plantillas y recientes, guardar / guardar como, exportar a PDF, imprimir, deshacer y rehacer, buscar y reemplazar, arrastrar y soltar archivos, **recuperación automática** si la app se cierra sin guardar, revisión ortográfica en español e inglés, y el botón para volver a la dona.
 
@@ -41,6 +41,8 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 
 **Nuevo en la 0.3 para toda la suite:** **cifrar con contraseña** (`.docx`, `.xlsx` y `.pptx` con el cifrado estándar de Office, AES-256; también abre los archivos cifrados por Office) y **barra de acceso rápido** personalizable en cada app.
 
+**Nuevo en la 0.4 para toda la suite:** **accesibilidad** (lector de pantalla y teclado: flechas para moverse por la cinta, **F6** para pasar entre la cinta, el documento y la barra de estado, foco visible, el foco no se escapa de los diálogos y Calcula Datos anuncia la celda activa; contraste AA revisado con axe-core), **revisión ortográfica sin internet** (los diccionarios vienen en el instalador) y archivos grandes más rápidos (un CSV de 100 000 filas abre en unos 2 s; un documento de 300 páginas, en menos de 1 s).
+
 **Escribiente**
 - Páginas reales (Carta, Oficio México, Legal, A4, A5), orientación y márgenes; la vista en pantalla y el PDF tienen las mismas páginas
 - Fuentes, tamaño, negrita, cursiva, subrayado, tachado, sub/superíndice, color y resaltado
@@ -49,7 +51,8 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Encabezado, pie y números de página; índice automático; contador de palabras
 - Plantillas: carta formal, reporte y currículum
 - **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie y al final**, **tabulaciones** (izquierda, centro, derecha) en la regla, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
-- **0.3:** **ecuaciones** (escritas en LaTeX con vista previa; en el `.docx` quedan como ecuaciones de Word y en el `.odt` como fórmulas), **citas y bibliografía** (APA), **comparar documentos** (el resultado queda como control de cambios), **etiquetas y sobres** (también con los destinatarios de la combinación), **diagramas** tipo SmartArt (lista, proceso, ciclo, jerarquía y pirámide), **modo lectura** y **modo enfoque**, reacciones en comentarios, exportar a **Markdown** y abrir documentos `.doc` de Word 97-2003 (se recupera el texto)
+- **0.3:** **ecuaciones** (escritas en LaTeX con vista previa; en el `.docx` quedan como ecuaciones de Word y en el `.odt` como fórmulas), **citas y bibliografía** (APA), **comparar documentos** (el resultado queda como control de cambios), **etiquetas y sobres** (también con los destinatarios de la combinación), **diagramas** tipo SmartArt (lista, proceso, ciclo, jerarquía y pirámide), **modo lectura** y **modo enfoque**, reacciones en comentarios, exportar a **Markdown** y abrir documentos `.doc` de Word 97-2003
+- **0.4:** abre las **ecuaciones de Word y LibreOffice** como ecuaciones editables, abre los `.doc` antiguos **con su formato** (títulos, negritas, colores, tamaños, tablas, listas y alineación), y guarda dentro del `.docx`/`.odt` las **reacciones** a comentarios, los diagramas tipo SmartArt editables, las fuentes de las citas y el LaTeX de las ecuaciones
 
 **Calcula Datos**
 - Cuadrícula rápida (dibujada en canvas), varias hojas, inmovilizar paneles, cambiar ancho/alto, autoajuste
@@ -61,6 +64,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Plantillas: presupuesto mensual, ventas por mes y lista de asistencia
 - **0.2:** **formato condicional** (reglas, barras de datos, escalas de color, íconos), **validación** con listas desplegables, administrador de nombres, notas en celdas, tablas con formato, **tablas dinámicas**, proteger hoja y libro, área de impresión y ajustar a página, y abrir `.xlsm` sin ejecutar macros (se conservan al guardar)
 - **0.3:** funciones **LAMBDA**, LET, MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY, APILARV/APILARH, TOMAR, EXCLUIR, ENCOL, ENFILA, ELEGIRCOLS/ELEGIRFILAS, AJUSTARFILAS, TEXTOANTES/TEXTODESPUES e **IMAGEN**; **buscar objetivo** y **Solver** (Simplex con restricciones, enteros y binarios; búsqueda directa en modelos no lineales); **minigráficos** (línea, columna y ganancia/pérdida); **agrupar y esquema** de filas y columnas (esquema nativo de Excel); **segmentación de datos**; y gráficos que siguen matrices dinámicas (rango `A4#`)
+- **0.4:** **Obtener y transformar datos** (como Power Query): trae datos de **CSV/TXT, un libro de Excel, JSON** o un rango, y los limpia con **pasos aplicados** que se pueden revisar y quitar — quitar o renombrar columnas, filtrar, ordenar, quitar duplicados, cambiar tipo, dividir, reemplazar, recortar, mayúsculas, rellenar hacia abajo, **columna personalizada** (`[Precio] * [Cantidad]`), **agrupar** (suma, promedio, contar…), **anexar** y **combinar** consultas. *Cerrar y cargar* deja el resultado en una hoja; **Actualizar todo** vuelve a leer los archivos de origen. Las consultas se guardan en el `.xlsx`
 
 **Impresiona**
 - Diapositivas con diseños (título, contenido, dos contenidos, sección…), 8 temas originales, fondo, tamaño 16:9 o 4:3
@@ -71,6 +75,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Plantillas: plan de negocio, clase y avance de proyecto
 - **0.2:** **gráficos** (se guardan como gráficos nativos del `.pptx`), animaciones de salida y **panel de animaciones** (al hacer clic / con la anterior / después), **patrón de diapositivas** con pie, número y fecha, clasificador con secciones, **vista del moderador** con ventana para el público en la segunda pantalla, pluma durante la presentación y exportar cada diapositiva como PNG
 - **0.3:** **video y audio** en las diapositivas (se guardan dentro del `.pptx`) con **subtítulos** WebVTT o SRT, transición **Transformación** (Morph), **trayectorias de animación**, **ensayar intervalos** con avance automático y **exportar a video** (WebM) con transiciones y pasos de animación. Las animaciones, trayectorias, intervalos, patrón, secciones y subtítulos se conservan al guardar y abrir el `.pptx`
+- **0.4:** **cámara en vivo** dentro de la diapositiva (círculo, rectángulo redondeado o rectángulo, con espejo y borde, como Cameo) y **grabar la presentación con narración**: tu voz y el tiempo de cada diapositiva quedan guardados, la presentación avanza sola con la narración y el video exportado lleva el audio
 
 **PapelPDF** — la app completa del repositorio [PapelPDF](https://github.com/chago2850-blip/PapelPDF): anotar, editar, formularios, firma, organizar páginas, convertir, contraseña, redacción y OCR sin conexión.
 
@@ -80,12 +85,12 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 
 | Sistema | Archivo | Cómo |
 | --- | --- | --- |
-| Windows 10/11 | `Mi.Oficina.MX.Setup.0.1.0.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
-| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.1.0-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
-| macOS Intel | `MiOficinaMX-0.1.0-x64.dmg` | Igual que el anterior. |
-| Ubuntu, Debian, Mint | `mi-oficina-mx_0.1.0_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.1.0_amd64.deb` |
-| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.1.0.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.1.0.x86_64.rpm` |
-| Cualquier Linux | `Mi.Oficina.MX-0.1.0.AppImage` | `chmod +x Mi.Oficina.MX-0.1.0.AppImage` y ábrelo |
+| Windows 10/11 | `Mi.Oficina.MX.Setup.0.4.0.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
+| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.4.0-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
+| macOS Intel | `MiOficinaMX-0.4.0-x64.dmg` | Igual que el anterior. |
+| Ubuntu, Debian, Mint | `mi-oficina-mx_0.4.0_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.4.0_amd64.deb` |
+| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.4.0.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.4.0.x86_64.rpm` |
+| Cualquier Linux | `Mi.Oficina.MX-0.4.0.AppImage` | `chmod +x Mi.Oficina.MX-0.4.0.AppImage` y ábrelo |
 
 El instalador asocia los archivos `.docx`, `.xlsx`, `.csv`, `.pptx` y `.pdf`: con doble clic se abren en la app correcta.
 
@@ -108,6 +113,10 @@ node test/formats.test.mjs    # pruebas de formatos de número y fórmulas en es
 npm i --no-save playwright@1.49.1 && xvfb-run -a node test/e2e.mjs   # punta a punta (Linux sin pantalla)
 xvfb-run -a node test/e2e-fase2.mjs              # funciones de la fase 2 (OFICINA_LANG=en para probar en inglés)
 xvfb-run -a node test/e2e-fase3.mjs              # funciones de la fase 3
+xvfb-run -a node test/e2e-fase4.mjs              # funciones de la fase 4
+xvfb-run -a node test/a11y.mjs                   # auditoría de accesibilidad (axe-core)
+xvfb-run -a node test/perf.mjs calcula           # tiempos con archivos grandes (o: escribiente)
+xvfb-run -a npx electron --no-sandbox scripts/dict   # descarga los diccionarios de ortografía a build/dict
 python3 scripts/i18n/merge.py                     # regenera apps/shared/i18n-en.js desde scripts/i18n/en-*.py
 xvfb-run -a node test/i18n-crawl.mjs              # recorre la interfaz en inglés y lista textos sin traducir
 npm run dist:linux            # AppImage + deb + rpm
@@ -136,9 +145,9 @@ replica/                mapa de funciones y pantallas del proyecto
 
 ## Lo que falta (siguientes versiones)
 
-Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. Las fases 1, 2 y 3 están completas: todas las funciones *must*, *should* y *could* del mapa, cuatro de ellas con alcance parcial (ver abajo). Lo que queda fuera a propósito (*skip*) son las funciones en la nube: coautoría en tiempo real, Copilot, OneDrive y cuentas.
+Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. Las fases 1 a 4 están completas: todas las funciones *must*, *should* y *could* del mapa; solo el SmartArt queda con alcance parcial (ver abajo). Lo que queda fuera a propósito (*skip*) son las funciones en la nube: coautoría en tiempo real, Copilot, OneDrive y cuentas.
 
-**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y al final, tabulaciones, comentarios con sus respuestas, control de cambios y alineación, pero no siempre los colores ni las fuentes de cada palabra; las ecuaciones de un `.docx` hecho en Word todavía no se leen (las de Escribiente sí se guardan para Word); los diagramas tipo SmartArt se guardan en el `.docx` como imagen; al abrir un `.doc` antiguo se pierde el formato; las reacciones a comentarios no se guardan dentro del `.docx`; PowerPoint ve el patrón de Impresiona aplanado en cada diapositiva y la transición Transformación como un cambio sin efecto; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
+**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y al final, tabulaciones, comentarios con sus respuestas, control de cambios y alineación, pero no siempre los colores ni las fuentes de cada palabra; los diagramas tipo SmartArt se ven en Word como imagen (en Escribiente siguen editables); los `.doc` antiguos se abren sin imágenes; PowerPoint ve el patrón de Impresiona aplanado en cada diapositiva y la transición Transformación como un cambio sin efecto; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; Excel no ve las consultas de *Obtener y transformar* (solo la hoja con el resultado); la cámara en vivo se guarda en el `.pptx` pero PowerPoint no la reconoce; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
 
 ## Licencia
 

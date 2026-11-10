@@ -1,5 +1,6 @@
 // Motor de presentación de Impresiona: transiciones, animaciones por pasos, pluma y vista del moderador. GPL-3.0
 import { h, icon, t } from '../../shared/office.js';
+import { stopAllCams } from './fase4.js';
 
 export const EXIT_TYPES = ['fadeOut', 'flyOut', 'zoomOut'];
 // Trayectorias de animación: el objeto se ve desde el inicio y se mueve por el camino
@@ -64,6 +65,9 @@ export class ShowEngine {
     this.step = Math.min(step, this.steps.groups.length);
     this.drawInk();
     if (this.mode === 'show') layer.querySelectorAll('video[data-autoplay], audio[data-autoplay]').forEach((m) => { m.currentTime = 0; m.play().catch(() => {}); });
+    // narración grabada de la diapositiva
+    this.narr?.pause(); this.narr = null;
+    if (this.mode === 'show' && !this.noNarration && pres.useNarration !== false && s.narration?.src) { this.narr = new Audio(s.narration.src); this.narr.play().catch(() => {}); }
     // intervalos ensayados: avance automático
     if (this.mode === 'show' && this.useTimings && s.advanceAfter > 0) this.autoT = setTimeout(() => this.onAuto?.(), s.advanceAfter * 1000);
     this.onChange?.(this.state());
@@ -156,7 +160,7 @@ export class ShowEngine {
 }
 
 // ---------------------------------------------------------------- presentación en la misma ventana
-export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = false, onRehearsed }) {
+export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = false, onRehearsed, recording = false, onSlide }) {
   const show = h('div', { class: 'show', tabindex: 0 });
   const stageS = h('div', { class: 'show-stage' });
   const cnt = h('span', { class: 'cnt' });
@@ -171,11 +175,15 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = fals
   const fmt = (ms) => { const sec = Math.floor(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
   const rehTick = rehearse ? setInterval(() => { rehBox.firstChild.textContent = fmt(Date.now() - tSlide); rehBox.lastChild.textContent = fmt(Date.now() - tTotal); }, 250) : 0;
   if (rehBox) show.append(rehBox);
+  if (recording) show.append(h('div', { class: 'rec-dot' }, h('i'), 'REC'));
+  let slideSeen = null;
   const eng = new ShowEngine(stageS, { renderSlide, getPres, onChange: (st) => {
     cnt.textContent = `${st.i + 1} / ${st.total}`;
     if (rehearse && st.i !== lastI) { times[lastI] = (times[lastI] || 0) + (Date.now() - tSlide); tSlide = Date.now(); lastI = st.i; }
+    if (st.i !== slideSeen) { slideSeen = st.i; onSlide?.(st.i); }
   } });
-  eng.useTimings = !rehearse && getPres().useTimings !== false;
+  eng.useTimings = !rehearse && !recording && getPres().useTimings !== false;
+  eng.noNarration = recording;
   // con intervalos, al terminar el tiempo se pasa a la siguiente diapositiva (con sus pasos ya incluidos)
   eng.onAuto = () => { if (ended()) return; if (eng.i < getPres().slides.length - 1) eng.mount(eng.i + 1, { dir: 1 }); else next(); };
   const ended = () => show.classList.contains('ended');
@@ -184,6 +192,7 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = fals
   const end = () => {
     clearTimeout(eng.autoT); clearInterval(rehTick);
     show.querySelectorAll('video, audio').forEach((m) => m.pause());
+    eng.narr?.pause(); stopAllCams();
     show.remove(); if (document.fullscreenElement) document.exitFullscreen?.(); removeEventListener('resize', onResize);
     if (rehearse) { times[lastI] = (times[lastI] || 0) + (Date.now() - tSlide); onRehearsed?.(times.map((x) => (x ? Math.max(1, Math.round(x / 100) / 10) : 0)), Date.now() - tTotal); }
     onEnd?.(eng.i);

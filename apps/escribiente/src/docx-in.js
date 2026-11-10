@@ -1,4 +1,7 @@
 // Abre .docx (vía mammoth) y otros formatos de texto, y los convierte al HTML del editor. GPL-3.0
+import temml from 'temml';
+import { ommlToLatex, OMML_NS } from './omml.js';
+import { META_DOCX, applyMeta } from './meta.js';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 
@@ -74,12 +77,15 @@ function applyAligns(container, aligns) {
 // mammoth no conserva comentarios ni texto eliminado: antes de convertir, se marcan con
 // caracteres privados (U+E000…U+E001) dentro de document.xml y después se envuelven en el HTML.
 const MK0 = '\uE000', MK1 = '\uE001';
+const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+const unb64 = (s) => decodeURIComponent(escape(atob(s)));
 const attr = (el, a) => el.getAttributeNS(W, a) || el.getAttribute(`w:${a}`) || '';
 const textOf = (el) => [...el.getElementsByTagNameNS(W, 'p')].map((p) => [...p.getElementsByTagNameNS(W, 't')].map((t) => t.textContent).join('')).join('\n').trim();
 async function markRevisions(bytes) {
   const out = { bytes, comments: [], endnoteIds: new Set() };
   try {
     const zip = await JSZip.loadAsync(bytes);
+    try { const mt = await zip.file(META_DOCX)?.async('string'); if (mt) out.meta = JSON.parse(mt); } catch { /* */ }
     const xml = await zip.file('word/document.xml')?.async('string');
     if (!xml) return out;
     const d = new DOMParser().parseFromString(xml, 'application/xml');
@@ -122,6 +128,16 @@ async function markRevisions(bytes) {
           el.replaceWith(mkRun(`${tag === 'commentRangeEnd' ? '/' : ''}c:${id}`)); changed = true;
         }
       }
+    }
+    // Ecuaciones de Word (OMML) -> LaTeX editable
+    for (const el of [...d.getElementsByTagNameNS(OMML_NS, 'oMathPara'), ...d.getElementsByTagNameNS(OMML_NS, 'oMath')]) {
+      if (!d.documentElement.contains(el)) continue;
+      if (el.localName === 'oMath' && el.parentNode?.localName === 'oMathPara') continue;
+      const tex = ommlToLatex(el);
+      if (!tex) continue;
+      const run = mkRun(`q:${b64(tex)}`);
+      if (el.parentNode?.localName === 'body') { const p = d.createElementNS(W, 'w:p'); p.append(run); el.replaceWith(p); } else el.replaceWith(run);
+      changed = true;
     }
     // Inserciones y eliminaciones (solo las que contienen texto, no las marcas de párrafo)
     for (const kind of ['ins', 'del']) {
@@ -170,6 +186,7 @@ function wrapMarks(box, comments) {
       else if (k.startsWith('/c:')) { const i = open.lastIndexOf(k.slice(3)); if (i >= 0) open.splice(i, 1); }
       else if (k.startsWith('i:') || k.startsWith('d:')) { const [author, date] = k.slice(2).split('|'); rev = { kind: k[0] === 'i' ? 'ins' : 'del', author, date }; }
       else if (k === '/i' || k === '/d') rev = null;
+      else if (k.startsWith('q:')) { const tex = unb64(k.slice(2)); const sp = document.createElement('span'); sp.className = 'eq'; sp.contentEditable = 'false'; sp.dataset.tex = tex; try { sp.innerHTML = temml.renderToString(tex, { annotate: true }); } catch { sp.textContent = tex; } frag.append(sp); }
     }
     emit(v.slice(last));
     t.replaceWith(frag);
@@ -218,7 +235,8 @@ export async function docxToHtml(bytes) {
   // párrafos vacíos -> <p><br></p> para que se puedan editar
   box.querySelectorAll('p:empty').forEach((p) => p.append(document.createElement('br')));
   const warnings = (res.messages || []).filter((m) => m.type === 'warning').map((m) => m.message);
-  return { html: box.innerHTML || '<p><br></p>', page: extras.page, footnotes, endnotes, comments, warnings: warnings.length ? [`${warnings.length} elementos no se pudieron conservar del todo`] : [] };
+  const { sources } = applyMeta(box, marked.meta, comments, (tex) => { try { return temml.renderToString(tex, { annotate: true }); } catch { return null; } });
+  return { html: box.innerHTML || '<p><br></p>', page: extras.page, footnotes, endnotes, comments, sources, warnings: warnings.length ? [`${warnings.length} elementos no se pudieron conservar del todo`] : [] };
 }
 
 const escHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));

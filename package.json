@@ -1,7 +1,7 @@
 {
   "name": "mi-oficina-mx",
   "productName": "Mi Oficina MX",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Suite ofimática libre y multiplataforma: Escribiente, Calcula Datos, Impresiona y PapelPDF.",
   "main": "main.js",
   "author": {
@@ -35,6 +35,7 @@
   "devDependencies": {
     "@tesseract.js-data/eng": "1.0.0",
     "@tesseract.js-data/spa": "1.0.0",
+    "axe-core": "^4.10.2",
     "diff": "9.0.0",
     "echarts": "6.1.0",
     "electron": "33.2.1",
@@ -56,6 +57,9 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "extraResources": [
+      { "from": "build/dict", "to": "dict", "filter": ["*.bdic"] }
+    ],
     "files": [
       "main.js",
       "main/**/*",
@@ -199,7 +203,11 @@
         }
       ],
       "category": "public.app-category.productivity",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Impresiona usa la cámara para mostrarte en vivo dentro de la presentación.",
+        "NSMicrophoneUsageDescription": "Impresiona usa el micrófono para grabar la narración de tu presentación."
+      }
     },
     "linux": {
       "target": [

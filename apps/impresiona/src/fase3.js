@@ -3,6 +3,7 @@
 import { Muxer, ArrayBufferTarget } from 'webm-muxer';
 import { h, toast, modal, form, api, t, tf, esc } from '../../shared/office.js';
 import { buildSteps, pathPoints, PATH_TYPES } from './show.js';
+import { narrationTrack } from './fase4.js';
 
 let C = null; // { getPres, slide, commit, select, center, uid, renderAll, present, runShow, renderSlide }
 export function init(ctx) { C = ctx; }
@@ -174,7 +175,14 @@ export async function exportVideo({ width = 1280, secs = 5, useTimings = false, 
     const W = r.width - (r.width % 2), H = r.height - (r.height % 2);
     const imgs = await Promise.all(r.frames.map((b) => createImageBitmap(new Blob([b], { type: 'image/png' }))));
     const cfg = await pickCodec(W, H, fps); if (!cfg) throw new Error(t('Este equipo no puede codificar video.'));
-    const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: cfg.mux, width: W, height: H, frameRate: fps } });
+    // narración grabada: una pista de audio Opus
+    let audio = null;
+    if (typeof AudioEncoder !== 'undefined') {
+      msg.textContent = t('Preparando la narración…');
+      const pcm = await narrationTrack(pres, plan, fps);
+      if (pcm) { try { const r2 = await AudioEncoder.isConfigSupported({ codec: 'opus', sampleRate: 48000, numberOfChannels: 1, bitrate: 96000 }); if (r2.supported) audio = pcm; } catch { /* */ } }
+    }
+    const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: cfg.mux, width: W, height: H, frameRate: fps }, ...(audio ? { audio: { codec: 'A_OPUS', sampleRate: 48000, numberOfChannels: 1 } } : {}) });
     let encErr = null;
     const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => { encErr = e; } });
     enc.configure({ codec: cfg.codec, width: W, height: H, bitrate: W >= 1900 ? 8e6 : W >= 1200 ? 5e6 : 2.5e6, framerate: fps });
@@ -199,7 +207,21 @@ export async function exportVideo({ width = 1280, secs = 5, useTimings = false, 
         await emit();
       }
     }
-    await enc.flush(); muxer.finalize();
+    await enc.flush();
+    if (audio) {
+      const aenc = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: (e) => { encErr = e; } });
+      aenc.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 1, bitrate: 96000 });
+      const N = 4800;
+      for (let k = 0; k < audio.length; k += N) {
+        const part = audio.subarray(k, Math.min(audio.length, k + N));
+        const ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: part.length, numberOfChannels: 1, timestamp: Math.round((k / 48000) * 1e6), data: part });
+        aenc.encode(ad); ad.close();
+        if (aenc.encodeQueueSize > 16) await new Promise((res) => setTimeout(res, 0));
+      }
+      await aenc.flush();
+      if (encErr) throw encErr;
+    }
+    muxer.finalize();
     const bytes = new Uint8Array(muxer.target.buffer);
     bar.value = 100;
     if (!save) return bytes;

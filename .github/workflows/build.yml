@@ -34,6 +34,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm hfsprogs cmake libssl-dev zlib1g-dev libbz2-dev xvfb
       - run: npm ci
+      - name: Diccionarios de ortografía (sin internet en la app)
+        continue-on-error: true
+        run: xvfb-run -a npx electron --no-sandbox scripts/dict
       - name: Interfaz (minificada)
         run: NODE_ENV=production node scripts/build-ui.mjs
       - name: Pruebas de formatos
@@ -47,6 +50,9 @@ jobs:
           python3 -m pip install --user -q msoffcrypto-tool || python3 -m pip install --break-system-packages -q msoffcrypto-tool || true
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase3.mjs
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase3.mjs
+          xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase4.mjs
+          OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase4.mjs
+          xvfb-run -a -s "-screen 0 1600x1000x24" node test/a11y.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -55,6 +61,7 @@ jobs:
             test/out/e2e/*.png
             test/out/fase2/*.png
             test/out/fase3/*.png
+            test/out/fase4/*.png
           if-no-files-found: ignore
       - name: Instaladores de Linux
         run: npx electron-builder --linux AppImage deb rpm --x64 --publish never
@@ -93,6 +100,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Diccionarios de ortografía (sin internet en la app)
+        continue-on-error: true
+        run: npx electron scripts/dict
       - name: Interfaz (minificada)
         run: node scripts/build-ui.mjs --min
       - name: Pruebas de formatos

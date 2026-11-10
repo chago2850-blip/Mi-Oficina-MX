@@ -20,6 +20,10 @@ const log = (m) => console.log(`✔ ${m}`);
 const exe = process.env.OFICINA_EXE;
 const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${userData}`, "--no-sandbox"] } : { args: [root, `--user-data-dir=${userData}`, "--no-sandbox"] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out, OFICINA_LANG: process.env.OFICINA_LANG || 'es' } });
 const main = (fn, arg) => app.evaluate(fn, arg);
+// errores de JavaScript en cualquier ventana: la prueba falla si aparece alguno
+const pageErrors = [];
+const watch = (w) => { w.on('pageerror', (e) => pageErrors.push(`${w.url().split('/').slice(-2).join('/')}: ${e.message}`)); w.on('console', (m) => { if (m.type() === 'error' && !/favicon|Autofill|dictionary|Dictionar|getUserMedia|Requested device not found/i.test(m.text())) pageErrors.push(`${w.url().split('/').slice(-2).join('/')} console: ${m.text().slice(0, 300)}`); }); };
+app.on('window', watch); app.windows().forEach(watch);
 async function waitWindow(pred, ms = 15000) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
@@ -217,6 +221,7 @@ try {
   ls = await launcherState();
   assert.ok(ls.visible && !ls.minimized);
   log('la dona vuelve después de cerrar PapelPDF');
+  assert.deepEqual(pageErrors, [], `errores en las ventanas:\n${pageErrors.join('\n')}`);
   console.log('\nTodas las pruebas de punta a punta pasaron.');
 } catch (err) {
   console.error('✘', err);

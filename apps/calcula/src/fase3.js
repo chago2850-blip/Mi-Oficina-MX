@@ -332,7 +332,8 @@ function getImage(src) {
 function drawOverlay(ctx, r1, r2, c1, c2) {
   const x = X3();
   for (const sp of x.sparklines) { if (sp.r < r1 || sp.r > r2 || sp.c < c1 || sp.c > c2) continue; const rc = C.grid.cellRect(sp.r, sp.c); if (rc.h > 2) drawSpark(ctx, sp, rc); }
-  const used = C.wb.usedRange(); if (used.empty) return;
+  const dims = C.wb.hf.getSheetDimensions(C.wb.sheet.id); if (!dims.height) return; // imágenes = valores de celda; no hace falta recorrer los formatos
+  const used = { r1: 0, c1: 0, r2: dims.height - 1, c2: dims.width - 1 };
   for (let r = Math.max(r1, used.r1); r <= Math.min(r2, used.r2); r++) for (let c = Math.max(c1, used.c1); c <= Math.min(c2, used.c2); c++) {
     const src = imageAt(r, c); if (!src) continue;
     const rc = C.grid.cellRect(r, c); const im = getImage(src);

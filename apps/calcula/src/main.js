@@ -1,13 +1,14 @@
 // Calcula Datos — hoja de cálculo de Mi Oficina MX. GPL-3.0-or-later
-import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, confirmBox, onLang, t } from '../../shared/office.js';
+import { OfficeShell, h, $, $$, icon, toast, modal, form, dropdown, closeDropdown, esc, api, confirmBox, onLang, t, announce } from '../../shared/office.js';
 import * as echarts from 'echarts/dist/echarts.esm.min.mjs';
 import { Workbook, colName, addr, rangeStr, parseRange, parseAddr } from './workbook.js';
 import { Grid } from './grid.js';
 import { readXlsx, writeXlsx, parseCsv, toCsv } from './xlsx.js';
-import { toSpanish, FUNCTION_HELP } from './i18n.js';
+import { toSpanish, toEnglish, FUNCTION_HELP } from './i18n.js';
 import { FORMATS, changeDecimals, parseInput, formatValue } from './format.js';
 import * as F from './features.js';
 import * as F3 from './fase3.js';
+import * as Q from './query.js';
 import { readOds, writeOds } from './ods.js';
 import { injectVba } from './xlsx.js';
 
@@ -77,6 +78,8 @@ function refresh() {
   const g = sel(), { r, c } = grid.sel;
   nameBox.value = document.activeElement === nameBox ? nameBox.value : (g.r1 === g.r2 && g.c1 === g.c2 ? addr(r, c) : (g.r1 === 0 && g.r2 >= wb.sheet.nRows - 1 ? `${colName(g.c1)}:${colName(g.c2)}` : g.c1 === 0 && g.c2 >= wb.sheet.nCols - 1 ? `${g.r1 + 1}:${g.r2 + 1}` : rangeStr(g)));
   if (!grid.editing) fxInput.value = wb.editText(r, c);
+  // lector de pantalla: celda activa y su contenido
+  if (document.activeElement === grid.canvas) { const key = `${wb.active}:${r}:${c}`; const txt = wb.display(r, c); if (key !== refresh.last || txt !== refresh.lastTxt) { refresh.last = key; refresh.lastTxt = txt; announce(`${addr(r, c)}${txt !== '' ? `, ${txt}` : ''}${wb.editText(r, c).startsWith('=') ? `, ${t('fórmula')} ${wb.editText(r, c)}` : ''}`); } }
   // estado de la cinta
   const st = curStyle(), rb = shell.ribbon;
   rb.setOn('bold', st.b); rb.setOn('italic', st.i); rb.setOn('underline', st.u); rb.setOn('strike', st.s);
@@ -552,8 +555,11 @@ const adapter = {
       const text = new TextDecoder('utf-8').decode(f.bytes);
       wb.reset(); const s = wb.addSheet(f.name.replace(/\.[^.]+$/, '').slice(0, 31) || 'Hoja1');
       const rows = parseCsv(text);
-      wb.hf.batch(() => rows.forEach((row, r) => row.forEach((v, c) => { if (v !== '') wb.setInput(r, c, v); })));
-      s.nRows = Math.max(1000, rows.length + 200);
+      // se interpreta cada valor y se carga todo de una vez (mucho más rápido que celda por celda)
+      let width = 0;
+      const data = rows.map((row, r) => { if (row.length > width) width = row.length; return row.map((v, c) => { if (v === '') return null; const p = parseInput(v); let x = p.value; if (typeof x === 'string' && x.startsWith('=')) x = toEnglish(x); if (p.fmt) s.styles.set(`${r},${c}`, Object.freeze({ fmt: p.fmt })); return x; }); });
+      wb.hf.setSheetContent(s.id, data);
+      s.nRows = Math.max(1000, rows.length + 200); s.nCols = Math.max(52, width + 20);
       wb.hf.clearUndoStack?.(); wb.undoStack = [];
       afterLoad(); return {};
     }
@@ -664,6 +670,12 @@ async function onCommand(cmd, arg) {
     case 'pivot': return F.pivotDialog();
     case 'goalSeek': return F3.goalSeek();
     case 'solver': return F3.solver();
+    case 'getDataCsv': return Q.getData('csv');
+    case 'getDataXlsx': return Q.getData('xlsx');
+    case 'getDataJson': return Q.getData('json');
+    case 'getDataRange': return Q.getData('range');
+    case 'queries': return Q.manageQueries();
+    case 'refreshAll': return Q.refreshAll();
     case 'sparkline': return F3.sparklineDialog(arg || 'line');
     case 'clearSparklines': return F3.clearSparklines();
     case 'group': return F3.group(false);
@@ -768,6 +780,7 @@ const TABS = [
     { label: 'Nombres definidos', items: [{ cmd: 'defineName', label: 'Definir nombre', icon: 'textbox', size: 'lg' }, { cmd: 'nameManager', label: 'Administrador de nombres', icon: 'layout', size: 'lg' }] },
   ] },
   { id: 'data', label: 'Datos', groups: [
+    { label: 'Obtener y transformar', items: [{ cmd: 'getData', label: 'Obtener datos', icon: 'open', size: 'lg', menu: () => [{ label: 'Desde texto/CSV…', run: () => onCommand('getDataCsv') }, { label: 'Desde un libro de Excel…', run: () => onCommand('getDataXlsx') }, { label: 'Desde JSON…', run: () => onCommand('getDataJson') }, '-', { label: 'Desde tabla o rango', run: () => onCommand('getDataRange') }] }, { cmd: 'refreshAll', label: 'Actualizar todo', icon: 'recover', size: 'lg' }, { cmd: 'queries', label: 'Consultas y conexiones', icon: 'layout', size: 'lg' }] },
     { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }] },
     { label: 'Herramientas de datos', items: [{ cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
     { label: 'Previsión', items: [{ cmd: 'whatIf', label: 'Análisis de hipótesis', icon: 'func', size: 'lg', menu: () => [{ label: 'Buscar objetivo…', run: () => onCommand('goalSeek') }, { label: 'Solver…', run: () => onCommand('solver') }] }] },
@@ -789,6 +802,7 @@ shell = new OfficeShell({ appId: 'calcula', appName: 'Calcula Datos', logo: '../
 buildWorkspace(shell.workspace);
 F.initFeatures({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g) });
 F3.init({ wb, grid, shell, act, refresh, applyFilter, mountCharts, refreshCharts });
+Q.init({ wb, grid, shell, act, refresh, switchSheet, refreshCharts });
 { const pc = grid.positionCharts.bind(grid); grid.positionCharts = () => { pc(); F3.positionSlicers(); }; }
 statusInfo = h('span', { class: 'selstats' });
 zoom = shell.zoomControl({ value: 100, min: 50, max: 250, onChange: (v) => { grid.zoom = v / 100; grid.updateSpacer(); grid.syncScroll(); grid.draw(); } });
@@ -808,4 +822,4 @@ shell.start();
 // Al cambiar el idioma, las fórmulas y errores se vuelven a mostrar en el idioma nuevo
 onLang(() => { grid.invalidate(); grid.draw(); refresh(); });
 
-window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3 };
+window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q };

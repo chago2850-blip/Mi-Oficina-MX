@@ -49,7 +49,7 @@ const state = {
 let shell, editor, pagesEl, scroller, ruler, statusPages, statusWords, imgBox, selImg = null;
 
 function buildWorkspace(ws) {
-  scroller = h('div', { class: 'scroller' });
+  scroller = h('div', { class: 'scroller', role: 'region', 'aria-label': 'Páginas del documento', tabindex: '0' });
   ruler = h('div', { class: 'ruler', 'aria-hidden': 'true' });
   pagesEl = h('div', { class: 'pages' });
   editor = h('div', { id: 'editor', class: 'doc', contenteditable: 'true', spellcheck: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Documento' });
@@ -256,6 +256,8 @@ function paginate() {
   for (const b of blocks) if (b.dataset.push) { b.style.marginTop = ''; delete b.dataset.push; }
   const tops = blocks.map((b) => b.offsetTop);
   const hs = blocks.map((b) => b.offsetHeight);
+  // se leen todos los márgenes antes de escribir estilos (leerlos dentro del bucle forzaba recalcular la página en cada salto: muy lento en documentos largos)
+  const mbs = blocks.map((b) => parseFloat(getComputedStyle(b).marginBottom) || 0);
   let shift = 0, forceNext = false;
   const pageOf = [];
   // notas al pie: reducen el espacio de la página donde aparece su llamada
@@ -276,7 +278,7 @@ function paginate() {
     else if (top + hs[i] > zoneEnd && hs[i] <= H && top > page * S + 1) add = (page + 1) * S - top;
     if (add > 0) {
       const prev = blocks[i - 1];
-      const prevMB = prev ? parseFloat(getComputedStyle(prev).marginBottom) || 0 : 0;
+      const prevMB = prev ? mbs[i - 1] : 0;
       b.style.marginTop = `${prevMB + add}px`;
       b.dataset.push = String(add);
       shift += add; top += add; page = Math.floor(top / S);
@@ -781,13 +783,13 @@ const adapter = {
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
       state.header = ''; state.footer = ''; state.pageNumbers = 'none';
-      Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
     }
     if (f.ext === 'odt') {
       const r = await odtToHtml(f.bytes);
-      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { props: r.props };
     }
@@ -796,11 +798,11 @@ const adapter = {
       const d = f.doc || {};
       Object.assign(state, { header: (d.headers || '').trim().split('\n')[0] || '', footer: (d.footers || '').trim().split('\n')[0] || '', pageNumbers: 'none', comments: [], footnotes: {}, endnotes: {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
       const paras = String(d.body || '').replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-      let html = textToHtml(paras);
+      let html = d.html ? sanitize(d.html) : textToHtml(paras);
       const notes = [d.footnotes, d.endnotes].map((x) => String(x || '').trim()).filter(Boolean);
       if (notes.length) html += `<h2>${esc(t('Notas'))}</h2>${textToHtml(notes.join('\n'))}`;
       setContent(html);
-      return { warnings: [t('Documento de Word 97-2003 (.doc): se recuperó el texto; el formato se pierde (modo compatibilidad)')] };
+      return { warnings: [d.html ? t('Documento de Word 97-2003 (.doc): se recuperaron el texto, los títulos, las tablas, las listas y el formato básico. Se guardará como .docx (modo compatibilidad)') : t('Documento de Word 97-2003 (.doc): se recuperó el texto; el formato se pierde (modo compatibilidad)')] };
     }
     if (f.ext === 'txt') { setContent(textToHtml(text())); return {}; }
     if (f.ext === 'md') { setContent(markdownToHtml(text())); return {}; }

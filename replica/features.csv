@@ -21,9 +21,9 @@ Deshacer y rehacer ilimitado,compartido,must,yes,yes,
 Buscar y reemplazar (incluye sin acentos),compartido,must,yes,yes,
 Cinta con pestañas y pestañas contextuales,compartido,must,yes,yes,patrón de interfaz; íconos propios
 Portapapeles con pegado especial (solo texto / formato),compartido,must,yes,yes,clic derecho → Pegar solo texto
-Revisión ortográfica en español e inglés,compartido,must,yes,yes,diccionarios Hunspell libres
+Revisión ortográfica en español e inglés,compartido,must,yes,yes,"diccionarios Hunspell libres incluidos en el instalador (funciona sin internet)"
 Comentarios con respuestas,compartido,should,yes,yes,Escribiente (se importan de docx con sus respuestas); notas de celda en Calcula Datos
-Reacciones en comentarios,compartido,could,yes,partial,"👍 ❤️ 🎉 😮 👀 en comentarios y respuestas de Escribiente; se guardan en la recuperación y el HTML, no dentro del .docx"
+Reacciones en comentarios,compartido,could,yes,yes,"👍 ❤️ 🎉 😮 👀 en comentarios y respuestas de Escribiente; se guardan dentro del .docx y del .odt (Word las ignora)"
 Abrir y guardar ODF (odt ods odp),compartido,should,yes,yes,escritor/lector propio; fórmulas OpenFormula
 Barra de acceso rápido personalizable,compartido,could,yes,yes,"por app, desde la flecha junto a Guardar/Deshacer"
 Plantillas propias incluidas,compartido,should,yes,yes,escritas desde cero
@@ -53,16 +53,16 @@ Control de cambios (aceptar/rechazar),escribiente,should,yes,yes,también se imp
 Panel de navegación por títulos,escribiente,should,yes,yes,
 Copiar formato (brocha),escribiente,should,yes,yes,
 Símbolos y caracteres especiales,escribiente,should,yes,yes,
-Ecuaciones,escribiente,could,yes,partial,LaTeX con vista previa; se guardan como ecuación de Word (OMML) y fórmula ODF; las ecuaciones de un .docx ajeno aún no se leen
+Ecuaciones,escribiente,could,yes,yes,"LaTeX con vista previa; se guardan como ecuación de Word (OMML) y fórmula ODF; las ecuaciones de Word y LibreOffice se leen y se vuelven editables"
 Combinar correspondencia desde CSV/XLSX,escribiente,should,yes,yes,"vista previa y salida a docx, pdf o documento"
 Etiquetas y sobres,escribiente,could,yes,yes,"Avery 5160, 5163, L7163 y sobres DL, C5, núm. 10; combinan con los destinatarios"
 Citas y bibliografía,escribiente,could,yes,yes,fuentes y estilo APA
 Comparar dos documentos,escribiente,could,yes,yes,el resultado queda como control de cambios
 Marca de agua y color de página,escribiente,should,yes,yes,
 Modo enfoque / lectura,escribiente,could,yes,yes,
-Abrir doc binario antiguo,escribiente,could,yes,partial,"se recupera el texto, encabezados y notas; el formato se pierde (modo compatibilidad)"
+Abrir doc binario antiguo,escribiente,could,yes,yes,"lector propio de Word 97-2003: títulos, negritas/cursivas/subrayado, color y tamaño, tablas, listas, alineación, encabezados y notas; sin imágenes"
 Exportar a txt html y markdown,escribiente,could,yes,yes,
-SmartArt,escribiente,could,yes,partial,"lista, proceso, ciclo, jerarquía y pirámide editables; en .docx se guardan como imagen"
+SmartArt,escribiente,could,yes,partial,"lista, proceso, ciclo, jerarquía y pirámide; en Word se ven como imagen y al volver a abrir el .docx en Escribiente siguen editables"
 Cuadrícula con celdas filas columnas y varias hojas,calcula datos,must,yes,yes,canvas para 100k+ filas
 Barra de fórmulas y cuadro de nombres,calcula datos,must,yes,yes,
 Fórmulas con referencias relativas absolutas y entre hojas,calcula datos,must,yes,yes,HyperFormula
@@ -139,8 +139,11 @@ Coautoría en tiempo real y OneDrive,compartido,skip,yes,skip,servicio en la nub
 Copilot y Designer,compartido,skip,yes,skip,servicio de IA de pago de Microsoft
 Imágenes e íconos de archivo de Office,compartido,skip,yes,skip,contenido con licencia
 Fuentes de Microsoft (Calibri Aptos Cambria),compartido,skip,yes,skip,se usan Carlito Caladea Liberation
-Funciones de cubo y Power Pivot / Power Query,calcula datos,skip,yes,skip,dependen de servidores y motores de Microsoft
-Cameo (cámara en vivo en diapositiva),impresiona,skip,yes,skip,posible después de v1.0
-Recording Studio,impresiona,skip,yes,skip,posible después de v1.0
+Obtener y transformar datos (tipo Power Query),calcula datos,could,yes,yes,"CSV/TXT, libro de Excel, JSON y rango; pasos aplicados (quitar, filtrar, tipo, dividir, columna personalizada, agrupar, anexar, combinar…), Actualizar todo; las consultas se guardan en el .xlsx"
+Funciones de cubo y Power Pivot,calcula datos,skip,yes,skip,dependen de servidores y motores de Microsoft
+Cameo (cámara en vivo en diapositiva),impresiona,could,yes,yes,"círculo, rectángulo redondeado o rectángulo, espejo y borde; se guarda en el .pptx"
+Grabar presentación con narración,impresiona,could,yes,yes,"voz e intervalos por diapositiva; se reproduce en la presentación, entra en el video WebM y se guarda en el .pptx"
 Videos de Microsoft Stream/SharePoint,impresiona,skip,yes,skip,servicio de Microsoft
 Nombres y logotipos de Microsoft,compartido,skip,yes,skip,marcas registradas
+Accesibilidad (lector de pantalla y teclado),compartido,should,yes,yes,"roles ARIA, flechas en la cinta, F6 entre zonas, foco visible, anuncio de la celda activa; auditado con axe-core (sin problemas serios, contraste AA)"
+Rendimiento con archivos grandes,compartido,should,yes,yes,"CSV de 100 000 filas en ~2 s, documento de 300 páginas en <1 s; medido con test/perf.mjs"

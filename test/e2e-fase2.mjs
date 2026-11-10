@@ -17,6 +17,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (m) => console.log(`✔ ${m}`);
 const exe = process.env.OFICINA_EXE;
 const app = await electron.launch({ ...(exe ? { executablePath: exe, args: [`--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] } : { args: [root, `--user-data-dir=${path.join(out, 'perfil')}`, '--no-sandbox'] }), cwd: root, env: { ...process.env, OFICINA_TEST_DIR: out, OFICINA_LANG: process.env.OFICINA_LANG || 'es' } });
+// errores de JavaScript en cualquier ventana: la prueba falla si aparece alguno
+const pageErrors = [];
+const watch = (w) => { w.on('pageerror', (e) => pageErrors.push(`${w.url().split('/').slice(-2).join('/')}: ${e.message}`)); w.on('console', (m) => { if (m.type() === 'error' && !/favicon|Autofill|dictionary|Dictionar|getUserMedia|Requested device not found/i.test(m.text())) pageErrors.push(`${w.url().split('/').slice(-2).join('/')} console: ${m.text().slice(0, 300)}`); }); };
+app.on('window', watch); app.windows().forEach(watch);
 async function waitWindow(pred, ms = 15000) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) { for (const w of app.windows()) { try { if (pred(w.url())) return w; } catch { /* */ } } await wait(150); }
@@ -298,6 +302,7 @@ try {
     log('Suite: la interfaz cambia a inglés y de regreso a español sin reiniciar (cinta, menús, diálogos y fórmulas)');
     await closeApp('calcula'); await wait(500);
   }
+  assert.deepEqual(pageErrors, [], `errores en las ventanas:\n${pageErrors.join('\n')}`);
   console.log('\nTodas las pruebas de la fase 2 pasaron.');
 } catch (err) {
   console.error('✘', err);

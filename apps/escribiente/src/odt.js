@@ -1,6 +1,7 @@
 // Documentos ODF de texto (.odt): abrir y guardar. GPL-3.0
 import JSZip from 'jszip';
 import { t } from '../../shared/i18n.js';
+import { collectMeta, applyMeta, META_ODT } from './meta.js';
 
 const NS = {
   office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', style: 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
@@ -190,6 +191,12 @@ ${heading(1, 16, '#2F2496')}${heading(2, 13, '#3D30B5')}${heading(3, 12, '#3D30B
   const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta ${NSDECL} office:version="1.3"><office:meta><meta:generator>Escribiente · Mi Oficina MX</meta:generator><dc:title>${x(settings.title)}</dc:title><dc:creator>${x(settings.author)}</dc:creator><dc:subject>${x(settings.subject)}</dc:subject><meta:keyword>${x(settings.keywords)}</meta:keyword><dc:date>${new Date().toISOString()}</dc:date></office:meta></office:document-meta>`;
   zip.file('content.xml', content); zip.file('styles.xml', styles); zip.file('meta.xml', meta);
   zip.file('META-INF/manifest.xml', `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>${pictures.map((p) => `<manifest:file-entry manifest:full-path="${p}" manifest:media-type="image/${p.split('.').pop().replace('jpg', 'jpeg').replace('svg', 'svg+xml')}"/>`).join('')}${formulas.map((d) => `<manifest:file-entry manifest:full-path="${d}/" manifest:version="1.3" manifest:media-type="application/vnd.oasis.opendocument.formula"/><manifest:file-entry manifest:full-path="${d}/content.xml" manifest:media-type="text/xml"/>`).join('')}</manifest:manifest>`);
+  const xmeta = collectMeta(editorEl, settings);
+  if (xmeta) {
+    zip.file(META_ODT, JSON.stringify(xmeta));
+    const mf = await zip.file('META-INF/manifest.xml').async('string');
+    zip.file('META-INF/manifest.xml', mf.replace('</manifest:manifest>', `<manifest:file-entry manifest:full-path="${META_ODT}" manifest:media-type="application/json"/></manifest:manifest>`));
+  }
   return zip.generateAsync({ type: 'uint8array', mimeType: 'application/vnd.oasis.opendocument.text', compression: 'DEFLATE' });
 }
 
@@ -309,5 +316,10 @@ export async function odtToHtml(bytes) {
     page = { w, h: hgt, mt: lenToPx(A(pl, 'fo', 'margin-top') || '2cm'), mb: lenToPx(A(pl, 'fo', 'margin-bottom') || '2cm'), ml: lenToPx(A(pl, 'fo', 'margin-left') || '2cm'), mr: lenToPx(A(pl, 'fo', 'margin-right') || '2cm'), landscape: w > hgt };
   }
   const mg = (tag, ns = 'dc') => meta?.getElementsByTagNameNS(NS[ns], tag)[0]?.textContent || '';
-  return { html: html || '<p><br></p>', page, footnotes, endnotes, props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
+  let html2 = html; let sources = [];
+  try {
+    const mt = await zip.file(META_ODT)?.async('string');
+    if (mt) { const box = document.createElement('div'); box.innerHTML = html; ({ sources } = applyMeta(box, JSON.parse(mt), [], null)); html2 = box.innerHTML; }
+  } catch { /* */ }
+  return { html: html2 || '<p><br></p>', page, footnotes, endnotes, sources, props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
 }

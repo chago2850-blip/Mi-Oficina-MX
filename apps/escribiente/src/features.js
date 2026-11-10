@@ -572,7 +572,7 @@ export function layoutTabs() {
   }
 }
 export function drawTabMarkers(left, z, cw) {
-  const sel = h('button', { class: 'tabkind', title: 'Tipo de tabulación (clic para cambiar): izquierda, centrada o derecha', onclick: () => { tabKind = { l: 'c', c: 'r', r: 'l' }[tabKind]; sel.dataset.k = tabKind; } });
+  const sel = h('button', { class: 'tabkind', tabindex: '-1', title: 'Tipo de tabulación (clic para cambiar): izquierda, centrada o derecha', onclick: () => { tabKind = { l: 'c', c: 'r', r: 'l' }[tabKind]; sel.dataset.k = tabKind; } });
   sel.dataset.k = tabKind;
   C.ruler.append(sel);
   const b = C.currentBlock();
