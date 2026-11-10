@@ -104,6 +104,48 @@ function parseConstraints(text, varCells) {
   void varCells;
   return out;
 }
+// Simplex de dos fases: maximiza c·y con filas A·y (<=, >=, =) b y y >= 0
+export function simplex(c, A, b, types) {
+  const EPS = 1e-9; const m = A.length, n = c.length;
+  A = A.map((r) => r.slice()); b = b.slice(); types = types.slice();
+  for (let i = 0; i < m; i++) if (b[i] < 0) { A[i] = A[i].map((v) => -v); b[i] = -b[i]; types[i] = types[i] === '<=' ? '>=' : types[i] === '>=' ? '<=' : '='; }
+  const nS = types.filter((x) => x !== '=').length, nA = types.filter((x) => x !== '<=').length;
+  const cols = n + nS + nA; const T = []; const basis = []; let si = 0, ai = 0;
+  for (let i = 0; i < m; i++) {
+    const row = new Array(cols + 1).fill(0); A[i].forEach((v, j) => { row[j] = v; });
+    if (types[i] === '<=') { row[n + si] = 1; basis[i] = n + si; si++; }
+    else if (types[i] === '>=') { row[n + si] = -1; si++; row[n + nS + ai] = 1; basis[i] = n + nS + ai; ai++; }
+    else { row[n + nS + ai] = 1; basis[i] = n + nS + ai; ai++; }
+    row[cols] = b[i]; T.push(row);
+  }
+  const banned = new Set();
+  const pivot = (r, k) => { const pv = T[r][k]; for (let j = 0; j <= cols; j++) T[r][j] /= pv; for (let i = 0; i < m; i++) if (i !== r && Math.abs(T[i][k]) > EPS) { const f = T[i][k]; for (let j = 0; j <= cols; j++) T[i][j] -= f * T[r][j]; } basis[r] = k; };
+  const optimize = (cost) => {
+    for (let it = 0; it < 5000; it++) {
+      let enter = -1;
+      for (let j = 0; j < cols; j++) { if (banned.has(j)) continue; let rc = cost[j]; for (let i = 0; i < m; i++) rc -= cost[basis[i]] * T[i][j]; if (rc > EPS) { enter = j; break; } }
+      if (enter < 0) return 'ok';
+      let row = -1, best = Infinity;
+      for (let i = 0; i < m; i++) if (T[i][enter] > EPS) { const q = T[i][cols] / T[i][enter]; if (q < best - EPS || (Math.abs(q - best) <= EPS && basis[i] < basis[row])) { best = q; row = i; } }
+      if (row < 0) return 'unbounded';
+      pivot(row, enter);
+    }
+    return 'ok';
+  };
+  if (nA) {
+    const c1 = new Array(cols).fill(0); for (let j = n + nS; j < cols; j++) c1[j] = -1;
+    optimize(c1);
+    const art = basis.reduce((a, k, i) => a + (k >= n + nS ? T[i][cols] : 0), 0);
+    if (art > 1e-7) return { status: 'infeasible' };
+    for (let i = 0; i < m; i++) if (basis[i] >= n + nS) { const k = [...Array(n + nS).keys()].find((j) => Math.abs(T[i][j]) > EPS); if (k != null) pivot(i, k); }
+    for (let j = n + nS; j < cols; j++) banned.add(j);
+  }
+  const c2 = new Array(cols).fill(0); c.forEach((v, j) => { c2[j] = v; });
+  if (optimize(c2) === 'unbounded') return { status: 'unbounded' };
+  const y = new Array(n).fill(0); basis.forEach((k, i) => { if (k < n) y[k] = T[i][cols]; });
+  return { status: 'ok', y, z: c.reduce((a, v, j) => a + v * y[j], 0) };
+}
+
 export function solverCore({ target, goal, value, vars, constraints }) {
   const st = ur(); const n0 = st ? st.undoStack.length : 0;
   const sid = C.wb.sheet.id;
@@ -113,31 +155,76 @@ export function solverCore({ target, goal, value, vars, constraints }) {
   const setAll = (xs) => C.wb.hf.batch(() => vars.forEach((p, i) => C.wb.hf.setCellContents({ sheet: sid, row: p.r, col: p.c }, [[xs[i]]])));
   const val = (p) => num(C.wb.value(p.r, p.c));
   const cmps = constraints.filter((k) => k.kind === 'cmp');
+  const evalAll = (xs) => { setAll(xs); return { obj: val(target), lhs: cmps.map((k) => val(k)), rhs: cmps.map((k) => (typeof k.rhs === 'number' ? k.rhs : val(k.rhs.cell))) }; };
   const score = (xs0) => {
     const xs = xs0.map((x, i) => (isBin[i] ? Math.min(1, Math.max(0, Math.round(x))) : isInt[i] ? Math.round(x) : x));
-    setAll(xs);
-    const obj = val(target); if (!Number.isFinite(obj)) return { f: Infinity, xs };
+    const e = evalAll(xs); if (!Number.isFinite(e.obj)) return { f: Infinity, xs };
     let pen = 0;
-    for (const k of cmps) { const lhs = val(k); const rhs = typeof k.rhs === 'number' ? k.rhs : val(k.rhs.cell); const d = k.op === '<=' ? lhs - rhs : k.op === '>=' ? rhs - lhs : Math.abs(lhs - rhs); if (d > 1e-9) pen += d; }
-    const base = goal === 'max' ? -obj : goal === 'min' ? obj : Math.abs(obj - value);
-    return { f: base + pen * 1e6, xs, pen, obj };
+    cmps.forEach((k, q) => { const d = k.op === '<=' ? e.lhs[q] - e.rhs[q] : k.op === '>=' ? e.rhs[q] - e.lhs[q] : Math.abs(e.lhs[q] - e.rhs[q]); if (d > 1e-9) pen += d; });
+    const base = goal === 'max' ? -e.obj : goal === 'min' ? e.obj : Math.abs(e.obj - value);
+    return { f: base + pen * 1e6, xs, pen, obj: e.obj };
+  };
+  // ¿Es un modelo lineal? Se mide la pendiente de cada fórmula y se comprueba en otro punto.
+  const linear = () => {
+    const n = vars.length; const x0 = vars.map(() => 0);
+    const e0 = evalAll(x0); const fs = [e0.obj, ...e0.lhs, ...e0.rhs]; if (!fs.every(Number.isFinite)) return null;
+    const G = fs.map(() => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) { const x = x0.slice(); x[i] = 1; const e = evalAll(x); [e.obj, ...e.lhs, ...e.rhs].forEach((v, k) => { G[k][i] = v - fs[k]; }); }
+    for (const probe of [vars.map((_, i) => 3.7 + i * 1.3), vars.map((_, i) => -2.1 * (i + 1))]) {
+      const e = evalAll(probe); const got = [e.obj, ...e.lhs, ...e.rhs];
+      if (!got.every((v, k) => Math.abs(v - (fs[k] + G[k].reduce((a, g, i) => a + g * probe[i], 0))) <= 1e-7 * (1 + Math.abs(v)))) return null;
+    }
+    return { fs, G };
+  };
+  const solveLinear = (L) => {
+    const n = vars.length, q = cmps.length;
+    // x = p - m (variables libres); filas: (lhs - rhs) op 0
+    const rows = [], rb = [], rt = [];
+    cmps.forEach((k, j) => { const g = L.G[1 + j].map((v, i) => v - L.G[1 + q + j][i]); const c0 = L.fs[1 + j] - L.fs[1 + q + j]; rows.push([...g, ...g.map((v) => -v)]); rb.push(-c0); rt.push(k.op); });
+    if (goal === 'value') { rows.push([...L.G[0], ...L.G[0].map((v) => -v)]); rb.push(value - L.fs[0]); rt.push('='); }
+    vars.forEach((_, i) => { if (isBin[i]) { const r = new Array(2 * n).fill(0); r[i] = 1; r[n + i] = -1; rows.push(r); rb.push(1); rt.push('<='); const r2 = r.slice(); rows.push(r2); rb.push(0); rt.push('>='); } });
+    const sign = goal === 'min' ? -1 : 1; const cvec = goal === 'value' ? new Array(2 * n).fill(0) : [...L.G[0].map((v) => sign * v), ...L.G[0].map((v) => -sign * v)];
+    const toX = (y) => vars.map((_, i) => y[i] - y[n + i]);
+    // ramificación y acotamiento para enteros
+    let best = null, nodes = 0;
+    const bb = (extraRows) => {
+      if (++nodes > 400) return;
+      const r = simplex(cvec, [...rows, ...extraRows.map((e) => e.row)], [...rb, ...extraRows.map((e) => e.b)], [...rt, ...extraRows.map((e) => e.t)]);
+      if (r.status !== 'ok') return;
+      if (best && r.z <= best.z + 1e-9) return;
+      const x = toX(r.y); const k = x.findIndex((v, i) => isInt[i] && Math.abs(v - Math.round(v)) > 1e-6);
+      if (k < 0) { best = { z: r.z, x }; return; }
+      const unit = new Array(2 * n).fill(0); unit[k] = 1; unit[n + k] = -1;
+      bb([...extraRows, { row: unit, b: Math.floor(x[k]), t: '<=' }]); bb([...extraRows, { row: unit, b: Math.ceil(x[k]), t: '>=' }]);
+    };
+    bb([]);
+    return best ? best.x : null;
   };
   let bestRes = null;
   try {
-    const start = vars.map((p) => (Number.isFinite(val(p)) ? val(p) : 0));
-    for (const seed of [start, start.map(() => 0), start.map(() => 1), start.map((x) => x * 2 + 10)]) {
-      let x = seed.slice(); let cur = score(x); let step = Math.max(1, ...x.map(Math.abs)) / 2;
-      for (let it = 0; it < 4000 && step > 1e-7; it++) {
-        let improved = false;
-        for (let i = 0; i < x.length; i++) {
-          for (const dir of [1, -1]) {
-            const y = x.slice(); y[i] += dir * (isInt[i] ? Math.max(1, Math.round(step)) : step);
+    const L = linear();
+    const xl = L ? solveLinear(L) : null;
+    if (xl) bestRes = score(xl);
+    if (!bestRes || bestRes.pen > 1e-6) {
+      // modelo no lineal: búsqueda por patrones con penalización
+      const start = raw0.map((v) => (typeof v === 'number' ? v : 0));
+      const t0 = performance.now();
+      for (const seed of [start, start.map(() => 0), start.map(() => 1)]) {
+        if (bestRes && performance.now() - t0 > 6000) break;
+        let x = seed.slice(); let cur = score(x); let step = Math.max(1, ...x.map(Math.abs)) / 2;
+        for (let it = 0; it < 3000 && step > 1e-6 && performance.now() - t0 < 12000; it++) {
+          let improved = false;
+          const dirs = [];
+          for (let i = 0; i < x.length; i++) for (const d of [1, -1]) { const v = new Array(x.length).fill(0); v[i] = d; dirs.push(v); }
+          for (let i = 0; i < x.length; i++) for (let j = i + 1; j < x.length; j++) for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const v = new Array(x.length).fill(0); v[i] = a; v[j] = b; dirs.push(v); }
+          for (const d of dirs) {
+            const y = x.map((xi, i) => xi + d[i] * (isInt[i] ? Math.max(1, Math.round(step)) : step));
             const r = score(y); if (r.f < cur.f - 1e-12) { x = y; cur = r; improved = true; break; }
           }
+          if (!improved) { if (isInt.every(Boolean) && step <= 1) break; step /= 2; }
         }
-        if (!improved) { if (isInt.every(Boolean) && step <= 1) break; step /= 2; }
+        if (!bestRes || cur.f < bestRes.f) bestRes = cur;
       }
-      if (!bestRes || cur.f < bestRes.f) bestRes = cur;
     }
   } finally {
     C.wb.hf.batch(() => vars.forEach((p, i) => C.wb.hf.setCellContents({ sheet: sid, row: p.r, col: p.c }, [[raw0[i] ?? null]])));
@@ -154,7 +241,7 @@ export async function solver() {
     { name: 'value', label: 'Valor (si elegiste “Valor de”)', type: 'number', value: last.value ?? 0 },
     { name: 'vars', label: 'Cambiando las celdas', value: last.vars || '' },
     { name: 'cons', label: 'Restricciones, una por línea (p. ej. B2 <= 100, B2:B4 >= 0, B3 entero, B4 binario)', type: 'textarea', rows: 4, value: last.cons || '' },
-    { type: 'note', label: 'Método: búsqueda directa con penalización. Funciona bien con modelos pequeños, lineales o no lineales.' },
+    { type: 'note', label: 'Método: Simplex (con enteros por ramificación) si el modelo es lineal; si no, búsqueda directa con penalización.' },
   ], 'Resolver');
   if (!v) return;
   const target = parseAddr(v.target.trim().toUpperCase()); const g = parseRange(v.vars.trim().toUpperCase());

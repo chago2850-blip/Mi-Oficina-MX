@@ -192,10 +192,19 @@ try {
     // Solver: maximizar 3x + 2y con x + y <= 4, x + 3y <= 6, x,y >= 0  (óptimo x=4, y=0 -> 12)
     await set([[19, 0, 'x'], [19, 1, 0], [20, 0, 'y'], [20, 1, 0], [21, 0, 'z'], [21, 1, '=3*B20+2*B21'], [22, 1, '=B20+B21'], [23, 1, '=B20+3*B21']]);
     await startDialog(w, 'solver');
+    const tS = Date.now();
     await fillForm(w, { target: 'B22', goal: 'max', vars: 'B20:B21', cons: 'B23 <= 4\nB24 <= 6\nB20:B21 >= 0' });
-    await w.waitForSelector('.modal'); await w.click('.modal .btn.primary'); await wait(300);
+    await w.waitForSelector('.modal', { timeout: 60000 }); console.log(`  (Solver: ${Date.now() - tS} ms)`); await w.click('.modal .btn.primary'); await wait(300);
     assert.ok(Math.abs((await val(21, 1)) - 12) < 1e-3, `solver: ${await val(21, 1)}`);
-    log('Calcula Datos: Solver maximiza con restricciones');
+    const more = await w.evaluate(() => {
+      const { wb, F3 } = window.__calcula; const A = (r, c) => ({ r, c });
+      wb.action('m', () => { wb.setInput(30, 1, '0'); wb.setInput(31, 1, '0'); wb.setInput(32, 1, '=5*B31+4*B32'); wb.setInput(33, 1, '=6*B31+4*B32'); wb.setInput(34, 1, '=B31+2*B32'); wb.setInput(36, 1, '0'); wb.setInput(37, 1, '0'); wb.setInput(38, 1, '=(B37-3)^2+(B38+1)^2'); }, { batch: true });
+      const ip = F3.solverCore({ target: A(32, 1), goal: 'max', vars: [A(30, 1), A(31, 1)], constraints: [{ kind: 'cmp', r: 33, c: 1, op: '<=', rhs: 24 }, { kind: 'cmp', r: 34, c: 1, op: '<=', rhs: 6 }, { kind: 'cmp', r: 30, c: 1, op: '>=', rhs: 0 }, { kind: 'cmp', r: 31, c: 1, op: '>=', rhs: 0 }, { kind: 'int', r: 30, c: 1 }, { kind: 'int', r: 31, c: 1 }] });
+      const nl = F3.solverCore({ target: A(38, 1), goal: 'min', vars: [A(36, 1), A(37, 1)], constraints: [] });
+      return { ip: [ip.obj, ...ip.xs].map((v) => v + 0), nl: nl.xs.map((x) => Math.round(x * 1000) / 1000 + 0) };
+    });
+    assert.deepEqual(more.ip, [20, 4, 0], `entero: ${more.ip}`); assert.deepEqual(more.nl, [3, -1], `no lineal: ${more.nl}`);
+    log('Calcula Datos: Solver maximiza con restricciones (Simplex, enteros y no lineal)');
     // minigráficos
     await w.evaluate(() => { const { wb, grid } = window.__calcula; grid.select(0, 0); grid.select(1, 2, true); });
     await startDialog(w, 'sparkline');

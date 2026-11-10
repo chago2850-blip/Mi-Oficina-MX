@@ -855,6 +855,7 @@ export default {
 "Más opciones": "More options",
 "Máxima — páginas como imagen a 100 ppp": "Maximum — pages as images at 100 dpi",
 "Máximo": "Max",
+"Método: Simplex (con enteros por ramificación) si el modelo es lineal; si no, búsqueda directa con penalización.": "Method: Simplex (with branch and bound for integers) when the model is linear; otherwise, direct search with penalties.",
 "Método: búsqueda directa con penalización. Funciona bien con modelos pequeños, lineales o no lineales.": "Method: direct search with penalties. Works well with small linear or nonlinear models.",
 "Mínimo": "Min",
 "Naranja": "Orange",

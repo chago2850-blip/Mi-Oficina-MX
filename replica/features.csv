@@ -101,7 +101,7 @@ Más tipos de gráfico (dispersión área combinado),calcula datos,should,yes,ye
 Gráficos que siguen matrices dinámicas,calcula datos,could,yes,yes,rango con # (p. ej. A4#)
 Función IMAGEN,calcula datos,could,yes,yes,https:// o data:image
 Segmentación de datos,calcula datos,could,yes,yes,
-Solver,calcula datos,could,yes,yes,"búsqueda directa con restricciones, enteros y binarios; hasta 30 variables"
+Solver,calcula datos,could,yes,yes,Simplex con ramificación para enteros y binarios en modelos lineales; búsqueda directa en no lineales; hasta 30 variables
 Agrupar y esquema,calcula datos,could,yes,yes,filas y columnas; se guarda como esquema nativo de Excel
 Abrir xlsm sin ejecutar macros,calcula datos,should,yes,yes,las macros nunca se ejecutan; se conservan al guardar como xlsm
 Diapositivas: añadir duplicar eliminar reordenar,impresiona,must,yes,yes,
