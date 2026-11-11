@@ -1,7 +1,7 @@
 {
   "name": "mi-oficina-mx",
   "productName": "Mi Oficina MX",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Suite ofimática libre y multiplataforma: Escribiente, Calcula Datos, Impresiona y PapelPDF.",
   "main": "main.js",
   "author": {

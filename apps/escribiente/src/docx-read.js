@@ -86,7 +86,7 @@ function parsePPr(pPr) {
       case 'numPr': { const il = kid(c, 'ilvl'); const ni = kid(c, 'numId'); if (ni) o.numId = av(ni, 'val'); if (il) o.ilvl = num(av(il, 'val')); break; }
       case 'pBdr': { o.bdr = {}; for (const s of c.children) { const b = parseBorder(s); if (b !== undefined) o.bdr[s.localName === 'start' ? 'left' : s.localName === 'end' ? 'right' : s.localName] = b; } break; }
       case 'shd': o.shd = parseShd(c); break;
-      case 'tabs': o.tabs = kids(c, 'tab').map((t) => ({ k: { left: 'l', start: 'l', center: 'c', right: 'r', end: 'r', decimal: 'r' }[av(t, 'val')], x: num(av(t, 'pos')) })).filter((t) => t.k && t.x != null); break;
+      case 'tabs': o.tabs = kids(c, 'tab').map((t) => ({ k: { left: 'l', start: 'l', center: 'c', right: 'r', end: 'r', decimal: 'd' }[av(t, 'val')], x: num(av(t, 'pos')), f: { dot: '.', hyphen: '-', underscore: '_', middleDot: '·', heavy: '_' }[av(t, 'leader')] || '' })).filter((t) => t.k && t.x != null); break;
       case 'framePr': o.frame = true; break;
       case 'rPr': o.markRPr = c; break;
       case 'sectPr': o.sectPr = c; break;
@@ -216,7 +216,7 @@ function paraData(p) {
   if (p.pageBreakBefore) d.push('data-pbb="1"');
   if (p.widow === false) d.push('data-widow="0"');
   if (p.line && p.lineRule === 'atLeast') d.push('data-lr="atLeast"');
-  if (p.tabs?.length) d.push(`data-tabs="${p.tabs.map((t) => `${t.k}:${Math.round(t.x * TWIP_PX)}`).join(',')}"`);
+  if (p.tabs?.length) d.push(`data-tabs="${p.tabs.map((t) => `${t.k}:${Math.round(t.x * TWIP_PX * 10) / 10}${t.f ? `:${t.f}` : ''}`).join(',')}"`);
   return d.length ? ` ${d.join(' ')}` : '';
 }
 // diferencias de formato del texto respecto del párrafo
@@ -269,6 +269,8 @@ export async function readDocx(bytes) {
     theme.minor = lat(mf) || theme.minor; theme.major = lat(Mf) || theme.major;
   }
   const S = readStyles(await xml('word/styles.xml'), theme);
+  const settingsXml = await xml('word/settings.xml');
+  const dts = settingsXml && num(av(settingsXml.getElementsByTagNameNS(W, 'defaultTabStop')[0], 'val'));
   // relaciones
   const rels = async (p) => {
     const m = new Map(); const d = await xml(p); if (!d) return m;
@@ -691,7 +693,7 @@ export async function readDocx(bytes) {
   box.querySelectorAll('p:empty,h1:empty,h2:empty,h3:empty,li:empty').forEach((p) => p.append(document.createElement('br')));
   let meta = null; try { const mt = await zip.file(META_DOCX)?.async('string'); if (mt) meta = JSON.parse(mt); } catch { /* */ }
   const { sources } = applyMeta(box, meta, comments, (tex) => { try { return temml.renderToString(tex, { annotate: true }); } catch { return null; } });
-  return { html: box.innerHTML || '<p><br></p>', page, footnotes, endnotes, comments, sources, header, footer, columns, warnings: warnings.size ? [`No se pudieron conservar del todo: ${[...warnings].join(', ')}`] : [] };
+  return { html: box.innerHTML || '<p><br></p>', page, footnotes, endnotes, comments, sources, header, footer, columns, defTab: dts ? Math.round(dts * TWIP_PX * 100) / 100 : null, warnings: warnings.size ? [`No se pudieron conservar del todo: ${[...warnings].join(', ')}`] : [] };
 }
 
 function fmtNum(v, f) {

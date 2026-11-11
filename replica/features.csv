@@ -151,3 +151,4 @@ Tamaño de diapositiva con ajustes avanzados,impresiona,should,yes,yes,"tamaños
 Abrir y guardar .docx/.odt sin perder formato (lector propio),escribiente,must,yes,yes,"estilos, letra, párrafo, bordes, sombreado, listas, tablas combinadas, encabezado y pie; comprobado con LibreOffice"
 Cuadros Formato → Párrafo y Fuente,escribiente,must,yes,yes,"sangrías y espaciado, flujo del texto, bordes y sombreado; efectos, posición y espaciado"
 Cambiar mayúsculas y minúsculas; marcas de formato,escribiente,should,yes,yes,"5 modos (Mayús+F3); ¶ con Ctrl+F10"
+Tabulaciones (tecla Tab, regla, cuadro Tabulaciones),escribiente,must,yes,yes,"izquierda, centrada, derecha y decimal; relleno; paradas predeterminadas; .docx y .odt"

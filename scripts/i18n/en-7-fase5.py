@@ -14,6 +14,11 @@ D = {
 'Familia': 'Family', 'Normal': 'Normal', 'Negrita': 'Bold', 'Cursiva': 'Italic', 'Negrita cursiva': 'Bold italic', 'Tamaño': 'Size', 'Color de fuente': 'Font color', 'Subrayado': 'Underline', '(ninguno)': '(none)', 'Ondulado': 'Wave',
 'Efectos tipográficos': 'Font effects', 'Tachado': 'Strikethrough', 'Doble tachado': 'Double strikethrough', 'Superíndice': 'Superscript', 'Subíndice': 'Subscript', 'Versalitas': 'Small capitals', 'Oculto': 'Hidden', 'Sombra': 'Shadow', 'Contorno': 'Outline',
 'Posición y espaciado': 'Position & spacing', 'Espaciado entre caracteres': 'Character spacing', 'Escala de ancho': 'Width scale', 'Posición (elevar o bajar)': 'Position (raise or lower)',
+'Tabulaciones': 'Tabs', 'Tabulaciones…': 'Tabs…', 'Posiciones': 'Positions', 'Posición (cm)': 'Position (cm)', 'Tipo': 'Type', 'Carácter de relleno': 'Fill character',
+'Centrada': 'Centered', 'Decimal': 'Decimal', 'Nueva': 'New', 'Eliminar todas': 'Delete all', 'Paradas predeterminadas cada (cm)': 'Default tab stops every (cm)',
+'Sin tabulaciones propias: se usan las predeterminadas.': 'No custom tab stops: the default ones are used.',
+'Tipo de tabulación (clic para cambiar): izquierda, centrada, derecha o decimal. Doble clic en la regla: Tabulaciones…': 'Tab type (click to change): left, centered, right or decimal. Double-click the ruler: Tabs…',
+'Haz clic para poner una tabulación; doble clic para Tabulaciones…': 'Click to set a tab stop; double-click for Tabs…',
 'No es un documento de Word válido': 'Not a valid Word document', 'gráficos': 'charts', 'formas o diagramas': 'shapes or diagrams', 'objetos incrustados': 'embedded objects',
 }
 RULES = [

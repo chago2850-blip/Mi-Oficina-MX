@@ -105,8 +105,8 @@ export async function htmlToOdt(editorEl, settings) {
     if (ds.keeplines) props.push('fo:keep-together="always"');
     if (ds.pbb) props.push('fo:break-before="page"');
     if (ds.widow === '0') props.push('fo:widows="0" fo:orphans="0"');
-    const tabs = String(ds.tabs || '').split(',').map((t) => /^([lcr]):(\d+)/.exec(t)).filter(Boolean)
-      .map((m) => `<style:tab-stop style:position="${px2cm(Number(m[2]) - ml)}"${m[1] === 'l' ? '' : ` style:type="${m[1] === 'c' ? 'center' : 'right'}"`}/>`).join('');
+    const tabs = String(ds.tabs || '').split(',').map((t) => /^([lcrd]):(\d+(?:\.\d+)?)(?::(.))?/.exec(t)).filter(Boolean)
+      .map((m) => `<style:tab-stop style:position="${px2cm(Number(m[2]) - ml)}"${m[1] === 'l' ? '' : m[1] === 'd' ? ' style:type="char" style:char=","' : ` style:type="${m[1] === 'c' ? 'center' : 'right'}"`}${m[3] ? ` style:leader-text="${x(m[3])}" style:leader-style="${m[3] === '_' ? 'solid' : m[3] === '-' ? 'dash' : 'dotted'}"` : ''}/>`).join('');
     // letra del propio párrafo
     const tprops = textProps(readFmt(st, {}, null));
     if (!props.length && !tabs && !tprops.length) return parent;
@@ -250,7 +250,7 @@ ${styleXml.join('\n')}
   const styles = `<?xml version="1.0" encoding="UTF-8"?>
 <office:document-styles ${NSDECL} office:version="1.3"><office:font-face-decls><style:font-face style:name="Calibri" svg:font-family="Calibri, Carlito"/></office:font-face-decls>
 <office:styles>
-<style:default-style style:family="paragraph"><style:paragraph-properties fo:margin-bottom="0.28cm" fo:line-height="115%"/><style:text-properties style:font-name="Calibri" fo:font-size="11pt" fo:language="es" fo:country="MX"/></style:default-style>
+<style:default-style style:family="paragraph"><style:paragraph-properties fo:margin-bottom="0.28cm" fo:line-height="115%" style:tab-stop-distance="${px2cm(settings.defTab || 47.24)}"/><style:text-properties style:font-name="Calibri" fo:font-size="11pt" fo:language="es" fo:country="MX"/></style:default-style>
 <style:style style:name="Standard" style:family="paragraph"/>
 ${heading(1, 16, '#2F2496')}${heading(2, 13, '#3D30B5')}${heading(3, 12, '#3D30B5')}${heading(4, 11, '#3D30B5')}${heading(5, 11, '#3D30B5')}${heading(6, 11, '#3D30B5')}
 <style:style style:name="Title" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="28pt"/></style:style>

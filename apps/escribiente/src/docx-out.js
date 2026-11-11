@@ -206,7 +206,7 @@ class Builder {
     const ti = lenPx(st.textIndent);
     if (ml || ti || mr) p.indent = { ...(ml ? { left: Math.round(ml * PX_TWIP) } : {}), ...(mr ? { right: Math.round(mr * PX_TWIP) } : {}), ...(ti > 0 ? { firstLine: Math.round(ti * PX_TWIP) } : ti < 0 ? { hanging: Math.round(-ti * PX_TWIP) } : {}) };
     const tabs = parseTabs(ds.tabs);
-    if (tabs.length) p.tabStops = tabs.map((t) => ({ type: { l: TabStopType.LEFT, c: TabStopType.CENTER, r: TabStopType.RIGHT }[t.k], position: Math.round(t.x * PX_TWIP) }));
+    if (tabs.length) p.tabStops = tabs.map((t) => ({ type: { l: TabStopType.LEFT, c: TabStopType.CENTER, r: TabStopType.RIGHT, d: TabStopType.DECIMAL }[t.k], position: Math.round(t.x * PX_TWIP), ...(t.f ? { leader: { '.': 'dot', '-': 'hyphen', _: 'underscore', '·': 'middleDot' }[t.f] } : {}) }));
     const spacing = {};
     const mt = ds.push ? ds.mt0 : st.marginTop;
     if (mt) spacing.before = Math.round(lenPx(mt) * PX_TWIP);
@@ -458,6 +458,7 @@ export async function htmlToDocx(editorEl, settings) {
     ...(i > 0 ? { type: SectionType.CONTINUOUS } : {}),
   });
   const doc = new Document({
+    defaultTabStop: Math.round((settings.defTab || 47.24) * PX_TWIP),
     creator: settings.author || 'Escribiente',
     title: settings.title || '',
     subject: settings.subject || undefined,
@@ -557,5 +558,5 @@ function mathKids(el) {
 }
 
 export function parseTabs(v) {
-  return String(v || '').split(',').map((t) => { const m = /^([lcr]):(\d+(?:\.\d+)?)$/.exec(t.trim()); return m ? { k: m[1], x: Number(m[2]) } : null; }).filter(Boolean).sort((a, b) => a.x - b.x);
+  return String(v || '').split(',').map((t) => { const m = /^([lcrd]):(\d+(?:\.\d+)?)(?::(.))?$/.exec(t.trim()); return m ? { k: m[1], x: Number(m[2]), f: m[3] || '' } : null; }).filter(Boolean).sort((a, b) => a.x - b.x);
 }

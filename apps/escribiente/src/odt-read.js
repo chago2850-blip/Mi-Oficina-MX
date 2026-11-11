@@ -45,7 +45,9 @@ function readProps(st) {
     if (A(pp, 'fo', 'break-after') === 'page') flags.pba = true;
     if (A(pp, 'fo', 'widows') === '0' || A(pp, 'fo', 'orphans') === '0') flags.widow = '0';
     const tabs = kid(pp, 'tab-stops');
-    if (tabs) flags.tabs = kids(tabs, 'tab-stop').map((ts) => `${{ center: 'c', right: 'r', char: 'r' }[A(ts, 'style', 'type')] || 'l'}:${Math.round(lenToPx(A(ts, 'style', 'position')))}`).join(',');
+    // en ODF la posición se mide desde la sangría izquierda del párrafo
+    const mlPx = lenToPx(A(pp, 'fo', 'margin-left') || '0');
+    if (tabs) flags.tabs = kids(tabs, 'tab-stop').map((ts) => { const lt = A(ts, 'style', 'leader-text'); const ls = A(ts, 'style', 'leader-style'); const f = lt && lt !== ' ' ? lt : ls && ls !== 'none' ? (ls === 'solid' ? '_' : ls === 'dash' ? '-' : '.') : ''; return `${{ center: 'c', right: 'r', char: 'd' }[A(ts, 'style', 'type')] || 'l'}:${Math.round((lenToPx(A(ts, 'style', 'position')) + mlPx) * 10) / 10}${f ? `:${f}` : ''}`; }).join(',');
   }
   if (tp) {
     const fn = A(tp, 'style', 'font-name') || A(tp, 'fo', 'font-family'); if (fn) t['font-family'] = fontCss(fn);
@@ -99,6 +101,9 @@ export async function readOdt(bytes) {
     }
   };
   collect(stylesDoc); collect(content);
+  // intervalo de las paradas predeterminadas
+  let defTab = null;
+  for (const d of stylesDoc?.getElementsByTagNameNS(NS.style, 'default-style') || []) { if (A(d, 'style', 'family') !== 'paragraph') continue; const v = A(kid(d, 'paragraph-properties'), 'style', 'tab-stop-distance'); if (v) defTab = Math.round(lenToPx(v) * 100) / 100; }
   const chain = (family, name) => { const out = []; let n = name; let g = 0; while (n && g++ < 20) { const s = styles.get(`${family}:${n}`); if (!s) break; out.unshift(s); n = s.parent; } return out; };
   const resolve = (family, name) => {
     const ch = chain(family, name); const d = defaults[family] || { p: {}, t: {}, flags: {} };
@@ -347,5 +352,5 @@ export async function readOdt(bytes) {
   box.innerHTML = sanitize(html || '<p><br></p>');
   let sources = [];
   try { const mt = await zip.file(META_ODT)?.async('string'); if (mt) ({ sources } = applyMeta(box, JSON.parse(mt), comments, null)); } catch { /* */ }
-  return { html: box.innerHTML || '<p><br></p>', page, header, footer, footnotes, endnotes, comments, sources, warnings: warn.size ? [`No se pudieron conservar del todo: ${[...warn].join(', ')}`] : [], props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
+  return { html: box.innerHTML || '<p><br></p>', page, header, footer, defTab, footnotes, endnotes, comments, sources, warnings: warn.size ? [`No se pudieron conservar del todo: ${[...warn].join(', ')}`] : [], props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
 }

@@ -174,6 +174,48 @@ try {
   const kn = await w.evaluate(() => { const st = window.__escribiente.state; const ed = document.getElementById('editor'); const kids = [...ed.children]; const hi = kids.findIndex((k) => k.tagName === 'H2'); return [st.pageOf[hi], st.pageOf[hi + 1]]; });
   assert.equal(kn[0], kn[1], `título y párrafo en la misma página: ${kn}`);
   log('“Conservar con el siguiente” lleva el título a la página del párrafo que lo sigue');
+  // 7) tabulaciones: la tecla Tab, la regla y el cuadro Tabulaciones (como Writer)
+  await w.evaluate(() => window.__shell.newDoc('blank')); await wait(400);
+  await w.click('#editor'); await w.keyboard.type('Nombre'); await w.keyboard.press('Tab'); await w.keyboard.type('Valor');
+  const t1 = await w.evaluate(() => { const p = document.querySelector('#editor p'); return { text: p.textContent.replace(/​/g, ''), tabs: p.querySelectorAll('.otab').length, x: Math.round(p.querySelector('.otab').getBoundingClientRect().right - p.getBoundingClientRect().left) }; });
+  assert.deepEqual({ text: t1.text, tabs: t1.tabs }, { text: 'Nombre\tValor', tabs: 1 }, JSON.stringify(t1));
+  assert.ok(Math.abs(t1.x - 94) <= 2, `la tabulación llega a la parada predeterminada de 2.5 cm: ${t1.x}`);
+  // clic en la regla: parada izquierda en ~6 cm
+  await w.evaluate(() => window.__escribiente.paginate());
+  const rx = await w.evaluate(() => { const tr = document.querySelector('.ruler .track'); const m = tr.querySelector('.m'); const r = m.getBoundingClientRect(); return { x: r.right + (6 * 96 / 2.54) * window.__escribiente.state.zoom / 100, y: r.top + r.height / 2 }; });
+  await w.mouse.click(rx.x, rx.y); await wait(400);
+  const t2 = await w.evaluate(() => { const p = document.querySelector('#editor p'); return { tabs: p.dataset.tabs, x: Math.round(p.querySelector('.otab').getBoundingClientRect().right - p.getBoundingClientRect().left), marks: document.querySelectorAll('.ruler .tabstop').length }; });
+  assert.ok(/^l:22\d/.test(t2.tabs) && Math.abs(t2.x - 227) <= 3 && t2.marks === 1, JSON.stringify(t2));
+  // cuadro Tabulaciones: decimal a 10 cm y derecha con puntos a 15 cm; intervalo 2 cm
+  await startDialog(w, 'tabs'); await w.waitForSelector('.tb-list');
+  await w.evaluate(() => { const m = document.querySelector('.modal'); const set = (n, v) => { const el = m.querySelector(`[name="${n}"]`); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }; m.querySelector('.tb-btns .btn:nth-child(3)').click(); set('pos', '10'); set('kind', 'd'); set('fill', ''); m.querySelector('.tb-btns .btn').click(); set('pos', '15'); set('kind', 'r'); set('fill', '.'); m.querySelector('.tb-btns .btn').click(); set('deftab', '2'); });
+  await w.click('.modal .btn.primary'); await wait(400);
+  await w.keyboard.press('End'); await w.keyboard.press('Enter'); await w.keyboard.type('Total'); await w.keyboard.press('Tab'); await w.keyboard.type('1234,56'); await w.keyboard.press('Tab'); await w.keyboard.type('fin');
+  await wait(400);
+  const t3 = await w.evaluate(() => {
+    const p = document.querySelectorAll('#editor p')[1]; const pl = p.getBoundingClientRect().left;
+    const tn = [...p.querySelectorAll('*')].flatMap((e) => [...e.childNodes]).concat([...p.childNodes]).find((n) => n.nodeType === 3 && n.nodeValue.includes(',56'));
+    const r = document.createRange(); const k = tn.nodeValue.indexOf(','); r.setStart(tn, k); r.setEnd(tn, k + 1);
+    const fin = [...p.querySelectorAll('*')].flatMap((e) => [...e.childNodes]).concat([...p.childNodes]).find((n) => n.nodeType === 3 && n.nodeValue.includes('fin')); const r2 = document.createRange(); r2.selectNodeContents(fin);
+    return { tabs: p.dataset.tabs, comma: Math.round(r.getBoundingClientRect().left - pl), fin: Math.round(r2.getBoundingClientRect().right - pl), leader: p.querySelectorAll('.otab[data-leader="."]').length, def: window.__escribiente.state.defTab };
+  });
+  assert.match(t3.tabs, /^d:378(\.\d)?,r:56[67](\.\d)?:\.$/); assert.ok(Math.abs(t3.comma - 378) <= 2, `decimal: ${t3.comma}`); assert.ok(Math.abs(t3.fin - 567) <= 2, `derecha: ${t3.fin}`); assert.equal(t3.leader, 1); assert.ok(Math.abs(t3.def - 75.59) < 0.1);
+  // se guardan en .docx y .odt (decimal, relleno, intervalo) y se recuperan
+  for (const [ext, lab] of [['docx', 'Word'], ['odt', 'ODT']]) {
+    await w.evaluate(async ([e, l]) => window.__shell.saveAsFormat(e, l), [ext, lab]); await wait(700);
+    const z = await JSZip.loadAsync(fs.readFileSync(path.join(out, `${UNTITLED}.${ext}`)));
+    if (ext === 'docx') {
+      const dx = await z.file('word/document.xml').async('string'); const st = await z.file('word/settings.xml').async('string');
+      assert.match(dx, /<w:tab w:val="decimal" w:pos="567\d"\/>/); assert.match(dx, /<w:tab w:val="right" w:pos="850\d" w:leader="dot"\/>/); assert.match(st, /<w:defaultTabStop w:val="113\d"\/>/);
+    } else {
+      const cx = await z.file('content.xml').async('string'); const sx = await z.file('styles.xml').async('string');
+      assert.match(cx, /style:type="char" style:char=","/); assert.match(cx, /style:leader-text="\."/); assert.match(sx, /style:tab-stop-distance="2\.000cm"/);
+    }
+    await reopen(w, path.join(out, `${UNTITLED}.${ext}`)); await wait(700);
+    const back = await w.evaluate(() => ({ tabs: document.querySelectorAll('#editor p')[1]?.dataset.tabs, def: Math.round(window.__escribiente.state.defTab) }));
+    assert.ok(/^d:37[78](\.\d)?,r:56[67](\.\d)?:\.$/.test(back.tabs) && back.def === 76, `${ext}: ${JSON.stringify(back)}`);
+  }
+  log('Tabulaciones: la tecla Tab, paradas en la regla, cuadro Tabulaciones (decimal, derecha con relleno, intervalo) y se guardan en .docx y .odt');
   await closeApp('escribiente'); await wait(600);
   assert.deepEqual(pageErrors, [], `errores en las ventanas:\n${pageErrors.join('\n')}`);
   console.log('\nTodas las pruebas de la fase 5 (parte 1) pasaron.');

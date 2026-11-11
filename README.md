@@ -53,6 +53,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie y al final**, **tabulaciones** (izquierda, centro, derecha) en la regla, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
 - **0.3:** **ecuaciones** (escritas en LaTeX con vista previa; en el `.docx` quedan como ecuaciones de Word y en el `.odt` como fórmulas), **citas y bibliografía** (APA), **comparar documentos** (el resultado queda como control de cambios), **etiquetas y sobres** (también con los destinatarios de la combinación), **diagramas** tipo SmartArt (lista, proceso, ciclo, jerarquía y pirámide), **modo lectura** y **modo enfoque**, reacciones en comentarios, exportar a **Markdown** y abrir documentos `.doc` de Word 97-2003
 - **0.5 — Escribiente como LibreOffice Writer, parte 1 (abrir y guardar sin perder formato):** lector propio de `.docx` y `.odt` que conserva estilos, fuentes, tamaños, colores, resaltado, espaciado antes y después, interlineado (múltiple, mínimo y exacto), sangrías, bordes y sombreado de párrafo, versalitas, mayúsculas, texto oculto, doble tachado, espaciado entre letras, listas con su numeración, tablas con celdas combinadas, anchos, bordes y fondos, imágenes, encabezado y pie con número de página, saltos y notas. Nuevos cuadros **Formato → Párrafo** (sangrías y espaciado, flujo del texto —conservar con el siguiente, no dividir, salto de página antes, viudas y huérfanas—, bordes y sombreado) y **Fuente** (efectos tipográficos, posición y espaciado, escala), **Cambiar mayúsculas y minúsculas** (Mayús+F3) y **Marcas de formato ¶** (Ctrl+F10). Todo se guarda en `.docx` y `.odt` y se comprueba en las pruebas abriéndolo también con LibreOffice
+- **0.5.1 — tabulaciones como en Writer:** la tecla **Tab** inserta la tabulación donde está el cursor y avanza a la siguiente parada; la regla muestra las paradas predeterminadas (cada 1.25 cm) y las propias del párrafo: clic en la regla para poner una (izquierda, centrada, derecha o **decimal**, según el botón de la esquina), arrastrar para moverla, arrastrarla fuera para quitarla y doble clic para **Formato → Tabulaciones…** (posición, tipo, **carácter de relleno** ……, y el intervalo de las paradas predeterminadas). Todo se guarda y se lee en `.docx` y `.odt`
 - **0.4.2:** el **control de cambios** se ve en la barra de estado (*Control de cambios: activado/desactivado*, con un clic se apaga); con el control de cambios activo, lo que tú escribiste se borra normalmente con Retroceso, el cursor ya no salta y la ortografía sigue marcando palabras y dando sugerencias con el clic derecho
 - **0.4:** abre las **ecuaciones de Word y LibreOffice** como ecuaciones editables, abre los `.doc` antiguos **con su formato** (títulos, negritas, colores, tamaños, tablas, listas y alineación), y guarda dentro del `.docx`/`.odt` las **reacciones** a comentarios, los diagramas tipo SmartArt editables, las fuentes de las citas y el LaTeX de las ecuaciones
 
@@ -88,12 +89,12 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 
 | Sistema | Archivo | Cómo |
 | --- | --- | --- |
-| Windows 10/11 | `Mi.Oficina.MX.Setup.0.5.0.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
-| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.5.0-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
-| macOS Intel | `MiOficinaMX-0.5.0-x64.dmg` | Igual que el anterior. |
-| Ubuntu, Debian, Mint | `mi-oficina-mx_0.5.0_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.5.0_amd64.deb` |
-| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.5.0.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.5.0.x86_64.rpm` |
-| Cualquier Linux | `Mi.Oficina.MX-0.5.0.AppImage` | `chmod +x Mi.Oficina.MX-0.5.0.AppImage` y ábrelo |
+| Windows 10/11 | `Mi.Oficina.MX.Setup.0.5.1.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
+| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.5.1-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
+| macOS Intel | `MiOficinaMX-0.5.1-x64.dmg` | Igual que el anterior. |
+| Ubuntu, Debian, Mint | `mi-oficina-mx_0.5.1_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.5.1_amd64.deb` |
+| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.5.1.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.5.1.x86_64.rpm` |
+| Cualquier Linux | `Mi.Oficina.MX-0.5.1.AppImage` | `chmod +x Mi.Oficina.MX-0.5.1.AppImage` y ábrelo |
 
 El instalador asocia los archivos `.docx`, `.xlsx`, `.csv`, `.pptx` y `.pdf`: con doble clic se abren en la app correcta.
 

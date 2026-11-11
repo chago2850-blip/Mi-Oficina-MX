@@ -64,6 +64,7 @@ const P = {
   merge: 'M3 5h18v14H3z M8 12H3 M21 12h-5 M8 9l3 3-3 3 M16 9l-3 3 3 3',
   wrap: 'M4 6h16 M4 12h13a3 3 0 010 6h-4 M15 16l-2 2 2 2 M4 18h5',
   borders: 'M3 3h18v18H3z M3 12h18 M12 3v18',
+  tabs: 'M3 6h18 M3 18h18 M7 10v4 M7 14h4 M16 10v4 M12 14h4',
   pilcrow: 'M13 4v16 M17 4v16 M19 4H10a4 4 0 000 8h3',
   changeCase: 'M3 18L7.5 6l4.5 12 M4.6 14h5.8 M20 11v7 M20 13.5a2.8 2.8 0 10-.1 2.5',
   dialogLauncher: 'M4 4h16v16H4z M10 14l4-4 M10 10h4v4',

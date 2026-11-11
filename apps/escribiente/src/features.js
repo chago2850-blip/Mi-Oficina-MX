@@ -562,89 +562,197 @@ export function drawIndentMarkers(left, z, cw) {
 
 // ------------------------------------------------------------------ tabulaciones
 // Cada tabulación es <span class="otab">\t</span>; su ancho se calcula para llegar a la
-// siguiente parada del párrafo (data-tabs="l:120,c:300,r:500", en px desde el margen izquierdo)
-// o a la siguiente parada predeterminada (cada 1.25 cm, como Word).
-const DEF_TAB = 48;
+// siguiente parada del párrafo (data-tabs="l:120,c:300:.,r:500,d:420", en px desde el margen
+// izquierdo, con relleno opcional) o a la siguiente parada predeterminada del documento
+// (cada 1.25 cm, como LibreOffice Writer; se cambia en Formato → Tabulaciones).
+const CM = 96 / 2.54;
+const defTab = () => C.state.defTab || Math.round(1.25 * CM * 100) / 100;
 let tabKind = 'l';
+const KINDS = { l: 'Izquierda', c: 'Centrada', r: 'Derecha', d: 'Decimal' };
+const LEADERS = { '': '(ninguno)', '.': '.......', '-': '-------', _: '_______', '·': '·······' };
 export function parseTabs(v) {
-  return String(v || '').split(',').map((t) => { const m = /^([lcr]):(\d+(?:\.\d+)?)$/.exec(t.trim()); return m ? { k: m[1], x: Number(m[2]) } : null; }).filter(Boolean).sort((a, b) => a.x - b.x);
+  return String(v || '').split(',').map((t) => { const m = /^([lcrd]):(\d+(?:\.\d+)?)(?::(.))?$/.exec(t.trim()); return m ? { k: m[1], x: Number(m[2]), f: m[3] || '' } : null; }).filter(Boolean).sort((a, b) => a.x - b.x);
 }
-const tabsStr = (list) => list.sort((a, b) => a.x - b.x).map((t) => `${t.k}:${Math.round(t.x)}`).join(',');
+export const tabsStr = (list) => list.sort((a, b) => a.x - b.x).map((t) => `${t.k}:${Math.round(t.x * 10) / 10}${t.f ? `:${t.f}` : ''}`).join(',');
 const TAB_BLOCK = 'p,h1,h2,h3,h4,h5,h6,li,blockquote,td,th';
+// Inserta un tabulador donde está el cursor (dentro del párrafo, con deshacer del navegador)
 export function insertTab() {
-  if (C.state.track) { document.execCommand('insertText', false, '\t'); return; }
-  document.execCommand('insertHTML', false, '<span class="otab" contenteditable="false">\t</span>\u200B');
+  const before = new Set(C.editor.querySelectorAll('.otab'));
+  document.execCommand('insertText', false, '\t');
+  layoutTabs();
+  // el cursor queda justo después del tabulador nuevo
+  const added = [...C.editor.querySelectorAll('.otab')].find((x) => !before.has(x));
+  if (!added) return;
+  let nx = added.nextSibling;
+  if (!nx && added.parentElement !== C.editor && added.parentElement.tagName === 'SPAN' && !added.parentElement.attributes.length) nx = added.parentElement.nextSibling;
+  const r = document.createRange();
+  if (nx && nx.nodeType === 3) r.setStart(nx, nx.nodeValue.startsWith('\u200B') ? 1 : 0);
+  else { const tn = document.createTextNode('\u200B'); added.after(tn); r.setStart(tn, 1); }
+  r.collapse(true); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  C.saveSelection?.();
 }
-export function layoutTabs() {
-  // tabuladores sueltos (pegados o importados) -> span.otab
+// tabuladores sueltos (escritos, pegados o importados) -> span.otab, conservando el cursor
+function convertTabs() {
+  const sel = getSelection();
+  // Chrome envuelve los tabuladores escritos en <span style="white-space:pre">: se quita ese estilo
+  C.editor.querySelectorAll('span[style]').forEach((sp) => { if (/^\s*white-space:\s*pre;?\s*$/.test(sp.getAttribute('style'))) sp.removeAttribute('style'); });
   const w = document.createTreeWalker(C.editor, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeValue.includes('\t') && !n.parentElement.closest('.otab,pre,del') ? 1 : 3) });
   const raw = []; while (w.nextNode()) raw.push(w.currentNode);
   for (const t of raw) {
+    const caret = sel.rangeCount && sel.isCollapsed && sel.anchorNode === t ? sel.anchorOffset : -1;
     const frag = document.createDocumentFragment();
-    t.nodeValue.split('\t').forEach((part, i) => { if (i) frag.append(h('span', { class: 'otab', contenteditable: 'false' }, '\t')); if (part) frag.append(document.createTextNode(part)); });
+    let pos = 0; let target = null;
+    const parts = t.nodeValue.split('\t');
+    parts.forEach((part, i) => {
+      if (i) { frag.append(h('span', { class: 'otab', contenteditable: 'false' }, '\t')); pos += 1; }
+      if (part || (caret === pos && i === parts.length - 1) || (caret === pos + part.length && i === parts.length - 1)) {
+        const tn = document.createTextNode(part || '​'); frag.append(tn);
+        if (caret >= pos && caret <= pos + part.length && !target) target = [tn, part ? caret - pos : 1];
+      } else if (caret === pos && !target) { target = 'after'; }
+      pos += part.length;
+    });
+    const last = frag.lastChild;
     t.replaceWith(frag);
+    if (target) {
+      const r = document.createRange();
+      if (target === 'after') { r.setStartAfter(last); } else r.setStart(target[0], Math.min(target[1], target[0].nodeValue.length));
+      r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+    }
   }
+}
+export function layoutTabs() {
+  convertTabs();
   const spans = [...C.editor.querySelectorAll('.otab')];
   if (!spans.length) return;
   const z = C.state.zoom / 100;
   const edLeft = C.editor.getBoundingClientRect().left;
+  const DEF = defTab();
   spans.forEach((s) => { s.style.width = '1px'; });
   for (const s of spans) {
     const blk = s.parentElement.closest(TAB_BLOCK) || C.editor;
     const stops = parseTabs(blk.dataset?.tabs);
     const bl = blk === C.editor ? 0 : (blk.getBoundingClientRect().left - edLeft) / z;
     const x = (s.getBoundingClientRect().left - edLeft) / z;
-    const seg = () => {
+    // texto que sigue al tabulador hasta el siguiente tabulador (o el fin del párrafo)
+    const segRange = () => {
       const r = document.createRange(); r.setStartAfter(s);
       let end = s.nextSibling; while (end && !(end.nodeType === 1 && end.classList?.contains('otab'))) end = end.nextSibling;
       if (end) r.setEndBefore(end); else r.setEnd(s.parentElement, s.parentElement.childNodes.length);
-      return r.getBoundingClientRect().width / z;
+      return r;
     };
-    let wdt = 0;
+    const seg = () => segRange().getBoundingClientRect().width / z;
+    // ancho del texto antes del separador decimal (coma o punto)
+    const beforeDecimal = () => {
+      const r = segRange(); const txt = r.toString(); const k = txt.search(/[.,]\d/); if (k < 0) return seg();
+      const w2 = document.createTreeWalker(r.commonAncestorContainer.nodeType === 3 ? r.commonAncestorContainer.parentNode : r.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+      let left = k; let n; const rr = document.createRange(); rr.setStart(r.startContainer, r.startOffset);
+      while ((n = w2.nextNode())) { if (!r.intersectsNode(n)) continue; const st = n === r.startContainer ? r.startOffset : 0; const len = n.nodeValue.length - st; if (left <= len) { rr.setEnd(n, st + left); break; } left -= len; }
+      return rr.getBoundingClientRect().width / z;
+    };
+    let wdt = 0; let leader = '';
     for (const st of stops) {
       if (st.x <= x + 1) continue;
       if (st.k === 'l') wdt = st.x - x;
+      else if (st.k === 'd') wdt = st.x - x - beforeDecimal();
       else { const sw = seg(); wdt = st.k === 'r' ? st.x - x - sw : st.x - x - sw / 2; }
-      if (wdt > 1) break; wdt = 0;
+      if (wdt > 1) { leader = st.f; break; } wdt = 0;
     }
-    if (!wdt) { const last = stops.length ? Math.max(stops[stops.length - 1].x, 0) : 0; const base = Math.max(last, bl); let nx = Math.floor(x / DEF_TAB + 1) * DEF_TAB; if (nx <= base) nx = Math.ceil((base + 1) / DEF_TAB) * DEF_TAB; wdt = Math.max(4, nx - x); }
+    if (!wdt) { const last = stops.length ? Math.max(stops[stops.length - 1].x, 0) : 0; const base = Math.max(last, bl); let nx = Math.floor(x / DEF + 1) * DEF; if (nx <= base) nx = Math.ceil((base + 1) / DEF) * DEF; wdt = Math.max(4, nx - x); }
     s.style.width = `${wdt}px`;
+    if (leader) s.dataset.leader = leader; else delete s.dataset.leader;
   }
 }
+const tabRuler = { left: 0, z: 1, cw: 0 };
 export function drawTabMarkers(left, z, cw) {
-  const sel = h('button', { class: 'tabkind', tabindex: '-1', title: 'Tipo de tabulación (clic para cambiar): izquierda, centrada o derecha', onclick: () => { tabKind = { l: 'c', c: 'r', r: 'l' }[tabKind]; sel.dataset.k = tabKind; } });
+  Object.assign(tabRuler, { left, z, cw });
+  const sel = h('button', { class: 'tabkind', tabindex: '-1', title: t('Tipo de tabulación (clic para cambiar): izquierda, centrada, derecha o decimal. Doble clic en la regla: Tabulaciones…'), onclick: () => { tabKind = { l: 'c', c: 'r', r: 'd', d: 'l' }[tabKind]; sel.dataset.k = tabKind; } });
   sel.dataset.k = tabKind;
   C.ruler.append(sel);
   const b = C.currentBlock();
   const blocks = () => C.selectedBlocks().map((x) => x.closest(TAB_BLOCK) || x);
   const track = C.ruler.querySelector('.track');
-  if (track && !track.dataset.tabs) {
-    track.dataset.tabs = '1';
-    track.title = 'Haz clic para poner una tabulación';
-    track.addEventListener('mousedown', (e) => {
-      if (e.target !== track && !e.target.classList.contains('m')) return;
-      const x = (e.clientX - C.ruler.getBoundingClientRect().left - left) / z;
-      if (x <= 0 || x >= cw) return;
+  if (track) track.title = t('Haz clic para poner una tabulación; doble clic para Tabulaciones…');
+  if (!C.ruler.dataset.tabs) {
+    C.ruler.dataset.tabs = '1';
+    const onRuler = (e) => e.target === C.ruler || ['track', 'm', 'tick', 'lab', 'deftab'].some((c) => e.target.classList?.contains(c));
+    C.ruler.addEventListener('mousedown', (e) => {
+      if (e.detail > 1 || e.button !== 0) return;
+      if (!onRuler(e)) return;
+      const x = (e.clientX - C.ruler.getBoundingClientRect().left - tabRuler.left) / tabRuler.z;
+      if (x <= 0 || x >= tabRuler.cw) return;
       e.preventDefault();
-      for (const bl of blocks()) { const list = parseTabs(bl.dataset.tabs); list.push({ k: tabKind, x }); bl.dataset.tabs = tabsStr(list); }
+      for (const bl of blocks()) { const list = parseTabs(bl.dataset.tabs); list.push({ k: tabKind, x, f: '' }); bl.dataset.tabs = tabsStr(list); }
       C.shell.markDirty(); C.schedulePaginate();
     });
+    C.ruler.addEventListener('dblclick', (e) => { if (!onRuler(e)) return; e.preventDefault(); tabsDialog(); });
   }
   if (!b) return;
   const blk = b.closest(TAB_BLOCK) || b;
-  for (const t of parseTabs(blk.dataset.tabs)) {
-    const m = h('div', { class: `tabstop k-${t.k}`, title: 'Arrastra para mover; arrástrala fuera de la regla para quitarla', style: { left: `${left + t.x * z}px` } });
+  const stops = parseTabs(blk.dataset.tabs);
+  // paradas predeterminadas después de la última personalizada (marcas pequeñas, como Writer)
+  const DEF = defTab(); const from = stops.length ? stops[stops.length - 1].x : 0;
+  for (let x = Math.floor(from / DEF + 1) * DEF; x < cw; x += DEF) C.ruler.append(h('div', { class: 'deftab', style: { left: `${left + x * z}px` } }));
+  for (const tb of stops) {
+    const m = h('div', { class: `tabstop k-${tb.k}`, title: `${t(KINDS[tb.k])} · ${(tb.x / CM).toFixed(2)} cm — ${t('arrastra para mover; fuera de la regla para quitarla; doble clic: Tabulaciones…')}`, style: { left: `${left + tb.x * z}px` } });
+    m.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); tabsDialog(tb.x); });
     m.addEventListener('mousedown', (e) => {
+      if (e.detail > 1) return;
       e.preventDefault(); e.stopPropagation();
-      const x0 = e.clientX, y0 = e.clientY; const targets = blocks(); let nx = t.x, gone = false;
-      const move = (ev) => { nx = Math.max(0, Math.min(cw, t.x + (ev.clientX - x0) / z)); gone = Math.abs(ev.clientY - y0) > 24; m.style.left = `${left + nx * z}px`; m.style.opacity = gone ? '0.3' : ''; };
+      const x0 = e.clientX, y0 = e.clientY; const targets = blocks(); let nx = tb.x, gone = false;
+      const move = (ev) => { nx = Math.max(0, Math.min(cw, tb.x + (ev.clientX - x0) / z)); gone = Math.abs(ev.clientY - y0) > 24; m.style.left = `${left + nx * z}px`; m.style.opacity = gone ? '0.3' : ''; };
       const up = () => {
         removeEventListener('mousemove', move); removeEventListener('mouseup', up);
-        for (const bl of targets) { const list = parseTabs(bl.dataset.tabs).filter((s) => !(s.k === t.k && Math.abs(s.x - t.x) < 1)); if (!gone) list.push({ k: t.k, x: nx }); if (list.length) bl.dataset.tabs = tabsStr(list); else delete bl.dataset.tabs; }
+        if (Math.abs(nx - tb.x) < 0.5 && !gone) return;
+        for (const bl of targets) { const list = parseTabs(bl.dataset.tabs).filter((x) => !(x.k === tb.k && Math.abs(x.x - tb.x) < 1)); if (!gone) list.push({ ...tb, x: nx }); if (list.length) bl.dataset.tabs = tabsStr(list); else delete bl.dataset.tabs; }
         C.shell.markDirty(); C.schedulePaginate();
       };
       addEventListener('mousemove', move); addEventListener('mouseup', up);
     });
     C.ruler.append(m);
   }
+}
+
+// Formato → Tabulaciones…: lista de paradas del párrafo con posición, tipo y relleno,
+// y el intervalo de las paradas predeterminadas del documento (como en LibreOffice Writer)
+export async function tabsDialog(focusX) {
+  C.restoreSelection?.();
+  const targets = C.selectedBlocks().map((x) => x.closest(TAB_BLOCK) || x).filter(Boolean);
+  if (!targets.length) { toast('Coloca el cursor en un párrafo.'); return; }
+  let list = parseTabs(targets[0].dataset.tabs).map((x) => ({ ...x }));
+  let cur = list.findIndex((x) => focusX != null && Math.abs(x.x - focusX) < 1);
+  const posIn = h('input', { type: 'number', name: 'pos', step: '0.05', min: '0', max: '60' });
+  const kindSel = h('select', { name: 'kind' }, ...Object.entries(KINDS).map(([k, l]) => h('option', { value: k }, t(l))));
+  const fillSel = h('select', { name: 'fill' }, ...Object.entries(LEADERS).map(([k, l]) => h('option', { value: k }, t(l))));
+  const listEl = h('div', { class: 'tb-list', role: 'listbox', 'aria-label': t('Posiciones') });
+  const defIn = h('input', { type: 'number', name: 'deftab', step: '0.05', min: '0.1', max: '20', value: (defTab() / CM).toFixed(2) });
+  const draw = () => {
+    listEl.replaceChildren(...(list.length ? list.map((x, i) => h('button', { type: 'button', role: 'option', 'aria-selected': String(i === cur), class: `tb-item${i === cur ? ' on' : ''}`, onclick: () => { cur = i; load(); draw(); } }, h('span', {}, `${(x.x / CM).toFixed(2)} cm`), h('small', {}, `${t(KINDS[x.k])}${x.f ? ` · ${x.f.repeat(4)}` : ''}`))) : [h('p', { class: 'muted' }, t('Sin tabulaciones propias: se usan las predeterminadas.'))]));
+  };
+  const load = () => { const x = list[cur]; if (!x) return; posIn.value = (x.x / CM).toFixed(2); kindSel.value = x.k; fillSel.value = x.f; };
+  // como en Writer: el tipo y el relleno se aplican a la parada elegida; la posición se usa al pulsar «Nueva»
+  const save = () => { const x = list[cur]; if (!x || Math.abs(Number(posIn.value) * CM - x.x) >= 1) return; x.k = kindSel.value; x.f = fillSel.value; draw(); };
+  for (const el of [kindSel, fillSel]) el.addEventListener('change', save);
+  const btn = (label, fn) => h('button', { type: 'button', class: 'btn', onclick: fn }, t(label));
+  const body = h('div', { class: 'tb' },
+    h('div', { class: 'tb-left' }, h('b', {}, t('Posiciones')), listEl),
+    h('div', { class: 'tb-right' },
+      h('label', { class: 'fx-field' }, h('span', {}, t('Posición (cm)')), posIn),
+      h('label', { class: 'fx-field' }, h('span', {}, t('Tipo')), kindSel),
+      h('label', { class: 'fx-field' }, h('span', {}, t('Carácter de relleno')), fillSel),
+      h('div', { class: 'tb-btns' },
+        btn('Nueva', () => { const n = { k: kindSel.value || 'l', x: (Number(posIn.value) || (list.length ? list[list.length - 1].x / CM + 2 : 2)) * CM, f: fillSel.value || '' }; if (list.some((x) => Math.abs(x.x - n.x) < 1)) n.x += CM; list.push(n); list.sort((a, b) => a.x - b.x); cur = list.indexOf(n); load(); draw(); }),
+        btn('Eliminar', () => { if (cur >= 0) { list.splice(cur, 1); cur = Math.min(cur, list.length - 1); load(); draw(); } }),
+        btn('Eliminar todas', () => { list = []; cur = -1; draw(); })),
+      h('label', { class: 'fx-field tb-def' }, h('span', {}, t('Paradas predeterminadas cada (cm)')), defIn)));
+  if (cur < 0 && list.length) cur = 0;
+  load(); draw();
+  const ok = await modal({ title: t('Tabulaciones'), body, width: '520px', buttons: [{ label: 'Cancelar', value: null }, { label: 'Aceptar', primary: true, value: true }] });
+  if (!ok) return;
+  // una posición escrita que aún no está en la lista se agrega al aceptar
+  const typed = Number(posIn.value) * CM;
+  if (posIn.value !== '' && typed >= 0 && !list.some((x) => Math.abs(x.x - typed) < 1)) list.push({ k: kindSel.value, x: typed, f: fillSel.value });
+  for (const bl of targets) { if (list.length) bl.dataset.tabs = tabsStr(list.map((x) => ({ ...x }))); else delete bl.dataset.tabs; }
+  const d = Number(defIn.value);
+  if (d > 0) C.state.defTab = Math.round(d * CM * 100) / 100;
+  C.shell.markDirty(); C.schedulePaginate();
 }

@@ -244,7 +244,7 @@ function onEditorKey(e) {
     const cell = b && b.closest('td,th');
     if (cell) { e.preventDefault(); moveCell(cell, e.shiftKey ? -1 : 1); return; }
     if (b && b.tagName === 'LI') { e.preventDefault(); exec(e.shiftKey ? 'outdent' : 'indent'); return; }
-    e.preventDefault(); F.insertTab(); shell.markDirty(); schedulePaginate();
+    e.preventDefault(); if (e.shiftKey) return; F.insertTab(); shell.markDirty(); schedulePaginate();
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selImg) { e.preventDefault(); selImg.remove(); selectImage(null); shell.markDirty(); schedulePaginate(); }
   // Evita que el editor quede vacío sin párrafo
@@ -799,13 +799,13 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador del archivo
 function snapshotSettings() {
-  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor };
+  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor, defTab: state.defTab || null };
 }
 function setContent(html, settings) {
   editor.innerHTML = html || '<p><br></p>';
   if (settings) {
     if (settings.page) Object.assign(state.page, settings.page);
-    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor', 'defTab'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
     editor.classList.toggle('tracking', !!state.track);
   }
   selectImage(null);
@@ -832,7 +832,7 @@ const adapter = {
   async newDoc(tplId) {
     const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0];
     state.page = { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 };
-    state.header = ''; state.footer = ''; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
+    state.header = ''; state.footer = ''; state.defTab = null; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
     Object.assign(state, { comments: [], footnotes: {}, endnotes: {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
     editor.classList.remove('tracking');
     setContent(localizeHtml(t.html()));
@@ -844,14 +844,14 @@ const adapter = {
     const text = () => new TextDecoder('utf-8').decode(f.bytes);
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
-      state.header = r.header || ''; state.footer = r.footer || ''; state.pageNumbers = 'none';
+      state.header = r.header || ''; state.footer = r.footer || ''; state.pageNumbers = 'none'; state.defTab = r.defTab || null;
       Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
     }
     if (f.ext === 'odt') {
       const r = await odtToHtml(f.bytes);
-      Object.assign(state, { header: r.header || '', footer: r.footer || '', pageNumbers: 'none', comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { defTab: r.defTab || null, header: r.header || '', footer: r.footer || '', pageNumbers: 'none', comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { props: r.props };
     }
@@ -930,6 +930,7 @@ async function onCommand(cmd, arg) {
     case 'fontDialog': return FX.fontDialog();
     case 'paraDialog': return FX.paragraphDialog();
     case 'paraBorders': return FX.paragraphDialog('borders');
+    case 'tabs': return F.tabsDialog();
     case 'changeCase': return;
     case 'marks': { const on = FX.toggleMarks(); shell.ribbon.setOn('marks', on); return; }
     case 'fontName': return applyFontFamily(arg);
@@ -1064,7 +1065,7 @@ const TABS = [
       { label: 'Párrafo', items: [
         { stack: [
           { row: [{ cmd: 'insertUnorderedList', label: 'Viñetas', icon: 'bullets' }, { cmd: 'insertOrderedList', label: 'Numeración', icon: 'numbers' }, { cmd: 'outdent', label: 'Disminuir sangría', icon: 'outdent' }, { cmd: 'indent', label: 'Aumentar sangría', icon: 'indent' }] },
-          { row: [{ cmd: 'justifyLeft', label: 'Alinear a la izquierda', icon: 'alignLeft', kbd: 'Ctrl+L' }, { cmd: 'justifyCenter', label: 'Centrar', icon: 'alignCenter', kbd: 'Ctrl+E' }, { cmd: 'justifyRight', label: 'Alinear a la derecha', icon: 'alignRight', kbd: 'Ctrl+R' }, { cmd: 'justifyFull', label: 'Justificar', icon: 'justify', kbd: 'Ctrl+J' }, { cmd: 'lineSpacing', label: 'Interlineado', icon: 'lineSpacing', menu: lineMenu }, { cmd: 'paraBorders', label: 'Bordes y sombreado', icon: 'paraBorder' }, { cmd: 'marks', label: 'Marcas de formato (Ctrl+F10)', icon: 'pilcrow' }, { cmd: 'paraDialog', label: 'Párrafo…', icon: 'dialogLauncher' }] },
+          { row: [{ cmd: 'justifyLeft', label: 'Alinear a la izquierda', icon: 'alignLeft', kbd: 'Ctrl+L' }, { cmd: 'justifyCenter', label: 'Centrar', icon: 'alignCenter', kbd: 'Ctrl+E' }, { cmd: 'justifyRight', label: 'Alinear a la derecha', icon: 'alignRight', kbd: 'Ctrl+R' }, { cmd: 'justifyFull', label: 'Justificar', icon: 'justify', kbd: 'Ctrl+J' }, { cmd: 'lineSpacing', label: 'Interlineado', icon: 'lineSpacing', menu: lineMenu }, { cmd: 'paraBorders', label: 'Bordes y sombreado', icon: 'paraBorder' }, { cmd: 'marks', label: 'Marcas de formato (Ctrl+F10)', icon: 'pilcrow' }, { cmd: 'tabs', label: 'Tabulaciones…', icon: 'tabs' }, { cmd: 'paraDialog', label: 'Párrafo…', icon: 'dialogLauncher' }] },
         ] },
       ] },
       { label: 'Estilos', items: [{ render: styleGallery }] },
