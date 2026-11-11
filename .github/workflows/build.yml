@@ -31,8 +31,16 @@ jobs:
           cache: npm
       - name: Herramientas del sistema
         run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm hfsprogs cmake libssl-dev zlib1g-dev libbz2-dev xvfb
+          # reintentos; si el espejo de Azure no responde, se usa el archivo oficial de Ubuntu
+          PKGS="rpm hfsprogs cmake libssl-dev zlib1g-dev libbz2-dev xvfb"
+          for i in 1 2 3 4 5; do
+            sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y -o Acquire::Retries=3 $PKGS && exit 0
+            echo "apt falló (intento $i); cambiando de espejo"
+            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null || true
+            sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            sleep $((i * 20))
+          done
+          exit 1
       - run: npm ci
       - name: Diccionarios de ortografía (sin internet en la app)
         continue-on-error: true
