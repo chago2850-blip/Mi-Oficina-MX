@@ -76,6 +76,8 @@ jobs:
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase5-tablas.mjs
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase6-calc.mjs
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase6-calc.mjs
+          xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase7-impresiona.mjs
+          OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase7-impresiona.mjs
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/a11y.mjs
       - uses: actions/upload-artifact@v4
         if: always()

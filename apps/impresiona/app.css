@@ -198,3 +198,10 @@ body.render-mode .show-stage.aud { display: block; }
 .ss-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ss-prev { width: 100px; height: 100px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--chrome); margin-top: 20px; }
 .ss-page { background: #fff; border: 1px solid var(--line-2); box-shadow: var(--shadow); transition: width .15s, height .15s; }
+
+/* objetos (objetos.js) */
+.slide.show-grid { background-image: linear-gradient(rgba(91,72,232,.13) 1px, transparent 1px), linear-gradient(90deg, rgba(91,72,232,.13) 1px, transparent 1px) !important; background-size: var(--grid) var(--grid) !important; }
+.thumb.hidden-slide .tframe { opacity: .45; }
+.thumb.hidden-slide .n::after { content: ' ⊘'; }
+.obj.has-link { cursor: pointer; }
+.otxt .tin p { margin-bottom: var(--para-sp, .25em); }

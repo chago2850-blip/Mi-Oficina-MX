@@ -14,7 +14,8 @@ function sanitizeHtml(html) {
   return d.body.innerHTML.replace(/&nbsp;/g, (m, i, str) => (/\S/.test(str[i - 1] || '') && /\S/.test(str[i + 6] || '') ? ' ' : m));
 }
 const fillColor = (f) => (f && f.type === 'color' ? f.value : null);
-const SHAPES = { rect: 'rect', roundRect: 'roundRect', ellipse: 'ellipse', triangle: 'triangle', rightArrow: 'arrow', line: 'line', star5: 'star', star: 'star' };
+const SHAPES = { rect: 'rect', roundRect: 'roundRect', ellipse: 'ellipse', triangle: 'triangle', rightArrow: 'arrow', line: 'line', star5: 'star', star: 'star', star4: 'star4', rtTriangle: 'rtTriangle', diamond: 'diamond', parallelogram: 'parallelogram', trapezoid: 'trapezoid', pentagon: 'pentagon', hexagon: 'hexagon', octagon: 'octagon', plus: 'plus', heart: 'heart', wedgeRectCallout: 'callout', wedgeRoundRectCallout: 'callout', cloud: 'cloud', cloudCallout: 'cloud', leftArrow: 'leftArrow', upArrow: 'upArrow', downArrow: 'downArrow', leftRightArrow: 'leftRightArrow', chevron: 'chevron', homePlate: 'homePlate', straightConnector1: 'line' };
+const DASH_IN = { dashed: 'dash', dotted: 'dot' };
 
 export async function readPptx(bytes, uid) {
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
@@ -23,7 +24,7 @@ export async function readPptx(bytes, uid) {
   const W = Math.round(json.size.width * PT_PX), H = Math.round(json.size.height * PT_PX);
   const warnings = new Set();
   const conv = (el, ox = 0, oy = 0) => {
-    const base = { id: uid(), x: (el.left + ox) * PT_PX, y: (el.top + oy) * PT_PX, w: el.width * PT_PX, h: el.height * PT_PX, rot: el.rotate || 0 };
+    const base = { id: uid(), x: (el.left + ox) * PT_PX, y: (el.top + oy) * PT_PX, w: el.width * PT_PX, h: el.height * PT_PX, rot: el.rotate || 0, ...(el.isFlipH ? { flipH: true } : {}), ...(el.isFlipV ? { flipV: true } : {}) };
     if (el.type === 'text') return [{ ...base, type: 'text', html: sanitizeHtml(el.content), style: { valign: { mid: 'middle', ctr: 'middle', b: 'bottom', bottom: 'bottom' }[el.vAlign] || 'top', fill: fillColor(el.fill), stroke: el.borderWidth ? el.borderColor : null, strokeW: el.borderWidth || 0, raw: true } }];
     if (el.type === 'shape' && !fillColor(el.fill) && !el.borderWidth && el.content && (el.shapType === 'rect' || !el.shapType)) {
       // Cuadro de texto guardado como rectángulo sin relleno ni borde
@@ -32,7 +33,19 @@ export async function readPptx(bytes, uid) {
     if (el.type === 'shape') {
       const sh = SHAPES[el.shapType];
       if (!sh) warnings.add('algunas formas especiales se convirtieron en rectángulos');
-      return [{ ...base, type: 'shape', shape: sh || 'rect', html: sanitizeHtml(el.content), style: { fill: fillColor(el.fill) || null, stroke: el.borderWidth ? el.borderColor : null, strokeW: el.borderWidth * PT_PX || 0, valign: { mid: 'middle', ctr: 'middle', b: 'bottom' }[el.vAlign] || 'middle', align: 'center', raw: true } }];
+      const gv = el.fill?.type === 'gradient' ? el.fill.value : null; const gcols = (gv?.colors || []).map((c) => c.color).filter(Boolean);
+      const a8 = (c) => (typeof c === 'string' && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c); const alpha = [fillColor(el.fill), gcols[0]].map((c) => (typeof c === 'string' && /^#[0-9a-f]{8}$/i.test(c) ? parseInt(c.slice(7), 16) / 255 : null)).find((v) => v != null);
+      const sty = { fill: a8(fillColor(el.fill) || gcols[0]) || null, ...(alpha != null && alpha < 1 ? { fillOpacity: Math.round(alpha * 100) / 100 } : {}), ...(gcols.length > 1 ? { grad: { c2: a8(gcols[gcols.length - 1]), type: gv.path && gv.path !== 'line' ? 'radial' : 'linear', angle: Number(gv.rot) || 0 } } : {}), stroke: el.borderWidth ? el.borderColor : null, strokeW: el.borderWidth * PT_PX || 0, valign: { mid: 'middle', ctr: 'middle', b: 'bottom' }[el.vAlign] || 'middle', align: 'center', raw: true };
+      if (DASH_IN[el.borderType]) sty.dash = DASH_IN[el.borderType];
+      if (sh === 'line') {
+        sty.fill = undefined; if (el.borderColor) sty.stroke = el.borderColor;
+        // en PowerPoint la línea va de una esquina a la otra de su caja: aquí, línea horizontal girada
+        const cx = base.x + base.w / 2, cy = base.y + base.h / 2; const len = Math.hypot(base.w, base.h);
+        let ang = (Math.atan2(base.h, base.w) * 180) / Math.PI; if (base.flipV !== base.flipH && base.h > 1 && base.w > 1) ang = -ang;
+        const rot = (((base.rot || 0) + ang) % 360 + 360) % 360;
+        return [{ ...base, flipH: undefined, flipV: undefined, x: Math.round(cx - len / 2), y: Math.round(cy - 10), w: Math.round(len), h: 20, rot: Math.round(rot * 10) / 10, type: 'shape', shape: 'line', html: '', style: sty }];
+      }
+      return [{ ...base, type: 'shape', shape: sh || 'rect', html: sanitizeHtml(el.content), style: sty }];
     }
     if (el.type === 'image' && el.base64) return [{ ...base, type: 'image', src: el.base64 }];
     if (el.type === 'table') return [{ ...base, type: 'table', rows: el.data.map((row) => row.map((c) => ({ text: c.text || '', bg: c.fillColor || null, color: c.fontColor || null, bold: !!c.fontBold, hidden: !!(c.vMerge || c.hMerge), rs: c.rowSpan || 1, cs: c.colSpan || 1 }))), style: {} }];
@@ -66,7 +79,29 @@ export async function readPptx(bytes, uid) {
   }
   for (const s of slides) s.objects = s.objects.filter((o) => o.type !== 'media' || o.src);
   const imported = { size: { w: W, h: H }, theme: 'claro', slides: slides.length ? slides : [] };
-  try { const z = await JSZip.loadAsync(bytes); const px = await z.file('ppt/presentation.xml')?.async('string'); const m = /<p:presentation\b[^>]*\sfirstSlideNum="(\d+)"/.exec(px || ''); if (m) imported.firstNum = Number(m[1]); } catch { /* */ }
+  try {
+    const z = await JSZip.loadAsync(bytes); const px = await z.file('ppt/presentation.xml')?.async('string'); const m = /<p:presentation\b[^>]*\sfirstSlideNum="(\d+)"/.exec(px || ''); if (m) imported.firstNum = Number(m[1]);
+    // diapositivas ocultas (show="0"), en el orden de la presentación
+    const rels = await z.file('ppt/_rels/presentation.xml.rels')?.async('string') || '';
+    const ids = [...(px || '').matchAll(/<p:sldId\b[^>]*r:id="([^"]+)"/g)].map((x) => x[1]);
+    const target = (rid) => (new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`).exec(rels) || new RegExp(`Target="([^"]+)"[^>]*Id="${rid}"`).exec(rels) || [])[1];
+    const HEAD = { triangle: 'triangle', arrow: 'open', stealth: 'triangle', oval: 'circle', diamond: 'diamond' };
+    for (let i = 0; i < ids.length && i < imported.slides.length; i++) {
+      const t = target(ids[i]); const f = t && z.file(`ppt/${t.replace(/^\/?ppt\//, '')}`); const sx = f ? await f.async('string') : '';
+      if (/<p:sld\b[^>]*\sshow="(0|false)"/.test(sx)) imported.slides[i].hidden = true;
+      // puntas de flecha y guiones de las líneas (pptxtojson no los da): en el mismo orden que las líneas importadas
+      const lines = [...sx.matchAll(/<p:(sp|cxnSp)>([\s\S]*?)<\/p:\1>/g)].map((m) => m[2]).filter((b2) => /prst="(line|straightConnector1)"/.test(b2));
+      const objs = imported.slides[i].objects.filter((o) => o.type === 'shape' && o.shape === 'line');
+      lines.forEach((b2, k) => {
+        const o = objs[k]; if (!o) return;
+        const he = /<a:headEnd[^>]*type="(\w+)"/.exec(b2)?.[1], te = /<a:tailEnd[^>]*type="(\w+)"/.exec(b2)?.[1];
+        if (HEAD[he]) o.style.arrowStart = HEAD[he]; if (HEAD[te]) o.style.arrowEnd = HEAD[te];
+        const pd = /<a:prstDash val="(\w+)"/.exec(b2)?.[1];
+        const DM = { dash: 'dash', sysDash: 'dash', lgDash: 'longDash', sysDot: 'dot', dot: 'dot', dashDot: 'dashDot', sysDashDot: 'dashDot', lgDashDot: 'dashDot' };
+        if (DM[pd]) o.style.dash = DM[pd]; else if (/<a:custDash>/.test(b2)) { const ds = [...b2.matchAll(/<a:ds d="(\d+)" sp="(\d+)"/g)]; o.style.dash = ds.length > 1 && ds[0][1] !== ds[1][1] ? 'dashDot' : ds.length && Number(ds[0][1]) <= 150000 ? 'dot' : 'dash'; }
+      });
+    }
+  } catch { /* */ }
   const merged = await applySuiteMeta(bytes, imported);
   return { pres: merged || imported, warnings: merged ? [] : [...warnings] };
 }
@@ -130,7 +165,31 @@ function toHex(c) {
   const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return undefined;
   return m[1].split(',').slice(0, 3).map((x) => Math.round(parseFloat(x)).toString(16).padStart(2, '0')).join('').toUpperCase();
 }
-const SHAPE_OUT = { rect: 'rect', roundRect: 'roundRect', ellipse: 'ellipse', triangle: 'triangle', arrow: 'rightArrow', line: 'line', star: 'star5' };
+const SHAPE_OUT = { rect: 'rect', roundRect: 'roundRect', ellipse: 'ellipse', triangle: 'triangle', arrow: 'rightArrow', line: 'line', lineArrow: 'line', star: 'star5', star4: 'star4', rtTriangle: 'rtTriangle', diamond: 'diamond', parallelogram: 'parallelogram', trapezoid: 'trapezoid', pentagon: 'pentagon', hexagon: 'hexagon', octagon: 'octagon', plus: 'plus', heart: 'heart', callout: 'wedgeRectCallout', cloud: 'cloud', leftArrow: 'leftArrow', upArrow: 'upArrow', downArrow: 'downArrow', leftRightArrow: 'leftRightArrow', chevron: 'chevron', homePlate: 'homePlate' };
+const DASH_OUT = { dash: 'dash', dot: 'sysDot', dashDot: 'dashDot', longDash: 'lgDash' };
+const HEAD_OUT = { triangle: 'triangle', open: 'arrow', circle: 'oval', diamond: 'diamond' };
+// relleno, línea, sombra y efectos de un objeto en las opciones de PptxGenJS
+function fillOpt(st, th, def) {
+  if (st.fill === null) return { type: 'none' };
+  const c = st.fill || def; if (!c) return undefined;
+  return { color: c.replace('#', ''), ...(st.fillOpacity != null || st.opacity != null ? { transparency: Math.round((1 - (st.fillOpacity ?? 1) * (st.opacity ?? 1)) * 100) } : {}) };
+}
+function lineOpt(o, st, th) {
+  const isLine = o.shape === 'line' || o.shape === 'lineArrow';
+  const col = st.stroke || (isLine ? th.accent : null); if (!col) return { type: 'none' };
+  const L = { color: col.replace('#', ''), width: (st.strokeW || (isLine ? 4 : 1)) * 0.75 };
+  if (DASH_OUT[st.dash]) L.dashType = DASH_OUT[st.dash];
+  if (st.strokeOpacity != null) L.transparency = Math.round((1 - st.strokeOpacity) * 100);
+  if (isLine) { const a = st.arrowStart, b = st.arrowEnd || (o.shape === 'lineArrow' ? 'triangle' : null); if (HEAD_OUT[a]) L.beginArrowType = HEAD_OUT[a]; if (HEAD_OUT[b]) L.endArrowType = HEAD_OUT[b]; }
+  return L;
+}
+function fxOpt(o, st) {
+  const x = {};
+  if (o.flipH) x.flipH = true; if (o.flipV) x.flipV = true;
+  if (st.shadow) { const s = st.shadow; x.shadow = { type: 'outer', color: (s.color || '#000000').replace('#', ''), blur: Math.round((s.blur ?? 6) * 0.75), offset: Math.round(Math.hypot(s.dx ?? 4, s.dy ?? 4) * 0.75), angle: 45, opacity: s.alpha ?? 0.45 }; }
+  if (o.link) { if (/^(https?:|mailto:)/i.test(o.link)) x.hyperlink = { url: o.link }; }
+  return x;
+}
 
 export async function writePptx(pres, renderSlideImage, props = {}) {
   const p = new PptxGenJS();
@@ -143,7 +202,7 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
   p.company = 'Mi Oficina MX';
   const th = themeById(pres.theme);
   for (const s of pres.slides) {
-    const slide = p.addSlide();
+    const slide = p.addSlide(); if (s.hidden) slide.hidden = true;
     if (s.bgImage) slide.background = { data: s.bgImage };
     else slide.background = { color: (s.bg || th.bg).replace('#', '') };
     const masterObjs = pres.master?.objects || [];
@@ -157,13 +216,17 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
         const opts = {
           ...pos, valign: { middle: 'middle', bottom: 'bottom' }[st.valign] || 'top', margin: 4,
           fontFace: st.font || (o.role === 'title' ? th.titleFont : th.bodyFont), fontSize: st.size || 18, color: (st.color || (o.role === 'title' ? th.title : th.text)).replace('#', ''), bold: !!st.bold,
-          fit: 'none',
+          fit: st.autofit === 'shrink' ? 'shrink' : 'none', ...fxOpt(o, st),
+          ...(st.pad ? { margin: [st.pad.l, st.pad.r, st.pad.b, st.pad.t].map((v) => Math.round(v * 0.75)) } : {}),
+          ...(st.lineH ? { lineSpacingMultiple: st.lineH / 1.2 } : {}), ...(st.paraSp != null ? { paraSpaceAfter: st.paraSp } : {}),
         };
-        if (o.type === 'shape') Object.assign(opts, { shape: SHAPE_OUT[o.shape] || 'rect', fill: st.fill ? { color: st.fill.replace('#', '') } : undefined, line: st.stroke ? { color: st.stroke.replace('#', ''), width: (st.strokeW || 1) * 0.75 } : undefined, rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, color: (st.color || '#FFFFFF').replace('#', '') });
-        else if (st.fill) opts.fill = { color: st.fill.replace('#', '') };
+        if (o.type === 'shape') Object.assign(opts, { shape: SHAPE_OUT[o.shape] || 'rect', fill: fillOpt(st, th, th.accent), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, color: (st.color || '#FFFFFF').replace('#', '') });
+        else if (st.fill) opts.fill = fillOpt(st, th);
         slide.addText(runs, opts);
       } else if (o.type === 'shape') {
-        slide.addShape(SHAPE_OUT[o.shape] || 'rect', { ...pos, fill: st.fill ? { color: st.fill.replace('#', '') } : { type: 'none' }, line: st.stroke ? { color: st.stroke.replace('#', ''), width: (st.strokeW || 1) * 0.75 } : { type: 'none' }, rectRadius: o.shape === 'roundRect' ? 0.15 : undefined });
+        const isLn = o.shape === 'line' || o.shape === 'lineArrow';
+        if (isLn) Object.assign(pos, { y: (o.y + o.h / 2) * PX_IN, h: 0 });
+        slide.addShape(SHAPE_OUT[o.shape] || 'rect', { ...pos, fill: o.shape === 'line' || o.shape === 'lineArrow' ? undefined : (fillOpt(st, th, th.accent) || { type: 'none' }), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, ...fxOpt(o, st) });
       } else if (o.type === 'chart') {
         const d = o.data || { cats: [], series: [] };
         const CT = { column: 'bar', bar: 'bar', line: 'line', area: 'area', pie: 'pie', doughnut: 'doughnut', scatter: 'scatter' };
@@ -173,7 +236,9 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
         if (!data.length) continue;
         slide.addChart(CT[o.chartType] || 'bar', data, { ...pos, barDir: o.chartType === 'bar' ? 'bar' : 'col', title: o.title || undefined, showTitle: !!o.title, showLegend: d.series.length > 1 || o.chartType === 'pie' || o.chartType === 'doughnut', legendPos: 'b', chartColors: [th.accent, th.accent2, 'F08A24', '1F8FD6', '2FB4A8', '8E6CD9'].map((c) => c.replace('#', '')), catAxisLabelColor: th.text.replace('#', ''), valAxisLabelColor: th.text.replace('#', ''), titleColor: th.title.replace('#', ''), dataLabelColor: th.text.replace('#', '') });
       } else if (o.type === 'image' && o.src) {
-        slide.addImage({ data: o.src, ...pos });
+        const c = o.crop; const io = { data: o.src, ...pos, ...fxOpt(o, st), ...(st.opacity != null ? { transparency: Math.round((1 - st.opacity) * 100) } : {}) };
+        if (c) { const fw = (100 - c.l - c.r) / 100, fh = (100 - c.t - c.b) / 100; Object.assign(io, { w: pos.w / fw, h: pos.h / fh, sizing: { type: 'crop', x: (pos.w / fw) * (c.l / 100), y: (pos.h / fh) * (c.t / 100), w: pos.w, h: pos.h } }); }
+        slide.addImage(io);
       } else if (o.type === 'media' && o.src?.startsWith('data:')) {
         slide.addMedia({ type: o.kind === 'audio' ? 'audio' : 'video', data: o.src.replace(/^data:/, ''), ...pos });
       } else if (o.type === 'table') {

@@ -186,6 +186,15 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = fals
   eng.noNarration = recording;
   // con intervalos, al terminar el tiempo se pasa a la siguiente diapositiva (con sus pasos ya incluidos)
   eng.onAuto = () => { if (ended()) return; if (eng.i < getPres().slides.length - 1) eng.mount(eng.i + 1, { dir: 1 }); else next(); };
+  // acciones al hacer clic en un objeto (hipervínculos y saltos)
+  stageS.addEventListener('click', (e) => {
+    const a = e.target.closest?.('[data-link]'); if (!a) return;
+    e.stopPropagation(); e.preventDefault();
+    const l = a.dataset.link; const P = getPres(); const n = P.slides.length;
+    if (l.startsWith('#slide:')) { const i = P.slides.findIndex((s) => s.id === l.slice(7)); if (i >= 0) eng.mount(i, { dir: i < eng.i ? -1 : 1 }); }
+    else if (l === '#next') next(); else if (l === '#prev') prev(); else if (l === '#first') eng.mount(0, { dir: -1 }); else if (l === '#last') eng.mount(n - 1); else if (l === '#end') end();
+    else if (/^(https?:|mailto:)/i.test(l)) { if (window.oficina?.openExternal) window.oficina.openExternal(l); else window.open(l, '_blank'); }
+  }, true);
   const ended = () => show.classList.contains('ended');
   const next = () => { if (ended()) { end(); return; } if (!eng.next()) { clearTimeout(eng.autoT); show.classList.add('ended'); stageS.append(h('div', { class: 'show-end' }, t('Fin de la presentación. Haz clic para salir.'))); } };
   const prev = () => { if (ended()) { show.classList.remove('ended'); stageS.querySelector('.show-end')?.remove(); return; } eng.prev(); };

@@ -1,0 +1,19 @@
+# Fase 7 (Impresiona como LibreOffice Impress, parte 1)
+D = {
+'Acción': 'Action', 'Acción al hacer clic': 'Action on click', 'Acción al hacer clic…': 'Action on click…', 'Ir a la diapositiva': 'Go to slide', 'Ir a una página web o correo': 'Go to a web page or email',
+'Diapositiva anterior': 'Previous slide', 'Diapositiva siguiente': 'Next slide', 'Primera diapositiva': 'First slide', 'Última diapositiva': 'Last slide', 'Terminar presentación': 'End presentation',
+'Ajustar a la cuadrícula': 'Snap to grid', 'Mostrar cuadrícula': 'Show grid', 'Cuadrícula': 'Grid', 'Separación (cm)': 'Spacing (cm)',
+'Ajuste automático': 'Autofit', 'No ajustar': 'Do not autofit', 'Reducir el texto al desbordar': 'Shrink text on overflow', 'Anclaje del texto': 'Text anchor', 'Anclaje y ajuste': 'Anchor and fit', 'Espacio a los bordes': 'Spacing to borders', 'Espacio entre párrafos': 'Spacing between paragraphs', 'Sangrías y espacios': 'Indents & spacing',
+'Ajustes de imagen': 'Image adjustments', 'Ajustes de imagen…': 'Image adjustments…', 'Brillo (%)': 'Brightness (%)', 'Contraste (%)': 'Contrast (%)', 'Modo de color': 'Color mode', 'Escala de grises': 'Grayscale', 'Sepia': 'Sepia', 'Invertir colores': 'Invert colors',
+'Recortar imagen': 'Crop image', 'Recortar…': 'Crop…', 'Conservar el tamaño de la imagen (cambiar el marco)': 'Keep image size (change the frame)', 'El recorte es demasiado grande.': 'The crop is too large.', 'Tamaño original': 'Original size', 'Selecciona una imagen.': 'Select an image.',
+'Clonar formato': 'Clone formatting', 'Haz clic en el objeto al que quieres dar el mismo formato.': 'Click the object you want to give the same formatting.',
+'Continua': 'Continuous', 'Guiones': 'Dashes', 'Puntos': 'Dots', 'Guion y punto': 'Dash dot', 'Guiones largos': 'Long dashes', 'Sin línea': 'No line', 'Flecha abierta': 'Open arrow', 'Puntas de flecha (líneas)': 'Arrowheads (lines)',
+'Degradado': 'Gradient', 'Segundo color': 'Second color', 'Lineal': 'Linear', 'Radial': 'Radial', 'Tipo de degradado': 'Gradient type', 'Ángulo': 'Angle', 'Transparencia del relleno': 'Fill transparency', 'Transparencia del objeto': 'Object transparency', 'Usar sombra': 'Use shadow', 'Desenfoque': 'Blur', 'Distancia': 'Distance',
+'Distribuir': 'Distribute', 'Distribuir horizontalmente': 'Distribute horizontally', 'Distribuir verticalmente': 'Distribute vertically', 'Traer adelante': 'Bring forward', 'Enviar atrás': 'Send backward', 'Selecciona al menos dos objetos.': 'Select at least two objects.', 'Selecciona al menos tres objetos.': 'Select at least three objects.',
+'Girar 90° a la derecha': 'Rotate 90° right', 'Girar 90° a la izquierda': 'Rotate 90° left', 'Girar y voltear': 'Rotate & flip', 'Giro': 'Rotation', 'Ángulo de giro': 'Rotation angle', 'Voltear': 'Flip', 'Voltear horizontalmente': 'Flip horizontally', 'Voltear verticalmente': 'Flip vertically',
+'Posición X': 'Position X', 'Posición Y': 'Position Y', 'Posición y tamaño': 'Position and size', 'Posición y tamaño…': 'Position and size…', 'Mantener proporción': 'Keep ratio', 'Proteger posición y tamaño': 'Protect position and size',
+'Área…': 'Area…', 'Línea…': 'Line…', 'Texto…': 'Text…', 'Ocultar diapositiva': 'Hide slide', 'Mostrar diapositiva': 'Show slide', 'Todas las diapositivas están ocultas.': 'All slides are hidden.',
+'Triángulo rectángulo': 'Right triangle', 'Rombo': 'Diamond', 'Paralelogramo': 'Parallelogram', 'Trapecio': 'Trapezoid', 'Pentágono': 'Pentagon', 'Hexágono': 'Hexagon', 'Octágono': 'Octagon', 'Cruz': 'Cross', 'Estrella de 4 puntas': '4-point star', 'Corazón': 'Heart', 'Globo de diálogo': 'Speech bubble', 'Nube': 'Cloud',
+'Flecha derecha': 'Right arrow', 'Flecha izquierda': 'Left arrow', 'Flecha arriba': 'Up arrow', 'Flecha abajo': 'Down arrow', 'Flecha doble': 'Left-right arrow', 'Cheurón': 'Chevron', 'Pentágono (flecha)': 'Pentagon arrow', 'Flecha (línea)': 'Arrow (line)',
+}
+RULES = []
