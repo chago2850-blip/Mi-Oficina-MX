@@ -604,7 +604,7 @@ export async function readDocx(bytes) {
     for (let i = 0; i < matrix.length; i++) {
       const { trPr, cells } = matrix[i];
       const hgt = kid(trPr, 'trHeight'); const isHeader = onOff(kid(trPr, 'tblHeader'));
-      html += `<tr${hgt ? ` style="height:${Math.round(num(av(hgt, 'val')) * TWIP_PX)}px"` : ''}>`;
+      html += `<tr${onOff(kid(trPr, 'cantSplit')) ? ' data-keep="1"' : ''}${hgt ? ` style="height:${Math.round(num(av(hgt, 'val')) * TWIP_PX)}px"` : ''}>`;
       for (const c of cells) {
         if (c.skip) continue;
         const tcp = c.tcPr;

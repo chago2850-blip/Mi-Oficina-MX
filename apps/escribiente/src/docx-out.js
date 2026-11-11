@@ -276,7 +276,7 @@ class Builder {
   }
 
   async table(el, contentWidthPx) {
-    const trs = [...el.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr')];
+    const trs = [...el.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr')].filter((r) => !/tpush|trep/.test(r.className));
     // cuadrícula: posición de cada celda contando las combinadas (colspan / rowspan)
     const occ = []; const placed = [];
     trs.forEach((tr, ri) => {
@@ -349,7 +349,7 @@ class Builder {
         ci += cs;
       }
       const hgt = lenPx(tr.style.height);
-      rows.push(new TableRow({ children: cells, tableHeader: tr.parentElement.tagName === 'THEAD' || [...tr.children].every((c) => c.tagName === 'TH') || undefined, height: hgt ? { value: Math.round(hgt * PX_TWIP), rule: 'atLeast' } : undefined }));
+      rows.push(new TableRow({ children: cells, tableHeader: tr.parentElement.tagName === 'THEAD' || [...tr.children].every((c) => c.tagName === 'TH') || undefined, height: hgt ? { value: Math.round(hgt * PX_TWIP), rule: 'atLeast' } : undefined, cantSplit: tr.dataset.keep === '1' || undefined }));
     }
     const ts = el.style;
     const center = ts.marginLeft === 'auto' && ts.marginRight === 'auto';

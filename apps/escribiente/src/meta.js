@@ -1,6 +1,7 @@
 // Datos propios de Escribiente que Word y LibreOffice no guardan (reacciones a comentarios,
 // diagramas editables, fuentes y citas, LaTeX de las ecuaciones). Se guardan como un archivo
 // JSON dentro del .docx/.odt y al abrir se vuelven a aplicar si el documento no cambió de forma. GPL-3.0
+import { formulasMeta, applyFormulasMeta } from './tablas.js';
 export const META_DOCX = 'docProps/escribiente.json';
 export const META_ODT = 'escribiente.json';
 
@@ -14,8 +15,9 @@ export function collectMeta(editorEl, settings) {
     sources: settings.sources || [],
     cites: [...editorEl.querySelectorAll('.cite')].map((c) => ({ src: c.dataset.src, text: c.textContent })),
     eqs: [...editorEl.querySelectorAll('.eq')].map((e) => e.dataset.tex || ''),
+    formulas: formulasMeta(editorEl),
   };
-  const empty = !meta.reactions.length && !meta.smartart.length && !meta.sources.length && !meta.cites.length && !meta.eqs.some(Boolean);
+  const empty = !meta.reactions.length && !meta.smartart.length && !meta.sources.length && !meta.cites.length && !meta.eqs.some(Boolean) && !meta.formulas.length;
   return empty ? null : meta;
 }
 
@@ -32,6 +34,8 @@ export function applyMeta(box, meta, comments, renderTex) {
   // diagramas: por posición entre las imágenes
   const imgs = [...box.querySelectorAll('img')];
   if (imgs.length === meta.imgCount) for (const s of meta.smartart || []) { const im = imgs[s.i]; if (im) { im.classList.add('smartart'); im.dataset.smartart = s.data; } }
+  // fórmulas de las tablas (Word y LibreOffice guardan solo el resultado)
+  applyFormulasMeta(box, meta.formulas);
   // ecuaciones: el LaTeX original
   const eqs = [...box.querySelectorAll('.eq')];
   if (eqs.length === (meta.eqs || []).length) eqs.forEach((e, k) => { const tex = meta.eqs[k]; if (tex && tex !== e.dataset.tex) { const m = renderTex?.(tex); if (m) { e.dataset.tex = tex; e.innerHTML = m; } } });

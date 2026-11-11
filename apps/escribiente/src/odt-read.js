@@ -308,7 +308,9 @@ export async function readOdt(bytes) {
     walkRows(n);
     for (const r of rows) {
       const header = r.parentElement?.localName === 'table-header-rows';
-      o += '<tr>';
+      const rsEl = styles.get(`table-row:${A(r, 'table', 'style-name')}`)?.el; const rpp = rsEl && kid(rsEl, 'table-row-properties');
+      const mrh = rpp && (A(rpp, 'style', 'min-row-height') || A(rpp, 'style', 'row-height')); const keepR = rpp && A(rpp, 'fo', 'keep-together') === 'always';
+      o += `<tr${keepR ? ' data-keep="1"' : ''}${mrh ? ` style="height:${(lenToPx(mrh) * 0.75).toFixed(2)}pt"` : ''}>`;
       for (const c of r.children) {
         if (c.localName !== 'table-cell') continue;
         const cs = styles.get(`table-cell:${A(c, 'table', 'style-name')}`)?.el; const cp = cs && kid(cs, 'table-cell-properties');

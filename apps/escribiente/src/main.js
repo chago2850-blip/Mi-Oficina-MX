@@ -8,6 +8,7 @@ import * as F from './features.js';
 import * as F3 from './fase3.js';
 import * as FX from './formato.js';
 import * as ES from './estilos.js';
+import * as TB from './tablas.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -285,7 +286,7 @@ function onEditorKey(e) {
   if (e.key === 'Backspace' || e.key === 'Delete') setTimeout(() => { if (!editor.firstElementChild) editor.innerHTML = '<p><br></p>'; }, 0);
 }
 function moveCell(cell, dir) {
-  const cells = [...cell.closest('table').querySelectorAll('td,th')];
+  const cells = [...cell.closest('table').querySelectorAll('td,th')].filter((c) => !c.closest('tr.tpush, tr.trep'));
   let i = cells.indexOf(cell) + dir;
   if (i >= cells.length && dir > 0) { tableOp('rowBelow'); return moveCell(cell, dir); }
   i = Math.max(0, Math.min(cells.length - 1, i));
@@ -324,6 +325,8 @@ function paginate() {
   editor.style.width = `${cw}px`;
   pagesEl.style.width = `${W}px`;
   F.layoutTabs();
+  // filas de relleno y encabezados repetidos de la paginación anterior
+  editor.querySelectorAll('tr.tpush, tr.trep').forEach((r) => r.remove());
   const blocks = [...editor.children];
   // se quita el empuje anterior y se restaura el margen superior propio del párrafo
   for (const b of blocks) if (b.dataset.push) { b.style.marginTop = b.dataset.mt0 || ''; delete b.dataset.push; delete b.dataset.mt0; }
@@ -333,6 +336,12 @@ function paginate() {
   const css = blocks.map((b) => getComputedStyle(b));
   const mbs = css.map((c) => parseFloat(c.marginBottom) || 0);
   const mts = css.map((c) => parseFloat(c.marginTop) || 0);
+  // tablas: posición de cada fila (para partir la tabla entre páginas fila por fila)
+  const tblRows = blocks.map((b) => {
+    if (b.tagName !== 'TABLE') return null;
+    const t0 = b.getBoundingClientRect().top; const z = (b.getBoundingClientRect().height / (b.offsetHeight || 1)) || 1;
+    return TB.rowsOf(b).map((r) => { const rc = r.getBoundingClientRect(); return { r, top: (rc.top - t0) / z, h: rc.height / z }; });
+  });
   const shiftAt = [];
   let shift = 0, forceNext = false;
   const pageOf = [];
@@ -360,6 +369,11 @@ function paginate() {
     let overflow = false;
     if (forceNext || (b.dataset.pbb && i > 0 && pageOf[i - 1] === page && !blocks[i - 1].classList.contains('pb'))) { add = (page + 1) * S - top; forceNext = false; }
     else if (top >= zoneEnd - 0.5) { add = (page + 1) * S - top; overflow = true; }
+    else if (tblRows[i] && !(b.dataset.nosplit && hs[i] <= H)) {
+      // la tabla se parte por filas: se baja entera solo si no cabe ni su primera fila
+      const R = tblRows[i]; const firstH = R.length ? R[0].h + (R[1] && [...R[0].r.children].every((c) => c.tagName === 'TH') ? R[1].h : 0) : hs[i];
+      if (top + firstH > zoneEnd && top > page * S + 1) { add = (page + 1) * S - top; overflow = true; }
+    }
     else if (top + hs[i] > zoneEnd && hs[i] <= H && top > page * S + 1) { add = (page + 1) * S - top; overflow = true; }
     // conservar con el siguiente: los párrafos marcados se van a la página nueva junto con este
     if (overflow && add > 0) {
@@ -378,6 +392,21 @@ function paginate() {
     if (add > 0) {
       pushBlock(i, add);
       shift += add; top += add; page = Math.floor(top / S);
+    }
+    if (tblRows[i] && tblRows[i].length > 1) {
+      const R = tblRows[i]; let local = 0;
+      const head = [...R[0].r.children].every((c) => c.tagName === 'TH') ? R[0] : null;
+      const ncols = TB.grid(b).cols || 1;
+      for (let k = 1; k < R.length; k++) {
+        const rt = top + R[k].top + local; const pg = Math.floor(rt / S); const ze = pg * S + H - (pageFnH[pg] || 0);
+        if (rt + R[k].h <= ze || rt <= pg * S + 1 || R[k].h > H) continue;
+        const gap = (pg + 1) * S - rt;
+        const sp = document.createElement('tr'); sp.className = 'tpush'; sp.setAttribute('contenteditable', 'false'); sp.setAttribute('aria-hidden', 'true');
+        sp.innerHTML = `<td colspan="${ncols}" style="height:${gap}px"></td>`;
+        R[k].r.before(sp); local += gap;
+        if (head) { const rep = head.r.cloneNode(true); rep.className = 'trep'; rep.setAttribute('contenteditable', 'false'); rep.setAttribute('aria-hidden', 'true'); R[k].r.before(rep); local += head.h; }
+      }
+      shift += local;
     }
     if (fids.length) { const ex = extraFor(page, fids); pageFns[page] = [...new Set([...(pageFns[page] || []), ...fids])]; pageFnH[page] = (pageFnH[page] || 0) + ex; }
     pageOf.push(page);
@@ -547,23 +576,19 @@ function tablePicker(anchor) {
 }
 function tableOp(op, arg) {
   const b = currentBlock();
-  const cell = b && b.closest('td,th');
-  if (!cell) return;
-  const tr = cell.parentElement, table = cell.closest('table');
-  const ci = [...tr.children].indexOf(cell);
-  const mkCell = (tag = 'td') => { const c = document.createElement(tag); c.innerHTML = '<br>'; return c; };
-  if (op === 'rowAbove' || op === 'rowBelow') {
-    const nr = document.createElement('tr');
-    [...tr.children].forEach(() => nr.append(mkCell()));
-    tr.parentElement.insertBefore(nr, op === 'rowAbove' ? tr : tr.nextSibling);
-  } else if (op === 'colLeft' || op === 'colRight') {
-    [...table.rows].forEach((row) => { const ref = row.children[ci]; const c = mkCell(ref?.tagName === 'TH' ? 'th' : 'td'); row.insertBefore(c, op === 'colLeft' ? ref : ref?.nextSibling || null); });
-  } else if (op === 'delRow') { if (table.rows.length <= 1) table.remove(); else tr.remove(); }
-  else if (op === 'delCol') { if (tr.children.length <= 1) table.remove(); else [...table.rows].forEach((row) => row.children[ci]?.remove()); }
-  else if (op === 'delTable') table.remove();
-  else if (op === 'shade') cell.style.backgroundColor = arg === 'transparent' ? '' : arg;
-  else if (op === 'header') { const first = table.rows[0]; [...first.children].forEach((c) => { const n = document.createElement(c.tagName === 'TH' ? 'td' : 'th'); n.innerHTML = c.innerHTML; c.replaceWith(n); }); }
-  shell.markDirty(); schedulePaginate();
+  if (!(b && b.closest('td,th')) && !TB.selCells().length) return;
+  switch (op) {
+    case 'rowAbove': return TB.insertRows('above');
+    case 'rowBelow': return TB.insertRows('below');
+    case 'colLeft': return TB.insertCols('left');
+    case 'colRight': return TB.insertCols('right');
+    case 'delRow': return TB.deleteRows();
+    case 'delCol': return TB.deleteCols();
+    case 'delTable': return TB.deleteTable();
+    case 'shade': return TB.shadeCells(arg);
+    case 'header': return TB.toggleHeaderRow();
+    default:
+  }
 }
 
 function insertImageDataUrl(url) {
@@ -915,13 +940,15 @@ const adapter = {
     throw new Error('Formato no compatible');
   },
   async serialize(ext) {
+    // sin las filas de relleno de la paginación ni la selección de celdas
+    editor.querySelectorAll('tr.tpush, tr.trep').forEach((r) => r.remove()); TB.clearSel(); setTimeout(schedulePaginate, 0);
     if (ext === 'txt') return htmlToText(editor);
     if (ext === 'md') return F3.htmlToMarkdown(editor);
     if (ext === 'html' || ext === 'htm') return exportHtml();
     if (ext === 'odt') return htmlToOdt(editor, { ...snapshotSettings(), ...shell.docProps() });
     return htmlToDocx(editor, { ...snapshotSettings(), ...shell.docProps() });
   },
-  snapshot() { return JSON.stringify({ html: editor.innerHTML, settings: snapshotSettings() }); },
+  snapshot() { return JSON.stringify({ html: editor.innerHTML.replace(/<tr class="(tpush|trep)"[\s\S]*?<\/tr>/g, ''), settings: snapshotSettings() }); },
   async restore(s) { const j = JSON.parse(s); setContent(j.html, j.settings); },
   isPristine() { return !shell.doc.dirty && (editor.innerText || '').trim() === '' && !editor.querySelector('img,table'); },
   pdfOptions() { return { landscape: false, pageSize: { width: state.page.w / 96, height: state.page.h / 96 } }; },
@@ -1015,6 +1042,29 @@ async function onCommand(cmd, arg) {
     case 'rowAbove': case 'rowBelow': case 'colLeft': case 'colRight': case 'delRow': case 'delCol': case 'delTable': case 'header':
       return tableOp(cmd);
     case 'cellShade': return tableOp('shade', arg);
+    case 'mergeCells': return TB.mergeCells();
+    case 'splitCells': return TB.splitDialog();
+    case 'splitTable': return TB.splitTable();
+    case 'distCols': return TB.distributeCols();
+    case 'distRows': return TB.distributeRows();
+    case 'optWidth': return TB.optimalWidth();
+    case 'vaTop': return TB.cellVAlign('top');
+    case 'vaMiddle': return TB.cellVAlign('middle');
+    case 'vaBottom': return TB.cellVAlign('bottom');
+    case 'tableProps': return TB.propertiesDialog();
+    case 'tableBorders': return TB.propertiesDialog(4);
+    case 'tableStyle': return;
+    case 'sortTable': return TB.sortDialog();
+    case 'tableFormula': return TB.formulaDialog();
+    case 'recalc': TB.recalcAll(); return;
+    case 'tableToText': return TB.tableToTextDialog();
+    case 'textToTable': return TB.textToTableDialog();
+    case 'insRows': return TB.insertDialog('row');
+    case 'insCols': return TB.insertDialog('col');
+    case 'selCell': return TB.selectWhole('cell');
+    case 'selRow': return TB.selectWhole('row');
+    case 'selCol': return TB.selectWhole('col');
+    case 'selTable': return TB.selectWhole('table');
     case 'imgLeft': return imageOp('left');
     case 'imgCenter': return imageOp('center');
     case 'imgRight': return imageOp('right');
@@ -1125,7 +1175,7 @@ const TABS = [
   {
     id: 'insert', label: 'Insertar', groups: [
       { label: 'Páginas', items: [{ cmd: 'pageBreak', label: 'Salto de página', icon: 'pageBreak', size: 'lg', kbd: 'Ctrl+Enter' }] },
-      { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
+      { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }, { cmd: 'textToTable', label: 'Texto en tabla…', icon: 'textTable', size: 'lg' }] },
       { label: 'Ilustraciones', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }, { cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: () => F.shapeMenu() }, { cmd: 'smartart', label: 'SmartArt', icon: 'layout', size: 'lg' }] },
       { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }] },
       { label: 'Vínculos', items: [{ cmd: 'insertLink', label: 'Vínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
@@ -1184,12 +1234,21 @@ const TABS = [
   },
   {
     id: 'table', label: 'Tabla', contextual: true, groups: [
+      { label: 'Seleccionar', items: [{ stack: [{ cmd: 'selCell', label: 'Seleccionar celda', icon: 'rect', showLabel: true }, { cmd: 'selRow', label: 'Seleccionar fila', icon: 'rowAdd', showLabel: true }, { cmd: 'selCol', label: 'Seleccionar columna', icon: 'colAdd', showLabel: true }] }, { cmd: 'selTable', label: 'Seleccionar tabla', icon: 'table', size: 'lg' }] },
       { label: 'Filas y columnas', items: [
-        { cmd: 'rowAbove', label: 'Fila arriba', icon: 'rowAdd', size: 'lg' }, { cmd: 'rowBelow', label: 'Fila abajo', icon: 'rowAdd', size: 'lg' },
-        { cmd: 'colLeft', label: 'Columna a la izquierda', icon: 'colAdd', size: 'lg' }, { cmd: 'colRight', label: 'Columna a la derecha', icon: 'colAdd', size: 'lg' },
+        { cmd: 'rowAbove', label: 'Fila arriba', icon: 'rowAdd', size: 'lg' }, { cmd: 'rowBelow', label: 'Fila abajo', icon: 'rowAdd', size: 'lg', split: () => [{ label: 'Insertar filas…', run: () => TB.insertDialog('row') }] },
+        { cmd: 'colLeft', label: 'Columna a la izquierda', icon: 'colAdd', size: 'lg' }, { cmd: 'colRight', label: 'Columna a la derecha', icon: 'colAdd', size: 'lg', split: () => [{ label: 'Insertar columnas…', run: () => TB.insertDialog('col') }] },
       ] },
       { label: 'Eliminar', items: [{ stack: [{ cmd: 'delRow', label: 'Eliminar fila', icon: 'rowDel', showLabel: true }, { cmd: 'delCol', label: 'Eliminar columna', icon: 'colDel', showLabel: true }, { cmd: 'delTable', label: 'Eliminar tabla', icon: 'trash', showLabel: true }] }] },
-      { label: 'Estilo', items: [{ cmd: 'cellShade', label: 'Sombreado', icon: 'fill', color: true, colorValue: '#E3F2FD', size: 'sm' }, { cmd: 'header', label: 'Fila de encabezado', icon: 'table', showLabel: true }] },
+      { label: 'Combinar', items: [{ cmd: 'mergeCells', label: 'Combinar celdas', icon: 'merge', size: 'lg' }, { cmd: 'splitCells', label: 'Dividir celdas…', icon: 'splitCell', size: 'lg' }, { cmd: 'splitTable', label: 'Dividir tabla', icon: 'splitTable', size: 'lg' }] },
+      { label: 'Tamaño', items: [{ stack: [{ cmd: 'distRows', label: 'Distribuir filas', icon: 'distRows', showLabel: true }, { cmd: 'distCols', label: 'Distribuir columnas', icon: 'distCols', showLabel: true }, { cmd: 'optWidth', label: 'Ancho óptimo', icon: 'fitWidth', showLabel: true }] }] },
+      { label: 'Alineación', items: [{ stack: [{ cmd: 'vaTop', label: 'Arriba', icon: 'vaTop', showLabel: true }, { cmd: 'vaMiddle', label: 'Centro', icon: 'vaMiddle', showLabel: true }, { cmd: 'vaBottom', label: 'Abajo', icon: 'vaBottom', showLabel: true }] }] },
+      { label: 'Estilo', items: [
+        { cmd: 'tableStyle', label: 'Estilos de tabla', icon: 'tableStyle', size: 'lg', menu: () => TB.tableStyleMenu() },
+        { stack: [{ cmd: 'cellShade', label: 'Sombreado', icon: 'fill', color: true, colorValue: '#E3F2FD', showLabel: true }, { cmd: 'tableBorders', label: 'Bordes', icon: 'borders', showLabel: true, split: () => TB.BORDER_PRESETS.map(([k, l]) => ({ label: l, run: () => TB.applyBorders(k) })) }, { cmd: 'header', label: 'Fila de encabezado', icon: 'table', showLabel: true }] },
+      ] },
+      { label: 'Datos', items: [{ cmd: 'sortTable', label: 'Ordenar…', icon: 'sortAsc', size: 'lg' }, { cmd: 'tableFormula', label: 'Fórmula…', icon: 'sum', size: 'lg' }, { stack: [{ cmd: 'recalc', label: 'Actualizar fórmulas', icon: 'func', showLabel: true }, { cmd: 'tableToText', label: 'Convertir en texto…', icon: 'textTable', showLabel: true }] }] },
+      { label: 'Propiedades', items: [{ cmd: 'tableProps', label: 'Propiedades de tabla…', icon: 'tableProps', size: 'lg' }] },
     ],
   },
   {
@@ -1229,6 +1288,7 @@ F.initFeatures({
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
 ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
+TB.init({ editor, shell, currentBlock, restoreSelection, saveSelection, schedulePaginate, selectedBlocks, layoutTabs: () => F.layoutTabs?.() });
 FX.init({ editor, selectedBlocks, restoreSelection, saveSelection, markDirty: () => shell.markDirty(), schedulePaginate, reflectState, FONTS, applySpanStyles, exec });
 F3.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, schedulePaginate, paginate, setContent: (html, s) => setContent(html, s), zoomWidth: () => onCommand('zoomWidth'), setZoom: (v) => zoom.set(v) });
 adapter.onPrefs = (p) => { editor.spellcheck = p.spellcheck !== false; };
@@ -1247,4 +1307,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, saveSelection, insertCite: (s) => F3.insertCitation(s) };
+window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, saveSelection, insertCite: (s) => F3.insertCitation(s) };

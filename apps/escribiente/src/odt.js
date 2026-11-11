@@ -217,7 +217,7 @@ export async function htmlToOdt(editorEl, settings) {
     if (tag === 'UL' || tag === 'OL') return list(el);
     if (tag === 'HR') return '<text:p text:style-name="HRule"/>';
     if (tag === 'TABLE') {
-      const rows = [...el.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr')];
+      const rows = [...el.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr')].filter((r) => !/tpush|trep/.test(r.className));
       // cuadrícula con celdas combinadas
       const occ = []; const placed = [];
       rows.forEach((tr, ri) => { occ[ri] ||= []; let ci = 0; for (const td of tr.children) { while (occ[ri][ci]) ci++; const cs = td.colSpan || 1; const rs = td.rowSpan || 1; placed.push({ td, ri, ci, cs, rs }); for (let r = ri; r < ri + rs; r++) { occ[r] ||= []; for (let c = ci; c < ci + cs; c++) occ[r][c] = r === ri && c === ci ? 'own' : 'cov'; } ci += cs; } });
@@ -241,8 +241,14 @@ export async function htmlToOdt(editorEl, settings) {
         if (!autoStyles.has(key)) { const name = `Ce${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="table-cell"><style:table-cell-properties ${pr.join(' ')}/></style:style>`); }
         return autoStyles.get(key);
       };
+      const headRows = rows.length > 1 && [...rows[0].children].every((c) => c.tagName === 'TH') ? 1 : 0;
       for (let ri = 0; ri < rows.length; ri++) {
-        o += '<table:table-row>';
+        if (ri === 0 && headRows) o += '<table:table-header-rows>';
+        const tr = rows[ri]; const rh = lenToPx(tr.style.height); const rp = [];
+        if (rh) rp.push(`style:min-row-height="${px2cm(rh)}"`); if (tr.dataset.keep) rp.push('fo:keep-together="always"');
+        let rsn = '';
+        if (rp.length) { const key = `R|${rp.join(' ')}`; if (!autoStyles.has(key)) { const name = `Ro${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="table-row"><style:table-row-properties ${rp.join(' ')}/></style:style>`); } rsn = ` table:style-name="${autoStyles.get(key)}"`; }
+        o += `<table:table-row${rsn}>`;
         for (let ci = 0; ci < cols; ci++) {
           const pc = placed.find((p) => p.ri === ri && p.ci === ci);
           if (!pc) { o += occ[ri]?.[ci] === 'cov' ? '<table:covered-table-cell/>' : '<table:table-cell><text:p/></table:table-cell>'; continue; }
@@ -252,6 +258,7 @@ export async function htmlToOdt(editorEl, settings) {
           o += `<table:table-cell table:style-name="${cellStyle(td)}" office:value-type="string"${cs > 1 ? ` table:number-columns-spanned="${cs}"` : ''}${rs > 1 ? ` table:number-rows-spanned="${rs}"` : ''}>${inner}</table:table-cell>`;
         }
         o += '</table:table-row>';
+        if (ri === 0 && headRows) o += '</table:table-header-rows>';
       }
       return `${o}</table:table>`;
     }
