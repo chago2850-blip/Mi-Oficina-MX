@@ -9,6 +9,7 @@ import * as F3 from './fase3.js';
 import * as FX from './formato.js';
 import * as ES from './estilos.js';
 import * as TB from './tablas.js';
+import * as IN from './insertar.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -271,6 +272,8 @@ function onEditorKey(e) {
     else if (k === 'f10') { e.preventDefault(); onCommand('marks'); }
   }
   if (mod && e.key === 'F11') { e.preventDefault(); onCommand('stylesPane'); }
+  if (e.key === 'F9' && !mod) { e.preventDefault(); IN.updateAll(); }
+  if (mod && e.shiftKey && e.key === 'Enter') { e.preventDefault(); saveSelection(); IN.insertColumnBreak(); }
   if (e.shiftKey && !mod && e.key === 'F3') { e.preventDefault(); saveSelection(); const sel = document.getSelection().toString(); FX.changeCase(sel === sel.toLocaleUpperCase('es') ? 'lower' : sel === sel.toLocaleLowerCase('es') ? 'title' : 'upper'); }
   if (mod && e.altKey && /^[1-3]$/.test(e.key)) { e.preventDefault(); setBlockStyle(`h${e.key}`); }
   if (mod && e.altKey && e.key === '0') { e.preventDefault(); setBlockStyle('p'); }
@@ -425,6 +428,7 @@ function paginate() {
     n = Math.max(n, pg + 1);
   }
   state.pages = n; state.pageOf = pageOf;
+  if (editor.querySelector('.fld')) IN.updateFields();
   // hojas
   const sheets = $$('.sheet', pagesEl);
   for (let i = sheets.length; i < n; i++) pagesEl.insertBefore(h('div', { class: 'sheet' }), editor);
@@ -645,10 +649,10 @@ function buildTOC() {
   return `<div class="toc" contenteditable="false"><div class="toc-h">Contenido</div>${lines}</div>`;
 }
 function insertTOC() {
-  const existing = editor.querySelector('.toc');
-  if (existing) { existing.outerHTML = buildTOC(); schedulePaginate(); setTimeout(() => { const t = editor.querySelector('.toc'); if (t) t.outerHTML = buildTOC(); }, 60); toast('Índice actualizado'); shell.markDirty(); return; }
+  const existing = editor.querySelector('.toc:not([data-kind])');
+  if (existing) { existing.outerHTML = buildTOC(); schedulePaginate(); setTimeout(() => { const t = editor.querySelector('.toc:not([data-kind])'); if (t) t.outerHTML = buildTOC(); }, 60); toast('Índice actualizado'); shell.markDirty(); return; }
   insertHTMLAtCursor(`${buildTOC()}<p><br></p>`);
-  setTimeout(() => { const t = editor.querySelector('.toc'); if (t) t.outerHTML = buildTOC(); }, 80);
+  setTimeout(() => { const t = editor.querySelector('.toc:not([data-kind])'); if (t) t.outerHTML = buildTOC(); }, 80);
 }
 
 // ------------------------------------------------------------------ imágenes: seleccionar y cambiar tamaño
@@ -1017,6 +1021,16 @@ async function onCommand(cmd, arg) {
     case 'hr': return insertHTMLAtCursor('<hr><p><br></p>');
     case 'symbol': return insertSymbol(arg);
     case 'toc': return insertTOC();
+    case 'fields': return;
+    case 'fieldDlg': return IN.fieldDialog();
+    case 'bookmark': return IN.bookmarkDialog();
+    case 'crossRef': return IN.crossRefDialog();
+    case 'caption': return IN.captionDialog();
+    case 'figIndex': return IN.figureIndexDialog();
+    case 'markEntry': return IN.markEntryDialog();
+    case 'alphaIndex': return IN.insertIndex('alpha');
+    case 'updateAll': return IN.updateAll();
+    case 'columnBreak': return IN.insertColumnBreak();
     case 'headerFooter': return headerFooter();
     case 'pageSetup': return pageSetup();
     case 'orientation': return setPage({ landscape: !state.page.landscape });
@@ -1174,11 +1188,12 @@ const TABS = [
   },
   {
     id: 'insert', label: 'Insertar', groups: [
-      { label: 'Páginas', items: [{ cmd: 'pageBreak', label: 'Salto de página', icon: 'pageBreak', size: 'lg', kbd: 'Ctrl+Enter' }] },
+      { label: 'Páginas', items: [{ cmd: 'pageBreak', label: 'Salto de página', icon: 'pageBreak', size: 'lg', kbd: 'Ctrl+Enter', split: () => [{ label: 'Salto de página', kbd: 'Ctrl+Enter', run: () => onCommand('pageBreak') }, { label: 'Salto de columna', kbd: 'Ctrl+Mayús+Enter', run: () => onCommand('columnBreak') }] }] },
       { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }, { cmd: 'textToTable', label: 'Texto en tabla…', icon: 'textTable', size: 'lg' }] },
       { label: 'Ilustraciones', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }, { cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: () => F.shapeMenu() }, { cmd: 'smartart', label: 'SmartArt', icon: 'layout', size: 'lg' }] },
       { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }] },
-      { label: 'Vínculos', items: [{ cmd: 'insertLink', label: 'Vínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
+      { label: 'Vínculos', items: [{ cmd: 'insertLink', label: 'Vínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }, { stack: [{ cmd: 'bookmark', label: 'Marcador…', icon: 'bookmark', showLabel: true }, { cmd: 'crossRef', label: 'Referencia cruzada…', icon: 'link', showLabel: true }] }] },
+      { label: 'Campos', items: [{ cmd: 'fields', label: 'Campos', icon: 'fields', size: 'lg', menu: () => [...IN.FIELDS.map(([k, l]) => ({ label: l, run: () => { saveSelection(); IN.insertField(k); } })), '-', { label: 'Más campos…', run: () => { saveSelection(); IN.fieldDialog(); } }] }] },
       { label: 'Encabezado y pie', items: [{ cmd: 'headerFooter', label: 'Encabezado y pie', icon: 'header', size: 'lg' }, { cmd: 'headerFooter', label: 'Número de página', icon: 'pageNum', size: 'lg' }] },
       { label: 'Símbolos', items: [{ cmd: 'equation', label: 'Ecuación', icon: 'func', size: 'lg' }, { cmd: 'symbol', label: 'Símbolo', icon: 'symbol', size: 'lg' }, { cmd: 'hr', label: 'Línea horizontal', icon: 'hr', size: 'lg' }] },
     ],
@@ -1202,7 +1217,9 @@ const TABS = [
   },
   {
     id: 'refs', label: 'Referencias', groups: [
-      { label: 'Tabla de contenido', items: [{ cmd: 'toc', label: 'Índice / actualizar', icon: 'styles', size: 'lg' }] },
+      { label: 'Tabla de contenido', items: [{ cmd: 'toc', label: 'Índice / actualizar', icon: 'styles', size: 'lg' }, { cmd: 'updateAll', label: 'Actualizar todo', icon: 'recover', size: 'lg', kbd: 'F9' }] },
+      { label: 'Títulos', items: [{ cmd: 'caption', label: 'Insertar título', icon: 'caption', size: 'lg' }, { stack: [{ cmd: 'figIndex', label: 'Índice de ilustraciones…', icon: 'styles', showLabel: true }, { cmd: 'crossRef', label: 'Referencia cruzada…', icon: 'link', showLabel: true }] }] },
+      { label: 'Índice alfabético', items: [{ cmd: 'markEntry', label: 'Marcar entrada', icon: 'bookmark', size: 'lg' }, { cmd: 'alphaIndex', label: 'Insertar índice', icon: 'styles', size: 'lg' }] },
       { label: 'Notas al pie', items: [{ cmd: 'footnote', label: 'Insertar nota al pie', icon: 'sup', size: 'lg' }, { cmd: 'endnote', label: 'Insertar nota al final', icon: 'sup' }] },
       { label: 'Citas y bibliografía', items: [{ cmd: 'cite', label: 'Insertar cita', icon: 'comment', size: 'lg', menu: () => F3.citeMenu() }, { stack: [{ cmd: 'sources', label: 'Administrar fuentes', icon: 'folder', showLabel: true }, { cmd: 'bibliography', label: 'Bibliografía', icon: 'styles', showLabel: true }] }] },
     ],
@@ -1288,6 +1305,7 @@ F.initFeatures({
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
 ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
+IN.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, currentBlock, schedulePaginate });
 TB.init({ editor, shell, currentBlock, restoreSelection, saveSelection, schedulePaginate, selectedBlocks, layoutTabs: () => F.layoutTabs?.() });
 FX.init({ editor, selectedBlocks, restoreSelection, saveSelection, markDirty: () => shell.markDirty(), schedulePaginate, reflectState, FONTS, applySpanStyles, exec });
 F3.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, schedulePaginate, paginate, setContent: (html, s) => setContent(html, s), zoomWidth: () => onCommand('zoomWidth'), setZoom: (v) => zoom.set(v) });
@@ -1307,4 +1325,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, saveSelection, insertCite: (s) => F3.insertCitation(s) };
+window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, IN, saveSelection, insertCite: (s) => F3.insertCitation(s) };

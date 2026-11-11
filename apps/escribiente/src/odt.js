@@ -9,8 +9,27 @@ const NS = {
   text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0', table: 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
   draw: 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0', fo: 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0',
   xlink: 'http://www.w3.org/1999/xlink', dc: 'http://purl.org/dc/elements/1.1/', meta: 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0',
-  svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0',
+  svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0', number: 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0',
 };
+// formato de fecha/hora estilo Java (dd/MM/yyyy) → number:date-style / number:time-style de ODF
+export function dateStyleXml(fmt, name, time = false) {
+  let inner = '';
+  const re = /'([^']*)'|yyyy|yy|MMMM|MMM|MM|M|dd|d|EEEE|EEE|HH|H|hh|h|mm|ss|a|[^'yMdEHhmsa]+/g; let m;
+  while ((m = re.exec(fmt))) {
+    const tk = m[0];
+    if (m[1] !== undefined) inner += `<number:text>${x(m[1])}</number:text>`;
+    else if (/^y+$/.test(tk)) inner += `<number:year${tk.length > 2 ? ' number:style="long"' : ''}/>`;
+    else if (/^M+$/.test(tk)) inner += `<number:month${tk.length === 2 || tk.length === 4 ? ' number:style="long"' : ''}${tk.length >= 3 ? ' number:textual="true"' : ''}/>`;
+    else if (/^d+$/.test(tk)) inner += `<number:day${tk.length === 2 ? ' number:style="long"' : ''}/>`;
+    else if (/^E+$/.test(tk)) inner += `<number:day-of-week${tk.length >= 4 ? ' number:style="long"' : ''}/>`;
+    else if (/^[Hh]+$/.test(tk)) inner += `<number:hours${tk.length === 2 ? ' number:style="long"' : ''}/>`;
+    else if (tk === 'mm') inner += '<number:minutes number:style="long"/>';
+    else if (tk === 'ss') inner += '<number:seconds number:style="long"/>';
+    else if (tk === 'a') inner += '<number:am-pm/>';
+    else inner += `<number:text>${x(tk)}</number:text>`;
+  }
+  return `<number:${time ? 'time' : 'date'}-style style:name="${name}"${time ? '' : ' number:automatic-order="false"'}>${inner}</number:${time ? 'time' : 'date'}-style>`;
+}
 const NSDECL = Object.entries(NS).map(([k, v]) => `xmlns:${k}="${v}"`).join(' ');
 const x = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const px2cm = (px) => `${(px / 37.7953).toFixed(3)}cm`;
@@ -101,6 +120,7 @@ export async function htmlToOdt(editorEl, settings) {
   };
   const paraStyleProps = (el) => {
     const st = el.style || {}; const ds = el.dataset || {};
+    const colBreak = !!el.querySelector?.('.cbk');
     const props = [];
     const al = st.textAlign; if (al && al !== 'left' && al !== 'start') props.push(`fo:text-align="${al === 'justify' ? 'justify' : al === 'center' ? 'center' : 'end'}"`);
     const hasBL = st.borderLeftStyle && st.borderLeftStyle !== 'none';
@@ -126,7 +146,33 @@ export async function htmlToOdt(editorEl, settings) {
       .map((m) => `<style:tab-stop style:position="${px2cm(Number(m[2]) - ml)}"${m[1] === 'l' ? '' : m[1] === 'd' ? ' style:type="char" style:char=","' : ` style:type="${m[1] === 'c' ? 'center' : 'right'}"`}${m[3] ? ` style:leader-text="${x(m[3])}" style:leader-style="${m[3] === '_' ? 'solid' : m[3] === '-' ? 'dash' : 'dotted'}"` : ''}/>`).join('');
     // letra del propio párrafo
     const tprops = textProps(readFmt(st, {}, null));
+    if (colBreak) props.push('fo:break-after="column"');
     return { props, tabs, tprops };
+  };
+  // campo de Escribiente → campo ODF
+  const seqs = new Set(); let sectNo = 0;
+  const odfField = (n) => {
+    const d = n.dataset; const v = x(n.textContent);
+        switch (d.fld) {
+      case 'date': case 'time': {
+        const key = `D|${d.fld}|${d.fmt || ''}`; if (!autoStyles.has(key)) { const nm = `N${autoStyles.size + 1}`; autoStyles.set(key, nm); styleXml.push(dateStyleXml(d.fmt || (d.fld === 'date' ? 'dd/MM/yyyy' : 'HH:mm'), nm, d.fld === 'time')); }
+        const iso = new Date().toISOString().slice(0, 19);
+        return d.fld === 'date' ? `<text:date style:data-style-name="${autoStyles.get(key)}"${d.fixed ? ' text:fixed="true"' : ''} text:date-value="${iso}">${v}</text:date>` : `<text:time style:data-style-name="${autoStyles.get(key)}"${d.fixed ? ' text:fixed="true"' : ''} text:time-value="${iso}">${v}</text:time>`;
+      }
+      case 'page': return `<text:page-number text:select-page="current">${v}</text:page-number>`;
+      case 'pages': return `<text:page-count>${v}</text:page-count>`;
+      case 'title': return `<text:title>${v}</text:title>`;
+      case 'author': return `<text:initial-creator>${v}</text:initial-creator>`;
+      case 'file': return `<text:file-name text:display="name-and-extension">${v}</text:file-name>`;
+      case 'words': return `<text:word-count>${v}</text:word-count>`;
+      case 'seq': { const nm = d.seq || 'Figura'; seqs.add(nm); const bm = n.parentElement?.querySelector('a.bm[id]')?.id; return `<text:sequence text:name="${x(nm)}" text:formula="ooow:${x(nm)}+1" style:num-format="1"${bm ? ` text:ref-name="${x(bm)}"` : ''}>${v}</text:sequence>`; }
+      case 'ref': {
+        const tgt = editorEl.querySelector(`a.bm[id="${CSS.escape(d.ref || '')}"]`); const cap = tgt?.closest('p.caption');
+        if (cap && (d.show === 'label' || d.show === 'number')) return `<text:sequence-ref text:reference-format="${d.show === 'label' ? 'category-and-value' : 'value'}" text:ref-name="${x(d.ref)}">${v}</text:sequence-ref>`;
+        return `<text:bookmark-ref text:reference-format="${{ page: 'page', above: 'direction', number: 'number' }[d.show] || 'text'}" text:ref-name="${x(d.ref)}">${v}</text:bookmark-ref>`;
+      }
+      default: return v;
+    }
   };
   const inline = async (node, f = {}) => {
     let out = '';
@@ -157,6 +203,11 @@ export async function htmlToOdt(editorEl, settings) {
       if (tag === 'SUP' && n.classList.contains('en')) { const t = settings.endnotes?.[n.dataset.fid]; if (t != null) { enNum++; out += `<text:note text:id="edn${enNum}" text:note-class="endnote"><text:note-citation>${roman(enNum)}</text:note-citation><text:note-body><text:p text:style-name="Endnote">${x(t)}</text:p></text:note-body></text:note>`; } continue; }
       if (tag === 'SUP' && n.classList.contains('fn')) { const t = settings.footnotes?.[n.dataset.fid]; if (t != null) { fnNum++; out += `<text:note text:id="ftn${fnNum}" text:note-class="footnote"><text:note-citation>${fnNum}</text:note-citation><text:note-body><text:p text:style-name="Footnote">${x(t)}</text:p></text:note-body></text:note>`; } continue; }
       if (n.classList?.contains('mf')) { out += x(`«${n.dataset.f}»`); continue; }
+      // campos, marcadores, entradas de índice y salto de columna
+      if (n.classList?.contains('fld')) { const sn = textStyle(f); const fx2 = odfField(n); out += sn ? `<text:span text:style-name="${sn}">${fx2}</text:span>` : fx2; continue; }
+      if (tag === 'A' && n.classList.contains('bm') && n.id) { out += `<text:bookmark text:name="${x(n.id)}"/>`; continue; }
+      if (n.classList?.contains('ix')) { out += `<text:alphabetical-index-mark text:string-value="${x(n.dataset.ix || '')}"/>`; continue; }
+      if (n.classList?.contains('cbk')) continue; // va como «salto de columna después» en el estilo del párrafo
       if (['UL', 'OL', 'TABLE'].includes(tag)) continue;
       const g = { ...f };
       if (tag === 'B' || tag === 'STRONG') g.bold = true; if (tag === 'I' || tag === 'EM') g.italic = true; if (tag === 'U') g.underline = true;
@@ -212,6 +263,13 @@ export async function htmlToOdt(editorEl, settings) {
     const tag = el.tagName;
     if (!/^(P|H[1-6]|DIV|UL|OL|TABLE|BLOCKQUOTE|HR|LI|PRE)$/.test(tag)) return `<text:p text:style-name="Standard">${await inline({ childNodes: [el] })}</text:p>`;
     if (el.classList?.contains('pb')) return '<text:p text:style-name="PBreak"/>';
+    // varias columnas: sección ODF con su número de columnas
+    if (el.classList?.contains('cols')) {
+      const n = Number(el.dataset.n || el.style.columnCount || 2); const nm = `Sect${++sectNo}`;
+      styleXml.push(`<style:style style:name="${nm}" style:family="section"><style:section-properties text:dont-balance-text-columns="false"><style:columns fo:column-count="${n}" fo:column-gap="0.5cm"/></style:section-properties></style:style>`);
+      let o = ''; for (const c of el.children) o += await block(c);
+      return `<text:section text:style-name="${nm}" text:name="Sección${sectNo}">${o}</text:section>`;
+    }
     if (el.classList?.contains('cols') || el.classList?.contains('tbox') || (tag === 'DIV' && el.querySelector(':scope > p, :scope > h1, :scope > ul, :scope > table'))) { let o = ''; for (const c of el.children) o += await block(c); return o; }
     if (el.classList?.contains('toc')) { let o = ''; for (const l of el.querySelectorAll('.toc-h, .toc-l')) o += `<text:p text:style-name="${l.classList.contains('toc-h') ? 'Heading_20_1' : 'Standard'}">${x(l.classList.contains('toc-h') ? l.textContent : `${l.children[0]?.textContent || ''}\t${l.children[2]?.textContent || ''}`).replace(/\t/g, '<text:tab/>')}</text:p>`; return o; }
     if (tag === 'UL' || tag === 'OL') return list(el);
@@ -263,7 +321,7 @@ export async function htmlToOdt(editorEl, settings) {
       return `${o}</table:table>`;
     }
     if (/^H[1-6]$/.test(tag)) { const lvl = Number(tag[1]); return `<text:h text:style-name="${paraStyle(el, `Heading_20_${lvl}`)}" text:outline-level="${lvl}">${await inline(el)}</text:h>`; }
-    const base = el.dataset?.style && settings.styles?.[el.dataset.style] ? odfName(el.dataset.style) : el.classList?.contains('title') ? 'Title' : el.classList?.contains('subtitle') ? 'Subtitle' : tag === 'BLOCKQUOTE' ? 'Quotations' : 'Standard';
+    const base = el.dataset?.style && settings.styles?.[el.dataset.style] ? odfName(el.dataset.style) : el.classList?.contains('title') ? 'Title' : el.classList?.contains('subtitle') ? 'Subtitle' : el.classList?.contains('caption') ? 'Caption' : tag === 'BLOCKQUOTE' ? 'Quotations' : 'Standard';
     return `<text:p text:style-name="${paraStyle(el, base)}">${await inline(el)}</text:p>`;
   };
   let body = '';
@@ -279,7 +337,7 @@ ${[...listStyles].map(([k, n]) => listStyleXml(k, n)).join('')}
 <text:list-style style:name="LBul">${[...Array(6)].map((_, i) => `<text:list-level-style-bullet text:level="${i + 1}" text:bullet-char="${['•', '◦', '▪'][i % 3]}"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" fo:text-indent="-0.635cm" fo:margin-left="${(0.635 * (i + 1) + 0.6).toFixed(2)}cm"/></style:list-level-properties></text:list-level-style-bullet>`).join('')}</text:list-style>
 <text:list-style style:name="LNum">${[...Array(6)].map((_, i) => `<text:list-level-style-number text:level="${i + 1}" style:num-suffix="." style:num-format="${['1', 'a', 'i'][i % 3]}"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" fo:text-indent="-0.635cm" fo:margin-left="${(0.635 * (i + 1) + 0.6).toFixed(2)}cm"/></style:list-level-properties></text:list-level-style-number>`).join('')}</text:list-style>
 ${styleXml.join('\n')}
-</office:automatic-styles><office:body><office:text>${body || '<text:p/>'}</office:text></office:body></office:document-content>`;
+</office:automatic-styles><office:body><office:text>${seqs.size ? `<text:sequence-decls>${[...seqs].map((nm) => `<text:sequence-decl text:display-outline-level="0" text:name="${x(nm)}"/>`).join('')}</text:sequence-decls>` : ''}${body || '<text:p/>'}</office:text></office:body></office:document-content>`;
   // {pagina} y {paginas} → campos de ODF; cada línea, un párrafo
   const hfOdt = (text, tail = '') => { const lines = String(text || '').split('\n'); return lines.map((l, i) => `<text:p>${x(l).replace(/\{pagina\}/gi, '<text:page-number text:select-page="current"/>').replace(/\{paginas\}/gi, '<text:page-count/>')}${i === lines.length - 1 ? tail : ''}</text:p>`).join(''); };
   const heading = (n, size, color) => `<style:style style:name="Heading_20_${n}" style:display-name="Heading ${n}" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Standard" style:default-outline-level="${n}"><style:paragraph-properties fo:margin-top="0.3cm" fo:margin-bottom="0.15cm" fo:keep-with-next="always"/><style:text-properties fo:font-size="${size}pt" fo:font-weight="bold" fo:color="${color}"/></style:style>`;
@@ -291,7 +349,7 @@ ${styleXml.join('\n')}
 ${heading(1, 16, '#2F2496')}${heading(2, 13, '#3D30B5')}${heading(3, 12, '#3D30B5')}${heading(4, 11, '#3D30B5')}${heading(5, 11, '#3D30B5')}${heading(6, 11, '#3D30B5')}
 <style:style style:name="Title" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="28pt"/></style:style>
 <style:style style:name="Subtitle" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="14pt" fo:color="#6B6F80"/></style:style>
-<style:style style:name="Quotations" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-left="1cm" fo:margin-right="1cm"/><style:text-properties fo:font-style="italic" fo:color="#444444"/></style:style>
+<style:style style:name="Caption" style:family="paragraph" style:parent-style-name="Standard" style:class="extra"><style:paragraph-properties fo:margin-top="0.1cm" fo:margin-bottom="0.2cm"/><style:text-properties fo:font-size="10pt" fo:font-style="italic"/></style:style><style:style style:name="Quotations" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-left="1cm" fo:margin-right="1cm"/><style:text-properties fo:font-style="italic" fo:color="#444444"/></style:style>
 <style:style style:name="List_20_Paragraph" style:display-name="List Paragraph" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-bottom="0.05cm"/></style:style>
 <style:style style:name="Footnote" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="9pt"/></style:style>
 <style:style style:name="Endnote" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="9pt"/></style:style>

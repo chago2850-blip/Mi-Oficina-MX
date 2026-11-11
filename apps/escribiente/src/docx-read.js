@@ -255,6 +255,25 @@ function runWrap(r, base, html) {
 }
 
 // ------------------------------------------------------------------ lector
+// campo de Word → campo de Escribiente (el resultado se conserva como texto del campo)
+const stripTags = (html) => html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+const JFMT = (f = '') => f.replace(/\\(.)/g, '$1').replace(/am\/pm/i, 'a');
+function fieldWrap(instr, inner) {
+  const s0 = instr.trim(); const kw = (/^(\w+)/.exec(s0) || [])[1]?.toUpperCase();
+  const span = (kind, attrs = {}) => `<span class="fld" data-fld="${kind}"${Object.entries(attrs).map(([k, v]) => (v == null ? '' : ` data-${k}="${esc(String(v))}"`)).join('')} contenteditable="false">${stripTags(inner) || '…'}</span>`;
+  const fmt = (/\\@\s*"([^"]+)"/.exec(s0) || [])[1];
+  switch (kw) {
+    case 'DATE': case 'CREATEDATE': case 'SAVEDATE': case 'PRINTDATE': return span('date', { fmt: JFMT(fmt || 'dd/MM/yyyy') });
+    case 'TIME': return span('time', { fmt: JFMT(fmt || 'HH:mm') });
+    case 'PAGE': return span('page');
+    case 'NUMPAGES': case 'SECTIONPAGES': return span('pages');
+    case 'TITLE': return span('title'); case 'AUTHOR': return span('author'); case 'FILENAME': return span('file'); case 'NUMWORDS': return span('words');
+    case 'SEQ': return span('seq', { seq: (/^SEQ\s+(\S+)/i.exec(s0) || [])[1] || 'Figura' });
+    case 'REF': case 'PAGEREF': { const nm = (/^\w+\s+(\S+)/.exec(s0) || [])[1]; if (!nm) return inner; return span('ref', { ref: nm, show: kw === 'PAGEREF' ? 'page' : /\\[nrw]/.test(s0) ? 'number' : /\\p/.test(s0) ? 'above' : 'text' }); }
+    case 'XE': { const term = (/^XE\s+"([^"]+)"/i.exec(s0) || [])[1]; return term ? `<span class="ix" data-ix="${esc(term)}" contenteditable="false"></span>` : ''; }
+    default: return inner;
+  }
+}
 export async function readDocx(bytes) {
   const zip = await JSZip.loadAsync(bytes);
   const xml = async (p) => { const t = await zip.file(p)?.async('string'); return t ? new DOMParser().parseFromString(t, 'application/xml') : null; };
@@ -391,7 +410,7 @@ export async function readDocx(bytes) {
           const sub = { html: '', boxes: out.boxes };
           await inline(n, base, relMap, b, sub);
           const hm = /^HYPERLINK\s+"([^"]+)"/i.exec(instr);
-          out.html += hm ? `<a href="${esc(hm[1])}">${sub.html}</a>` : sub.html;
+          out.html += hm ? `<a href="${esc(hm[1])}">${sub.html}</a>` : fieldWrap(instr, sub.html);
           break;
         }
         case 'ins': case 'moveTo': out.html += mk(`i:${[av(n, 'author'), av(n, 'date')].map((x) => (x || '').replace(/[|]/g, '')).join('|')}`); await inline(n, base, relMap, b, out); out.html += mk('/i'); break;
@@ -437,7 +456,7 @@ export async function readDocx(bytes) {
         case 'tab': txt += '\t'; break;
         case 'br': {
           const type = av(c, 'type');
-          if (type === 'page') { flush(); out.breakAfter = true; out.html += ''; } else if (type === 'column') txt += '\n'; else txt += '\n';
+          if (type === 'page') { flush(); out.breakAfter = true; out.html += ''; } else if (type === 'column') { flush(); out.html += '<span class="cbk" contenteditable="false"></span>'; } else txt += '\n';
           break;
         }
         case 'cr': txt += '\n'; break;
@@ -454,6 +473,8 @@ export async function readDocx(bytes) {
             if (f) {
               const hm = /HYPERLINK\s+(?:\\l\s+)?"([^"]+)"/i.exec(f.instr);
               if (hm && f.out === out) { const inner = out.html.slice(f.start); out.html = `${out.html.slice(0, f.start)}<a href="${esc(/\\l/.test(f.instr) ? `#${hm[1]}` : hm[1])}">${inner}</a>`; }
+              else if (f.out === out && f.phase === 'result') { const inner = out.html.slice(f.start); const w = fieldWrap(f.instr, inner); if (w !== inner) out.html = out.html.slice(0, f.start) + w; }
+              else if (f.out === out && /^\s*XE\s/.test(f.instr)) out.html += fieldWrap(f.instr, '');
             }
           }
           break;
@@ -523,6 +544,7 @@ export async function readDocx(bytes) {
     if (hm || (outline && /heading|título|titulo|encabezado/.test(name))) tag = `h${Math.min(6, Number(hm ? hm[1] : outline))}`;
     else if (name === 'title' || name === 'título' || name === 'titulo') cls = 'title';
     else if (name === 'subtitle' || name === 'subtítulo' || name === 'subtitulo') cls = 'subtitle';
+    else if (name === 'caption' || name === 'descripción' || name === 'leyenda' || name === 'epígrafe' || p.style === 'Caption') cls = 'caption';
     else if (/^(quote|intense quote|cita|cita destacada)$/.test(name)) tag = 'blockquote';
     let content = out.html;
     const hasPB = false;
@@ -674,7 +696,7 @@ export async function readDocx(bytes) {
         }
         if (pr.boxes.length) { closeAll(); html += pr.boxes.join(''); }
         if (pr.pageBreak) { closeAll(); html += '<div class="pb" contenteditable="false"></div>'; }
-        if (pr.sect && sections) { closeAll(); sections.push(pr.sect); const type = av(kid(pr.sect, 'type'), 'val'); if (type !== 'continuous') html += '<div class="pb" contenteditable="false"></div>'; }
+        if (pr.sect && sections) { closeAll(); sections.push(pr.sect); html += `<!--sect:${num(av(kid(pr.sect, 'cols'), 'num')) || 1}-->`; const type = av(kid(pr.sect, 'type'), 'val'); if (type !== 'continuous') html += '<div class="pb" contenteditable="false"></div>'; }
       } else if (n.localName === 'tbl') { closeAll(); prevStyle = null; html += await table(n, relMap, b); }
       else if (n.localName === 'sectPr') { if (sections) sections.push(n); }
       else if (n.namespaceURI === OMML_NS && n.localName === 'oMathPara') { closeAll(); const tex = ommlToLatex(n); if (tex) html += `<p style="text-align:center">${mk(`q:${b64(tex)}`)}</p>`; }
@@ -698,6 +720,16 @@ export async function readDocx(bytes) {
     const w = num(av(sz, 'w')), hh = num(av(sz, 'h'));
     if (w && hh) page = { w: Math.round(w * TWIP_PX), h: Math.round(hh * TWIP_PX), mt: Math.round(Math.abs(num(av(mar, 'top')) ?? 1440) * TWIP_PX), mb: Math.round(Math.abs(num(av(mar, 'bottom')) ?? 1440) * TWIP_PX), ml: Math.round((num(av(mar, 'left')) ?? 1440) * TWIP_PX), mr: Math.round((num(av(mar, 'right')) ?? 1440) * TWIP_PX), landscape: w > hh };
     columns = num(av(kid(sect, 'cols'), 'num')) || 1;
+    // secciones intermedias con varias columnas → bloques div.cols (como los crea Escribiente)
+    if (/<!--sect:\d+-->/.test(html)) {
+      const parts = html.split(/<!--sect:(\d+)-->/); let out2 = '';
+      for (let i = 0; i < parts.length; i += 2) {
+        const n2 = i + 1 < parts.length ? Number(parts[i + 1]) : columns;
+        let seg = parts[i]; const lead = /^(<div class="pb" contenteditable="false"><\/div>)/.exec(seg); if (lead) { out2 += lead[1]; seg = seg.slice(lead[1].length); }
+        out2 += n2 > 1 && seg.trim() ? `<div class="cols" data-n="${n2}" style="column-count:${n2}">${seg}</div>` : seg;
+      }
+      html = out2; columns = 1;
+    }
     // encabezado y pie predeterminados como texto, con {pagina} y {paginas}
     const hfText = async (kind) => {
       const ref = kids(sect, `${kind}Reference`).find((x) => av(x, 'type') === 'default') || kids(sect, `${kind}Reference`)[0];
@@ -731,6 +763,8 @@ export async function readDocx(bytes) {
   box.innerHTML = sanitize(html || '<p><br></p>');
   const comments = wrapMarks(box, rc?.list || []);
   box.querySelectorAll('p:empty,h1:empty,h2:empty,h3:empty,li:empty').forEach((p) => p.append(document.createElement('br')));
+  // referencia a un título sin modificador: «Figura 1» (como en Word)
+  box.querySelectorAll('.fld[data-fld="ref"][data-show="text"]').forEach((r) => { const a = box.querySelector(`a.bm[id="${CSS.escape(r.dataset.ref || '')}"]`); if (a?.closest('p.caption')) r.dataset.show = 'label'; });
   let meta = null; try { const mt = await zip.file(META_DOCX)?.async('string'); if (mt) meta = JSON.parse(mt); } catch { /* */ }
   const { sources } = applyMeta(box, meta, comments, (tex) => { try { return temml.renderToString(tex, { annotate: true }); } catch { return null; } });
   return { html: box.innerHTML || '<p><br></p>', page, footnotes, endnotes, comments, sources, header, footer, columns, defTab: dts ? Math.round(dts * TWIP_PX * 100) / 100 : null, chapnum, styles: Object.fromEntries(usedStyles), warnings: warnings.size ? [`No se pudieron conservar del todo: ${[...warnings].join(', ')}`] : [] };

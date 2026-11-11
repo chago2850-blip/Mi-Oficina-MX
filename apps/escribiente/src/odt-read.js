@@ -10,7 +10,7 @@ const NS = {
   text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0', table: 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
   draw: 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0', fo: 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0',
   xlink: 'http://www.w3.org/1999/xlink', dc: 'http://purl.org/dc/elements/1.1/', meta: 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0',
-  svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0',
+  svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0', number: 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0',
 };
 const A = (el, ns, name) => (el ? el.getAttributeNS(NS[ns], name) ?? el.getAttribute(`${ns}:${name}`) : null);
 const kids = (el, ln) => (el ? [...el.children].filter((c) => !ln || c.localName === ln) : []);
@@ -43,6 +43,8 @@ function readProps(st) {
     if (A(pp, 'fo', 'keep-together') === 'always') flags.keeplines = true;
     if (A(pp, 'fo', 'break-before') === 'page') flags.pbb = true;
     if (A(pp, 'fo', 'break-after') === 'page') flags.pba = true;
+    if (A(pp, 'fo', 'break-after') === 'column') flags.colb = true;
+    if (A(pp, 'fo', 'break-before') === 'column') flags.colbb = true;
     if (A(pp, 'fo', 'widows') === '0' || A(pp, 'fo', 'orphans') === '0') flags.widow = '0';
     const tabs = kid(pp, 'tab-stops');
     // en ODF la posición se mide desde la sangría izquierda del párrafo
@@ -101,6 +103,21 @@ export async function readOdt(bytes) {
     }
   };
   collect(stylesDoc); collect(content);
+  // formatos de fecha y hora de los campos (number:date-style → dd/MM/yyyy)
+  const dateFmts = new Map();
+  for (const d of [stylesDoc, content].filter(Boolean)) for (const tag of ['date-style', 'time-style']) for (const ds of d.getElementsByTagNameNS(NS.number, tag)) {
+    let f = '';
+    for (const c of ds.children) {
+      const lg = A(c, 'number', 'style') === 'long'; const tx = A(c, 'number', 'textual') === 'true';
+      switch (c.localName) {
+        case 'year': f += lg ? 'yyyy' : 'yy'; break; case 'month': f += tx ? (lg ? 'MMMM' : 'MMM') : lg ? 'MM' : 'M'; break; case 'day': f += lg ? 'dd' : 'd'; break;
+        case 'day-of-week': f += lg ? 'EEEE' : 'EEE'; break; case 'hours': f += lg ? 'HH' : 'H'; break; case 'minutes': f += 'mm'; break; case 'seconds': f += 'ss'; break; case 'am-pm': f += 'a'; break;
+        case 'text': { const tt = c.textContent; f += /[A-Za-z]/.test(tt) ? `'${tt}'` : tt; break; }
+        default:
+      }
+    }
+    if (f) dateFmts.set(A(ds, 'style', 'name'), f);
+  }
   // intervalo de las paradas predeterminadas
   let defTab = null;
   for (const d of stylesDoc?.getElementsByTagNameNS(NS.style, 'default-style') || []) { if (A(d, 'style', 'family') !== 'paragraph') continue; const v = A(kid(d, 'paragraph-properties'), 'style', 'tab-stop-distance'); if (v) defTab = Math.round(lenToPx(v) * 100) / 100; }
@@ -141,6 +158,7 @@ export async function readOdt(bytes) {
   let openComments = [];
 
   // texto en línea; base = estilo de texto del párrafo (para no repetirlo)
+  const fld = (kind, txt, attrs = {}) => `<span class="fld" data-fld="${kind}"${Object.entries(attrs).map(([k, v]) => (v == null ? '' : ` data-${k}="${esc(String(v))}"`)).join('')} contenteditable="false">${esc(txt || '…')}</span>`;
   const inline = async (node, base) => {
     let out = '';
     for (const n of node.childNodes) {
@@ -167,6 +185,19 @@ export async function readOdt(bytes) {
           break;
         }
         case 'a': out += `<a href="${esc(A(n, 'xlink', 'href') || '')}">${await inline(n, base)}</a>`; break;
+        // campos
+        case 'date': case 'time': { const fmt = dateFmts.get(A(n, 'style', 'data-style-name')); out += fld(ln, n.textContent, { fmt: fmt || (ln === 'date' ? 'dd/MM/yyyy' : 'HH:mm'), fixed: A(n, 'text', 'fixed') === 'true' ? '1' : undefined }); break; }
+        case 'page-number': out += fld('page', n.textContent); break;
+        case 'page-count': out += fld('pages', n.textContent); break;
+        case 'title': out += fld('title', n.textContent); break;
+        case 'initial-creator': case 'author-name': case 'creator': out += fld('author', n.textContent); break;
+        case 'file-name': out += fld('file', n.textContent); break;
+        case 'word-count': out += fld('words', n.textContent); break;
+        case 'sequence': { const rn = A(n, 'text', 'ref-name'); out += `${rn ? `<a id="${esc(rn)}" class="bm"></a>` : ''}${fld('seq', n.textContent, { seq: A(n, 'text', 'name') || 'Figura' })}`; break; }
+        case 'sequence-ref': out += fld('ref', n.textContent, { ref: A(n, 'text', 'ref-name'), show: A(n, 'text', 'reference-format') === 'value' ? 'number' : A(n, 'text', 'reference-format') === 'page' ? 'page' : 'label' }); break;
+        case 'bookmark-ref': out += fld('ref', n.textContent, { ref: A(n, 'text', 'ref-name'), show: { page: 'page', direction: 'above', number: 'number', chapter: 'number' }[A(n, 'text', 'reference-format')] || 'text' }); break;
+        case 'alphabetical-index-mark': { const sv = (A(n, 'text', 'string-value') || '').trim(); const term = A(n, 'text', 'key1') && !sv ? A(n, 'text', 'key1') : sv || A(n, 'text', 'key1') || ''; out += `<span class="ix" data-ix="${esc(term)}" contenteditable="false"></span>`; break; }
+        case 'alphabetical-index-mark-start': { const id = A(n, 'text', 'id'); const end = id && [...content.getElementsByTagNameNS(NS.text, 'alphabetical-index-mark-end')].find((e) => A(e, 'text', 'id') === id); let term = ''; if (end) { const r = content.createRange(); try { r.setStartAfter(n); r.setEndBefore(end); term = r.toString(); } catch { /* */ } } out += `<span class="ix" data-ix="${esc(term || A(n, 'text', 'key1') || '')}" contenteditable="false"></span>`; break; }
         case 'note': {
           const body = n.getElementsByTagNameNS(NS.text, 'note-body')[0]; const end = A(n, 'text', 'note-class') === 'endnote';
           const fid = `${end ? 'e' : 'f'}${Math.random().toString(36).slice(2, 8)}`;
@@ -240,6 +271,7 @@ export async function readOdt(bytes) {
     else if (/(^|\|)(title|título)(\||$)/.test(names)) cls = 'title';
     else if (/(^|\|)(subtitle|subtítulo)(\||$)/.test(names)) cls = 'subtitle';
     else if (/(^|\|)(quotations|quote|cita|citas)(\||$)/.test(names)) tag = 'blockquote';
+    else if (/(^|\|)(caption|figure|illustration|table|drawing|text|ilustración|figura|tabla|dibujo)(\||$)/i.test(names) && n.getElementsByTagNameNS(NS.text, 'sequence').length) cls = 'caption';
     const pcss = { ...st.p }; if (inList) { delete pcss['margin-left']; delete pcss['text-indent']; }
     // valores normales explícitos para que el CSS del editor no los cambie
     if (pcss['margin-top'] == null) pcss['margin-top'] = '0pt'; if (pcss['margin-bottom'] == null) pcss['margin-bottom'] = '0pt';
@@ -258,6 +290,8 @@ export async function readOdt(bytes) {
     if (!inner.replace(/<a id="[^"]*" class="bm"><\/a>/g, '').trim()) inner += '<br>';
     let html = `<${tag}${cls ? ` class="${cls}"` : ''}${css ? ` style="${css}"` : ''}${data.length ? ` ${data.join(' ')}` : ''}>${inner}</${tag}>`;
     if (st.flags.pba) html += '<div class="pb" contenteditable="false"></div>';
+    if (st.flags.colbb) html = html.replace(/^(<[^>]+>)/, '$1<span class="cbk" contenteditable="false"></span>');
+    if (st.flags.colb) html = html.replace(new RegExp(`</${tag}>$`), `<span class="cbk" contenteditable="false"></span></${tag}>`);
     return { html: html + boxes, pbb: st.flags.pbb, listStyle: st.listStyle };
   };
   const listHtml = async (l, styleName, level) => {

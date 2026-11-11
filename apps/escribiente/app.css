@@ -237,3 +237,15 @@ body.printing .doc td[data-formula], body.printing .doc th[data-formula] { backg
 .fx-note { color: var(--ink-3); font-size: 12px; margin: 4px 0 0; }
 .doc tr.tpush > td { border: 0 !important; padding: 0 !important; background: transparent !important; box-shadow: none !important; }
 .doc tr.trep { opacity: .85; user-select: none; }
+
+/* campos, marcadores, títulos e índices (insertar.js) */
+.doc .fld { background: #E6E6E6; border-radius: 2px; }
+body.printing .doc .fld, .m-print .fld { background: none; }
+.doc .ix { display: none; }
+.doc.marks .ix { display: inline; } .doc.marks .ix::before { content: '⟦' attr(data-ix) '⟧'; color: #7B6FD6; font-size: 9pt; }
+.doc a.bm { display: none; }
+.doc.marks a.bm { display: inline; } .doc.marks a.bm::before { content: '⚑'; color: #7B6FD6; font-size: 9pt; }
+.doc .cbk { display: block; break-after: column; height: 0; }
+.doc.marks .cbk { height: auto; border-top: 1px dashed #7B6FD6; } .doc.marks .cbk::after { content: 'Salto de columna'; font-size: 8pt; color: #7B6FD6; }
+.doc p.caption { font-style: italic; font-size: 10pt; color: #333; }
+.doc .toc .toc-l.l2 { padding-left: 14pt; }

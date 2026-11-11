@@ -4,6 +4,7 @@ import {
   Table, TableRow, TableCell, WidthType, ShadingType, PageBreak, Header, Footer, PageNumber,
   LevelFormat, PageOrientation, BorderStyle, TabStopType, LineRuleType, VerticalMergeType, VerticalAlignTable, TableLayoutType, AlignmentType as AT,
   CommentRangeStart, CommentRangeEnd, CommentReference, InsertedTextRun, DeletedTextRun, FootnoteReferenceRun, SectionType, Tab,
+  SimpleField, Bookmark, ColumnBreak,
   Math as OMath, MathRun, MathFraction, MathSuperScript, MathSubScript, MathSubSuperScript, MathRadical, MathSum, MathIntegral,
 } from 'docx';
 import JSZip from 'jszip';
@@ -102,6 +103,7 @@ class Builder {
   async runs(node, fmt = {}, out = []) {
     for (const n of node.childNodes) {
       if (n.nodeType === 3) {
+        if (this._skip?.has(n)) continue;
         const text = n.nodeValue.replace(/\u200B/g, '');
         if (!text) continue;
         if (fmt.rev) {
@@ -113,6 +115,7 @@ class Builder {
         continue;
       }
       if (n.nodeType !== 1) continue;
+      if (this._skip?.has(n)) continue;
       const tag = n.tagName;
       if (tag === 'BR') { out.push(new TextRun({ break: 1, ...this.runProps(fmt) })); continue; }
       if (tag === 'IMG') { const r = await this.image(n); if (r) out.push(r); continue; }
@@ -128,6 +131,21 @@ class Builder {
         if (this.settings.footnotes?.[fid] != null) out.push(new FootnoteReferenceRun(this.numFor(this.footIds, fid)));
         continue;
       }
+      // campos (fecha, página…), marcadores, entradas de índice y salto de columna
+      if (n.classList?.contains('fld')) { out.push(...fieldRuns(n, this.runProps(fmt))); continue; }
+      if (tag === 'A' && n.classList.contains('bm') && n.id) {
+        // en un título (Figura 1…) el marcador abarca la categoría y el número, como en Word
+        const cap = n.parentElement?.classList.contains('caption') && n.parentElement.querySelector('.fld[data-fld="seq"]');
+        if (cap && !this._capDone?.has(cap)) {
+          (this._capDone ||= new Set()).add(cap);
+          const tmp = document.createElement('span'); let k = n.nextSibling; const take = [];
+          while (k) { take.push(k); if (k === cap) break; k = k.nextSibling; }
+          if (take.includes(cap)) { (this._skip ||= new Set()); take.forEach((x) => { this._skip.add(x); tmp.append(x.cloneNode(true)); }); out.push(new Bookmark({ id: n.id, children: await this.runs(tmp, fmt, []) })); continue; }
+        }
+        out.push(new Bookmark({ id: n.id, children: [] })); continue;
+      }
+      if (n.classList?.contains('ix')) { out.push(new SimpleField(`XE "${(n.dataset.ix || '').replace(/"/g, '')}"`, '')); continue; }
+      if (n.classList?.contains('cbk')) { out.push(new ColumnBreak()); continue; }
       if (n.classList?.contains('mf')) { out.push(new TextRun({ text: `«${n.dataset.f}»`, ...this.runProps(fmt) })); continue; }
       const f = { ...fmt };
       if (tag === 'INS' || tag === 'DEL') f.rev = { kind: tag.toLowerCase(), author: n.dataset.author, date: n.dataset.date };
@@ -239,6 +257,7 @@ class Builder {
     if (/^H[1-3]$/.test(tag) && this.settings.chapnum && CHAPTER_PRESETS[this.settings.chapnum]?.fmts && !props.numbering) props.numbering = { reference: 'chapters', level: Number(tag[1]) - 1 };
     if (el.dataset?.style && this.settings.styles?.[el.dataset.style]) props.style = el.dataset.style;
     if (tag === 'P' && el.classList.contains('title')) props.heading = HeadingLevel.TITLE;
+    if (tag === 'P' && el.classList.contains('caption') && !props.style) props.style = 'Caption';
     if (tag === 'P' && el.classList.contains('subtitle')) props.style = 'Subtitle';
     if (tag === 'BLOCKQUOTE') props.style = 'Quote';
     // la letra del propio párrafo (fuente, tamaño, color…) pasa a cada fragmento de texto
@@ -406,6 +425,23 @@ class Builder {
 }
 
 // settings: { page:{w,h,mt,mb,ml,mr,landscape}, header, footer, pageNumbers, title, author }
+// campo de Escribiente → campo de Word, con el último resultado
+const WFMT = (f = '') => f.replace(/a\b/, 'am/pm');
+function fieldRuns(n, props) {
+  const d = n.dataset; const txt = n.textContent;
+  switch (d.fld) {
+    case 'page': return [new TextRun({ children: [PageNumber.CURRENT], ...props })];
+    case 'pages': return [new TextRun({ children: [PageNumber.TOTAL_PAGES], ...props })];
+    case 'date': case 'time': return d.fixed ? [new TextRun({ text: txt, ...props })] : [new SimpleField(`${d.fld === 'date' ? 'DATE' : 'TIME'} \\@ "${WFMT(d.fmt || '')}"`, txt)];
+    case 'title': return [new SimpleField('TITLE', txt)];
+    case 'author': return [new SimpleField('AUTHOR', txt)];
+    case 'file': return [new SimpleField('FILENAME', txt)];
+    case 'words': return [new SimpleField('NUMWORDS', txt)];
+    case 'seq': return [new SimpleField(`SEQ ${d.seq || 'Figura'} \\* ARABIC`, txt)];
+    case 'ref': return [new SimpleField(`${d.show === 'page' ? 'PAGEREF' : 'REF'} ${d.ref}${d.show === 'number' ? ' \\n' : d.show === 'above' ? ' \\p' : ''} \\h`, txt)];
+    default: return [new TextRun({ text: txt, ...props })];
+  }
+}
 export async function htmlToDocx(editorEl, settings) {
   const b = new Builder(settings);
   const pg = settings.page;
@@ -623,6 +659,7 @@ function docStyles(b, settings, kind) {
     out.push(def);
   }
   // estilos de carácter predeterminados que se usan en el documento
+  if (kind === 'p' && !out.some((d) => d.id === 'Caption')) out.push({ id: 'Caption', name: 'caption', basedOn: 'Normal', next: 'Normal', run: { italics: true, size: 20, color: '333333' }, paragraph: { spacing: { before: 60, after: 120 } } });
   if (kind === 'c') for (const bc of BUILTIN_CHAR) if (!st[bc.id]) { const el = document.createElement('span'); el.style.cssText = cssText(bc.css); out.push({ id: CHAR_ID[bc.id] || bc.id, name: bc.name, run: b.runProps(fmtFromStyle(el.style, {}, el)) }); }
   return out;
 }
