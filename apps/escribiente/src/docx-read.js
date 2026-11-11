@@ -714,7 +714,7 @@ export async function readDocx(bytes) {
 
   // página (última sección)
   const sect = sections[sections.length - 1];
-  let page = null; let header = ''; let footer = ''; let columns = 1;
+  let page = null; let header = ''; let footer = ''; let columns = 1; const extraPage = {};
   if (sect) {
     const sz = kid(sect, 'pgSz'); const mar = kid(sect, 'pgMar');
     const w = num(av(sz, 'w')), hh = num(av(sz, 'h'));
@@ -731,8 +731,8 @@ export async function readDocx(bytes) {
       html = out2; columns = 1;
     }
     // encabezado y pie predeterminados como texto, con {pagina} y {paginas}
-    const hfText = async (kind) => {
-      const ref = kids(sect, `${kind}Reference`).find((x) => av(x, 'type') === 'default') || kids(sect, `${kind}Reference`)[0];
+    const hfText = async (kind, which = 'default') => {
+      const ref = kids(sect, `${kind}Reference`).find((x) => av(x, 'type') === which) || (which === 'default' ? kids(sect, `${kind}Reference`).find((x) => !av(x, 'type')) : null);
       if (!ref) return '';
       const rel = docRels.get(avNs(ref, 'id')); if (!rel) return '';
       const d = await xml(`word/${rel.target}`); if (!d) return '';
@@ -746,17 +746,26 @@ export async function readDocx(bytes) {
             if (ln === 'fldChar') { const t = av(c, 'fldCharType'); if (t === 'begin') { state = 1; instr = ''; } else if (t === 'separate') { if (/\bNUMPAGES\b|\bSECTIONPAGES\b/.test(instr)) { s += '{paginas}'; state = 2; } else if (/\bPAGE\b/.test(instr)) { s += '{pagina}'; state = 2; } else state = 0; } else if (t === 'end') { if (state === 1 && /\bNUMPAGES\b/.test(instr)) s += '{paginas}'; else if (state === 1 && /\bPAGE\b/.test(instr)) s += '{pagina}'; state = 0; } continue; }
             if (ln === 'instrText') { instr += c.textContent; continue; }
             if (ln === 't') { if (state === 0) s += c.textContent; continue; }
-            if (ln === 'tab' && el.localName === 'r') { if (state === 0) s += '   '; continue; }
+            if (ln === 'tab' && el.localName === 'r') { if (state === 0) s += '\t'; continue; }
+            if (ln === 'fldSimple' || ln === 'instrText') continue;
             if (ln === 'pPr' || ln === 'rPr') continue;
             walk(c);
           }
         };
         walk(p);
-        if (s.trim()) lines.push(s.trim());
+        if (s.trim()) lines.push(s.replace(/^ +| +$/g, ''));
       }
       return lines.join('\n');
     };
     header = await hfText('header'); footer = await hfText('footer');
+    // primera página distinta, pares e impares, borde de página, números de línea, número inicial
+    if (kid(sect, 'titlePg') && av(kid(sect, 'titlePg'), 'val') !== '0' && av(kid(sect, 'titlePg'), 'val') !== 'false') { extraPage.hfFirst = true; extraPage.headerFirst = await hfText('header', 'first'); extraPage.footerFirst = await hfText('footer', 'first'); }
+    if (settingsXml?.getElementsByTagNameNS(W, 'evenAndOddHeaders')[0]) { extraPage.hfOddEven = true; extraPage.headerEven = await hfText('header', 'even'); extraPage.footerEven = await hfText('footer', 'even'); }
+    const pgb = kid(sect, 'pgBorders');
+    if (pgb) { const side = kid(pgb, 'top') || kid(pgb, 'left'); if (side) { const v = av(side, 'val'); extraPage.pageBorder = { style: v === 'double' ? 'double' : /dash/i.test(v) ? 'dashed' : /dot/i.test(v) ? 'dotted' : 'solid', width: Math.max(0.25, (num(av(side, 'sz')) || 4) / 8), color: av(side, 'color') && av(side, 'color') !== 'auto' ? `#${av(side, 'color').toLowerCase()}` : '#000000', space: Math.round((num(av(side, 'space')) || 24) / 0.75), shadow: av(side, 'shadow') === '1' || av(side, 'shadow') === 'true' || undefined }; } }
+    const lnt = kid(sect, 'lnNumType');
+    if (lnt) extraPage.lineNum = { on: true, every: num(av(lnt, 'countBy')) || 1, restart: av(lnt, 'restart') === 'newPage' ? 'page' : 'doc', dist: av(lnt, 'distance') ? Math.round(num(av(lnt, 'distance')) * TWIP_PX) : 18 };
+    const pnt = kid(sect, 'pgNumType'); if (pnt && num(av(pnt, 'start')) != null) extraPage.firstPageNum = num(av(pnt, 'start'));
   }
   // revisiones, comentarios y ecuaciones (marcas privadas → elementos del editor)
   const box = document.createElement('div');
@@ -767,7 +776,7 @@ export async function readDocx(bytes) {
   box.querySelectorAll('.fld[data-fld="ref"][data-show="text"]').forEach((r) => { const a = box.querySelector(`a.bm[id="${CSS.escape(r.dataset.ref || '')}"]`); if (a?.closest('p.caption')) r.dataset.show = 'label'; });
   let meta = null; try { const mt = await zip.file(META_DOCX)?.async('string'); if (mt) meta = JSON.parse(mt); } catch { /* */ }
   const { sources } = applyMeta(box, meta, comments, (tex) => { try { return temml.renderToString(tex, { annotate: true }); } catch { return null; } });
-  return { html: box.innerHTML || '<p><br></p>', page, footnotes, endnotes, comments, sources, header, footer, columns, defTab: dts ? Math.round(dts * TWIP_PX * 100) / 100 : null, chapnum, styles: Object.fromEntries(usedStyles), warnings: warnings.size ? [`No se pudieron conservar del todo: ${[...warnings].join(', ')}`] : [] };
+  return { html: box.innerHTML || '<p><br></p>', page, footnotes, endnotes, comments, sources, header, footer, columns, ...extraPage, defTab: dts ? Math.round(dts * TWIP_PX * 100) / 100 : null, chapnum, styles: Object.fromEntries(usedStyles), warnings: warnings.size ? [`No se pudieron conservar del todo: ${[...warnings].join(', ')}`] : [] };
 }
 
 function fmtNum(v, f) {

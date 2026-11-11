@@ -461,29 +461,44 @@ export async function htmlToDocx(editorEl, settings) {
   if (!sectionsData[0].children.length) sectionsData[0].children.push(new Paragraph({}));
 
   // texto del encabezado/pie: {pagina} y {paginas} se vuelven campos de Word; cada línea, un párrafo
+  const hs = settings.hfStyle || {};
+  const hrun = { size: Math.round((hs.size || 10) * 2), color: hex(hs.color || '#555555'), bold: hs.bold || undefined, italics: hs.italic || undefined };
   const tokRuns = (line) => {
     const kids = [];
-    for (const part of line.split(/(\{pagina\}|\{paginas\})/i)) {
+    for (const part of line.split(/(\{pagina\}|\{paginas\}|\{fecha\}|\{titulo\}|\{autor\}|\{archivo\}|\t)/i)) {
       if (!part) continue;
-      if (/^\{pagina\}$/i.test(part)) kids.push(new TextRun({ children: [PageNumber.CURRENT], size: 20, color: '555555' }));
-      else if (/^\{paginas\}$/i.test(part)) kids.push(new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 20, color: '555555' }));
-      else kids.push(new TextRun({ text: part, size: 20, color: '555555' }));
+      if (/^\{pagina\}$/i.test(part)) kids.push(new TextRun({ children: [PageNumber.CURRENT], ...hrun }));
+      else if (/^\{paginas\}$/i.test(part)) kids.push(new TextRun({ children: [PageNumber.TOTAL_PAGES], ...hrun }));
+      else if (part === '\t') kids.push(new TextRun({ children: [new Tab()], ...hrun }));
+      else if (/^\{(fecha|titulo|autor|archivo)\}$/i.test(part)) { const k = part.slice(1, -1).toLowerCase(); kids.push(new SimpleField({ fecha: 'DATE \\@ "dd/MM/yyyy"', titulo: 'TITLE', autor: 'AUTHOR', archivo: 'FILENAME' }[k], { fecha: new Date().toLocaleDateString('es-MX'), titulo: settings.title || '', autor: settings.author || '', archivo: '' }[k])); }
+      else kids.push(new TextRun({ text: part, ...hrun }));
     }
     return kids;
   };
-  const hfParas = (text, numPos) => {
+  let isHeader = true;
+  const hfParas = (text, numPos, header = true) => {
+    isHeader = header;
     const lines = text ? String(text).split('\n') : [];
     const out = lines.map((l, i) => {
       const kids = tokRuns(l);
       if (numPos && i === lines.length - 1) { kids.push(new TextRun({ text: '   ', size: 20 }), new TextRun({ children: [`${t('Página')} `, PageNumber.CURRENT, ` ${t('de')} `, PageNumber.TOTAL_PAGES], size: 20, color: '555555' })); }
-      return new Paragraph({ alignment: numPos === 'right' ? AlignmentType.RIGHT : numPos === 'center' ? AlignmentType.CENTER : AlignmentType.LEFT, children: kids });
+      return new Paragraph({ alignment: numPos === 'right' ? AlignmentType.RIGHT : numPos === 'center' ? AlignmentType.CENTER : hs.align === 'center' ? AlignmentType.CENTER : hs.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT, children: kids, tabStops: [{ type: TabStopType.CENTER, position: Math.round(((pg.w - pg.ml - pg.mr) / 2) * PX_TWIP) }, { type: TabStopType.RIGHT, position: Math.round((pg.w - pg.ml - pg.mr) * PX_TWIP) }], ...(hs.line ? { border: { [isHeader ? 'bottom' : 'top']: { style: BorderStyle.SINGLE, size: 4, color: '555555', space: 1 } } } : {}) });
     });
     if (!lines.length && numPos) out.push(new Paragraph({ alignment: numPos === 'right' ? AlignmentType.RIGHT : numPos === 'center' ? AlignmentType.CENTER : AlignmentType.LEFT, children: [new TextRun({ children: [`${t('Página')} `, PageNumber.CURRENT, ` ${t('de')} `, PageNumber.TOTAL_PAGES], size: 20, color: '555555' })] }));
     return out;
   };
   const pn = settings.pageNumbers || 'none';
-  const headerChildren = (settings.header || pn.startsWith('header')) ? hfParas(settings.header, pn === 'header-right' ? 'right' : null) : null;
-  const footerChildren = (settings.footer || pn.startsWith('footer')) ? hfParas(settings.footer, pn === 'footer-center' ? 'center' : pn === 'footer-right' ? 'right' : null) : null;
+  const hNum = pn === 'header-right' ? 'right' : null; const fNum = pn === 'footer-center' ? 'center' : pn === 'footer-right' ? 'right' : null;
+  const headerChildren = (settings.header || pn.startsWith('header')) ? hfParas(settings.header, hNum, true) : null;
+  const footerChildren = (settings.footer || pn.startsWith('footer')) ? hfParas(settings.footer, fNum, false) : null;
+  // primera página y páginas pares distintas
+  const hdrs = {}; const ftrs = {};
+  if (headerChildren) hdrs.default = new Header({ children: headerChildren }); if (footerChildren) ftrs.default = new Footer({ children: footerChildren });
+  if (settings.hfFirst) { hdrs.first = new Header({ children: hfParas(settings.headerFirst || '', null, true) }); ftrs.first = new Footer({ children: hfParas(settings.footerFirst || '', null, false) }); hdrs.default ||= new Header({ children: [new Paragraph({})] }); ftrs.default ||= new Footer({ children: [new Paragraph({})] }); }
+  if (settings.hfOddEven) { hdrs.even = new Header({ children: hfParas(settings.headerEven ?? settings.header ?? '', hNum, true) }); ftrs.even = new Footer({ children: hfParas(settings.footerEven ?? settings.footer ?? '', fNum, false) }); }
+  const pbd = settings.pageBorder; const BS = { solid: BorderStyle.SINGLE, double: BorderStyle.DOUBLE, dashed: BorderStyle.DASHED, dotted: BorderStyle.DOTTED };
+  const pageBorderSide = pbd ? { style: BS[pbd.style] || BorderStyle.SINGLE, size: Math.round(pbd.width * 8), color: hex(pbd.color), space: Math.min(31, Math.round((pbd.space ?? 18) * 0.75)) } : null;
+  const ln = settings.lineNum;
 
   const bulletLevels = Array.from({ length: 9 }, (_, l) => ({
     level: l, format: LevelFormat.BULLET, text: ['•', '◦', '▪'][l % 3], alignment: AlignmentType.LEFT,
@@ -504,7 +519,11 @@ export async function htmlToDocx(editorEl, settings) {
     page: {
       size: { width: Math.round(Math.min(pg.w, pg.h) * PX_TWIP), height: Math.round(Math.max(pg.w, pg.h) * PX_TWIP), orientation: pg.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
       margin: { top: Math.round(pg.mt * PX_TWIP), bottom: Math.round(pg.mb * PX_TWIP), left: Math.round(pg.ml * PX_TWIP), right: Math.round(pg.mr * PX_TWIP), header: 708, footer: 708 },
+      ...(pageBorderSide && i === 0 ? { borders: { pageBorderTop: pageBorderSide, pageBorderBottom: pageBorderSide, pageBorderLeft: pageBorderSide, pageBorderRight: pageBorderSide, pageBorders: { display: 'allPages', offsetFrom: 'text', zOrder: 'front' } } } : {}),
+      ...(i === 0 && (settings.firstPageNum || 1) !== 1 ? { pageNumbers: { start: settings.firstPageNum } } : {}),
     },
+    ...(ln?.on ? { lineNumbers: { countBy: ln.every || 1, restart: ln.restart === 'page' ? 'newPage' : 'continuous', distance: Math.round((ln.dist ?? 18) * PX_TWIP) } } : {}),
+    ...(i === 0 && settings.hfFirst ? { titlePage: true } : {}),
     ...(i > 0 ? { type: SectionType.CONTINUOUS } : {}),
   });
   const doc = new Document({
@@ -528,11 +547,12 @@ export async function htmlToDocx(editorEl, settings) {
     comments: comments.length ? { children: comments } : undefined,
     footnotes: Object.keys(footnotes).length ? footnotes : undefined,
     background: settings.pageColor ? { color: hex(settings.pageColor) } : undefined,
+    evenAndOddHeaderAndFooters: settings.hfOddEven || undefined,
     features: settings.track ? { trackRevisions: true } : undefined,
     sections: sectionsData.map((g, i) => ({
       properties: { ...pageProps(i), ...(g.cols > 1 ? { column: { count: g.cols, space: 708 } } : {}) },
-      headers: i === 0 && headerChildren ? { default: new Header({ children: headerChildren }) } : undefined,
-      footers: i === 0 && footerChildren ? { default: new Footer({ children: footerChildren }) } : undefined,
+      headers: i === 0 && Object.keys(hdrs).length ? hdrs : undefined,
+      footers: i === 0 && Object.keys(ftrs).length ? ftrs : undefined,
       children: g.children,
     })),
   });

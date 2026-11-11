@@ -416,13 +416,29 @@ export async function readOdt(bytes) {
     const lines = [];
     for (const p of el.getElementsByTagNameNS(NS.text, 'p')) {
       let s = '';
-      const walk = (x) => { for (const c of x.childNodes) { if (c.nodeType === 3) s += c.nodeValue; else if (c.nodeType === 1) { if (c.localName === 'page-number') s += '{pagina}'; else if (c.localName === 'page-count') s += '{paginas}'; else if (c.localName === 'tab') s += '   '; else if (c.localName === 's') s += ' '; else walk(c); } } };
+      const FL = { 'page-number': '{pagina}', 'page-count': '{paginas}', date: '{fecha}', title: '{titulo}', 'initial-creator': '{autor}', 'author-name': '{autor}', 'file-name': '{archivo}' };
+      const walk = (x) => { for (const c of x.childNodes) { if (c.nodeType === 3) s += c.nodeValue; else if (c.nodeType === 1) { if (FL[c.localName]) s += FL[c.localName]; else if (c.localName === 'tab') s += '\t'; else if (c.localName === 's') s += ' '.repeat(Number(A(c, 'text', 'c') || 1)); else walk(c); } } };
       walk(p);
-      if (s.trim()) lines.push(s.trim());
+      if (s.trim()) lines.push(s.replace(/^ +| +$/g, ''));
     }
     return lines.join('\n');
   };
-  if (mp) { header = hfText(kid(mp, 'header')); footer = hfText(kid(mp, 'footer')); }
+  const extraPage = {};
+  if (mp) {
+    header = hfText(kid(mp, 'header')); footer = hfText(kid(mp, 'footer'));
+    // primera página y páginas pares (izquierdas) distintas
+    if (kid(mp, 'header-first') || kid(mp, 'footer-first')) { extraPage.hfFirst = true; extraPage.headerFirst = hfText(kid(mp, 'header-first')); extraPage.footerFirst = hfText(kid(mp, 'footer-first')); }
+    if (kid(mp, 'header-left') || kid(mp, 'footer-left')) { extraPage.hfOddEven = true; extraPage.headerEven = hfText(kid(mp, 'header-left')); extraPage.footerEven = hfText(kid(mp, 'footer-left')); }
+  }
+  // borde de página
+  if (plp) {
+    const bd = A(plp, 'fo', 'border') || A(plp, 'fo', 'border-top');
+    const m2 = bd && /([\d.]+)(pt|cm|mm|in)?\s+(\w+)\s+(#[0-9a-f]{6})/i.exec(bd);
+    if (m2 && m2[3] !== 'none') { const w2 = parseFloat(m2[1]) * ({ cm: 28.35, mm: 2.835, in: 72 }[m2[2]] || 1); extraPage.pageBorder = { style: /double/.test(m2[3]) ? 'double' : /dash/.test(m2[3]) ? 'dashed' : /dot/.test(m2[3]) ? 'dotted' : 'solid', width: Math.round((/double/.test(m2[3]) ? w2 / 3 : w2) * 4) / 4 || 0.25, color: m2[4].toLowerCase(), space: Math.round(lenToPx(A(plp, 'fo', 'padding') || A(plp, 'fo', 'padding-top') || '0.5cm')), shadow: A(plp, 'style', 'shadow') && A(plp, 'style', 'shadow') !== 'none' ? true : undefined }; }
+  }
+  // numeración de líneas
+  const lnc = stylesDoc?.getElementsByTagNameNS(NS.text, 'linenumbering-configuration')[0];
+  if (lnc && A(lnc, 'text', 'number-lines') !== 'false') extraPage.lineNum = { on: true, every: Number(A(lnc, 'text', 'increment') || 1), restart: A(lnc, 'text', 'restart-on-page') === 'true' ? 'page' : 'doc', dist: A(lnc, 'text', 'offset') ? Math.round(lenToPx(A(lnc, 'text', 'offset'))) : 18, blank: A(lnc, 'text', 'count-empty-lines') !== 'false' };
   // numeración de capítulos (esquema de numeración de LibreOffice)
   let chapnum = null;
   const ol1 = [...(stylesDoc?.getElementsByTagNameNS(NS.text, 'outline-level-style') || [])].find((l) => A(l, 'text', 'level') === '1');
@@ -434,5 +450,5 @@ export async function readOdt(bytes) {
   box.innerHTML = sanitize(html || '<p><br></p>');
   let sources = [];
   try { const mt = await zip.file(META_ODT)?.async('string'); if (mt) ({ sources } = applyMeta(box, JSON.parse(mt), comments, null)); } catch { /* */ }
-  return { html: box.innerHTML || '<p><br></p>', page, header, footer, defTab, chapnum, styles: Object.fromEntries(usedStyles), footnotes, endnotes, comments, sources, warnings: warn.size ? [`No se pudieron conservar del todo: ${[...warn].join(', ')}`] : [], props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
+  return { html: box.innerHTML || '<p><br></p>', page, header, footer, ...extraPage, defTab, chapnum, styles: Object.fromEntries(usedStyles), footnotes, endnotes, comments, sources, warnings: warn.size ? [`No se pudieron conservar del todo: ${[...warn].join(', ')}`] : [], props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
 }

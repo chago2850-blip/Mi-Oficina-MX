@@ -10,6 +10,7 @@ import * as FX from './formato.js';
 import * as ES from './estilos.js';
 import * as TB from './tablas.js';
 import * as IN from './insertar.js';
+import * as PG from './pagina.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -444,6 +445,7 @@ function paginate() {
   updateStatusPage();
   positionImgBox();
   clearTimeout(paginate.navT); paginate.navT = setTimeout(() => { F.renderNav(); }, 400);
+  PG.drawLineNumbers();
 }
 
 function hfText(tpl, i, n) { return (tpl || '').replace(/\{pagina\}/gi, String(i + 1)).replace(/\{paginas\}/gi, String(n)); }
@@ -451,8 +453,9 @@ function renderHeaderFooter(sh, i, n) {
   const p = state.page;
   sh.replaceChildren();
   const pad = { left: `${p.ml}px`, right: `${p.mr}px` };
-  if (state.header) sh.append(h('div', { class: 'hf top', style: { ...pad, top: `${Math.max(12, p.mt / 2 - 10)}px` } }, hfText(state.header, i, n)));
-  if (state.footer) sh.append(h('div', { class: 'hf bottom', style: { ...pad, bottom: `${Math.max(12, p.mb / 2 - 10)}px` } }, hfText(state.footer, i, n)));
+  const hd = PG.hfNode('header', i, n, { ...pad, top: `${Math.max(12, p.mt / 2 - 10)}px` }); if (hd) sh.append(hd);
+  const ft = PG.hfNode('footer', i, n, { ...pad, bottom: `${Math.max(12, p.mb / 2 - 10)}px` }); if (ft) sh.append(ft);
+  const pbd = PG.borderNode(); if (pbd) sh.append(pbd);
   const pn = state.pageNumbers;
   if (state.pageColor) sh.style.background = state.pageColor; else sh.style.background = '';
   if (state.watermark?.text) sh.append(h('div', { class: 'wm', style: { color: state.watermark.color || '#C9CBD6' } }, state.watermark.text));
@@ -463,7 +466,7 @@ function renderHeaderFooter(sh, i, n) {
   }
   if (state.enPos && state.enPos.page === i) sh.append(F.endnotesEl({ left: `${p.ml}px`, width: `${p.w - p.ml - p.mr}px`, top: `${p.mt + state.enPos.y}px` }));
   if (pn && pn !== 'none') {
-    const label = tf('Página {0} de {1}', i + 1, n);
+    const label = tf('Página {0} de {1}', i + (state.firstPageNum || 1), n);
     const style = pn.startsWith('header') ? { top: `${Math.max(12, p.mt / 2 - 10)}px` } : { bottom: `${Math.max(12, p.mb / 2 - 10)}px` };
     if (pn.endsWith('center')) Object.assign(style, { left: '0', right: '0', textAlign: 'center' });
     else Object.assign(style, { right: `${p.mr}px` });
@@ -809,7 +812,8 @@ const MARGIN_PRESETS = [
   ['Normal (2.5 / 3 cm)', { mt: 2.5, mb: 2.5, ml: 3, mr: 3 }], ['Estrecho (1.27 cm)', { mt: 1.27, mb: 1.27, ml: 1.27, mr: 1.27 }],
   ['Moderado (2.54 / 1.91 cm)', { mt: 2.54, mb: 2.54, ml: 1.91, mr: 1.91 }], ['Ancho (2.54 / 5.08 cm)', { mt: 2.54, mb: 2.54, ml: 5.08, mr: 5.08 }],
 ];
-async function headerFooter() {
+async function headerFooter() { return PG.headerFooterDialog(); }
+async function headerFooterOld() {
   const v = await form('Encabezado y pie de página', [
     { name: 'header', label: 'Encabezado (se repite en cada página)', value: state.header, placeholder: 'Ej.: Nombre de la empresa' },
     { name: 'footer', label: 'Pie de página', value: state.footer, placeholder: 'Ej.: Documento confidencial' },
@@ -863,13 +867,13 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador del archivo
 function snapshotSettings() {
-  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor, defTab: state.defTab || null, styles: state.styles || {}, chapnum: state.chapnum || null };
+  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor, defTab: state.defTab || null, styles: state.styles || {}, chapnum: state.chapnum || null, headerFirst: state.headerFirst, footerFirst: state.footerFirst, headerEven: state.headerEven, footerEven: state.footerEven, hfFirst: !!state.hfFirst, hfOddEven: !!state.hfOddEven, hfStyle: state.hfStyle || null, firstPageNum: state.firstPageNum || 1, pageBorder: state.pageBorder || null, lineNum: state.lineNum || null };
 }
 function setContent(html, settings) {
   editor.innerHTML = html || '<p><br></p>';
   if (settings) {
     if (settings.page) Object.assign(state.page, settings.page);
-    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor', 'defTab', 'styles', 'chapnum'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor', 'defTab', 'styles', 'chapnum', 'headerFirst', 'footerFirst', 'headerEven', 'footerEven', 'hfFirst', 'hfOddEven', 'hfStyle', 'firstPageNum', 'pageBorder', 'lineNum'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
     editor.classList.toggle('tracking', !!state.track);
   }
   ES.render();
@@ -897,7 +901,7 @@ const adapter = {
   async newDoc(tplId) {
     const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0];
     state.page = { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 };
-    state.header = ''; state.footer = ''; state.defTab = null; state.styles = {}; state.chapnum = null; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
+    state.header = ''; state.footer = ''; state.defTab = null; state.styles = {}; state.chapnum = null; Object.assign(state, { headerFirst: '', footerFirst: '', headerEven: undefined, footerEven: undefined, hfFirst: false, hfOddEven: false, hfStyle: null, firstPageNum: 1, pageBorder: null, lineNum: null }); state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
     Object.assign(state, { comments: [], footnotes: {}, endnotes: {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
     editor.classList.remove('tracking');
     setContent(localizeHtml(t.html()));
@@ -911,6 +915,7 @@ const adapter = {
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
       state.header = r.header || ''; state.footer = r.footer || ''; state.pageNumbers = 'none'; state.defTab = r.defTab || null; state.styles = r.styles || {}; state.chapnum = r.chapnum || null;
+      Object.assign(state, { headerFirst: r.headerFirst ?? '', footerFirst: r.footerFirst ?? '', headerEven: r.headerEven, footerEven: r.footerEven, hfFirst: !!r.hfFirst, hfOddEven: !!r.hfOddEven, hfStyle: null, firstPageNum: r.firstPageNum || 1, pageBorder: r.pageBorder || null, lineNum: r.lineNum || null });
       Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
@@ -1031,6 +1036,8 @@ async function onCommand(cmd, arg) {
     case 'alphaIndex': return IN.insertIndex('alpha');
     case 'updateAll': return IN.updateAll();
     case 'columnBreak': return IN.insertColumnBreak();
+    case 'pageBorder': return PG.pageBorderDialog();
+    case 'lineNum': return PG.lineNumDialog();
     case 'headerFooter': return headerFooter();
     case 'pageSetup': return pageSetup();
     case 'orientation': return setPage({ landscape: !state.page.landscape });
@@ -1212,7 +1219,8 @@ const TABS = [
   },
   {
     id: 'design', label: 'Diseño', groups: [
-      { label: 'Fondo de página', items: [{ cmd: 'watermark', label: 'Marca de agua', icon: 'background', size: 'lg' }, { cmd: 'pageColor', label: 'Color de página', icon: 'fill', size: 'lg', color: true, colorValue: '#FFF8E1', colorOpts: { noneLabel: 'Sin color' } }] },
+      { label: 'Fondo de página', items: [{ cmd: 'watermark', label: 'Marca de agua', icon: 'background', size: 'lg' }, { cmd: 'pageColor', label: 'Color de página', icon: 'fill', size: 'lg', color: true, colorValue: '#FFF8E1', colorOpts: { noneLabel: 'Sin color' } }, { cmd: 'pageBorder', label: 'Bordes de página', icon: 'paraBorder', size: 'lg' }] },
+      { label: 'Líneas', items: [{ cmd: 'lineNum', label: 'Números de línea', icon: 'numbers', size: 'lg' }] },
     ],
   },
   {
@@ -1305,6 +1313,7 @@ F.initFeatures({
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
 ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
+PG.init({ state, editor, get pagesEl() { return pagesEl; }, shell, schedulePaginate });
 IN.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, currentBlock, schedulePaginate });
 TB.init({ editor, shell, currentBlock, restoreSelection, saveSelection, schedulePaginate, selectedBlocks, layoutTabs: () => F.layoutTabs?.() });
 FX.init({ editor, selectedBlocks, restoreSelection, saveSelection, markDirty: () => shell.markDirty(), schedulePaginate, reflectState, FONTS, applySpanStyles, exec });

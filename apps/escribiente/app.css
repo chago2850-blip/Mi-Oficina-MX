@@ -249,3 +249,12 @@ body.printing .doc .fld, .m-print .fld { background: none; }
 .doc.marks .cbk { height: auto; border-top: 1px dashed #7B6FD6; } .doc.marks .cbk::after { content: 'Salto de columna'; font-size: 8pt; color: #7B6FD6; }
 .doc p.caption { font-style: italic; font-size: 10pt; color: #333; }
 .doc .toc .toc-l.l2 { padding-left: 14pt; }
+
+/* página (pagina.js): encabezado en tres partes, borde de página y números de línea */
+.sheet .hf .hf-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.sheet .hf .hf-3 span:nth-child(2) { text-align: center; } .sheet .hf .hf-3 span:nth-child(3) { text-align: right; }
+.sheet .hf.top.hf-line { border-bottom: 1px solid currentColor; padding-bottom: 2px; }
+.sheet .hf.bottom.hf-line { border-top: 1px solid currentColor; padding-top: 2px; }
+.sheet .pborder { position: absolute; pointer-events: none; box-sizing: border-box; }
+.lnums { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.lnum { position: absolute; width: 36px; text-align: right; font-size: 8pt; color: #888; font-family: var(--doc-font); }

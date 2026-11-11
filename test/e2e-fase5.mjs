@@ -44,7 +44,7 @@ const reopen = (w, p) => w.evaluate(async (f) => { const d = await window.oficin
 // Abre un formulario sin esperar a que se cierre
 const startDialog = (w, cmd) => w.evaluate(([c]) => { setTimeout(() => window.__shell.command(c)); }, [cmd]);
 async function fillForm(w, values, submit = true) {
-  await w.waitForSelector('.modal', { timeout: 5000 });
+  await w.waitForSelector('.modal', { timeout: 5000 }); await wait(200); // el cuadro pone el foco en su primer campo justo después de abrirse
   for (const [name, v] of Object.entries(values)) {
     const sel = `.modal [name="${name}"]`;
     const tag = await w.evaluate((s) => document.querySelector(s)?.tagName, sel);
@@ -59,7 +59,7 @@ const hasSoffice = (() => { try { execFileSync('soffice', ['--version'], { stdio
 
 // pone valores en el cuadro abierto (también en pestañas ocultas) y acepta
 async function setDialog(w, values, submit = true) {
-  await w.waitForSelector('.modal', { timeout: 5000 });
+  await w.waitForSelector('.modal', { timeout: 5000 }); await wait(200); // el cuadro pone el foco en su primer campo justo después de abrirse
   await w.evaluate((vals) => {
     const m = [...document.querySelectorAll('.modal')].pop();
     for (const [k, v] of Object.entries(vals)) { const el = m.querySelector(`[name="${k}"]`); if (!el) throw new Error(`sin campo ${k}`); if (el.type === 'checkbox') el.checked = !!v; else el.value = String(v); el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('input', { bubbles: true })); }
