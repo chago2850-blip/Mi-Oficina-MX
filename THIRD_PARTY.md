@@ -23,6 +23,8 @@ Mi Oficina MX se distribuye bajo la **GPL-3.0-or-later**. Incluye estas bibliote
 | [officecrypto-tool](https://github.com/zurmokeeper/officecrypto-tool) (con crypto-js, xml2js y cfb) | Cifrar y abrir archivos de Office con contraseña | MIT · Apache-2.0 (cfb) |
 | [word-extractor](https://github.com/morungos/node-word-extractor) | Abrir .doc de Word 97-2003 | MIT |
 | Diccionarios Hunspell de Chromium: español ([RLA-ES](https://github.com/sbosio/rla-es)) e inglés ([SCOWL](http://wordlist.aspell.net/)) | Revisión ortográfica sin internet | GPL-3.0 / LGPL-3.0 / MPL-1.1 (es) · licencia SCOWL, tipo BSD (en) |
+| Diccionario de sinónimos del español `th_es_v2` ([RLA-ES](https://github.com/sbosio/rla-es)), en `apps/shared/data/thes-es.json.gz` | Sinónimos (Ctrl+F7) en Escribiente | GPL-3.0 / LGPL-3.0 / MPL-1.1 |
+| Patrones de separación silábica del español `hyph_es` (Javier Bezos, CervanTeX; RLA-ES), en `apps/shared/data/hyph-es.json` | Separación silábica en Escribiente | MIT / GPL-3.0 / LGPL-3.0 / MPL-1.1 |
 | [esbuild](https://esbuild.github.io/) | Empaquetar la interfaz (solo desarrollo) | MIT |
 | [axe-core](https://github.com/dequelabs/axe-core) | Auditoría de accesibilidad en las pruebas (solo desarrollo) | MPL-2.0 |
 

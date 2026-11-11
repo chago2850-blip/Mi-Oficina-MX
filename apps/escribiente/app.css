@@ -258,3 +258,11 @@ body.printing .doc .fld, .m-print .fld { background: none; }
 .sheet .pborder { position: absolute; pointer-events: none; box-sizing: border-box; }
 .lnums { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .lnum { position: absolute; width: 36px; text-align: right; font-size: 8pt; color: #888; font-family: var(--doc-font); }
+
+/* herramientas (herramientas.js) */
+.findbar input.bad { outline: 2px solid #D93025; }
+.th-list { max-height: 300px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.th-g { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; font-size: 13px; }
+.th-w { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 2px 9px; cursor: pointer; font: inherit; font-size: 12.5px; }
+.th-w:hover { border-color: var(--accent); color: var(--accent); }
+.doc p, .doc li { hyphens: manual; }

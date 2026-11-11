@@ -11,6 +11,7 @@ import * as ES from './estilos.js';
 import * as TB from './tablas.js';
 import * as IN from './insertar.js';
 import * as PG from './pagina.js';
+import * as HT from './herramientas.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -274,6 +275,7 @@ function onEditorKey(e) {
   }
   if (mod && e.key === 'F11') { e.preventDefault(); onCommand('stylesPane'); }
   if (e.key === 'F9' && !mod) { e.preventDefault(); IN.updateAll(); }
+  if (mod && e.key === 'F7') { e.preventDefault(); onCommand('thesaurus'); }
   if (mod && e.shiftKey && e.key === 'Enter') { e.preventDefault(); saveSelection(); IN.insertColumnBreak(); }
   if (e.shiftKey && !mod && e.key === 'F3') { e.preventDefault(); saveSelection(); const sel = document.getSelection().toString(); FX.changeCase(sel === sel.toLocaleUpperCase('es') ? 'lower' : sel === sel.toLocaleLowerCase('es') ? 'title' : 'upper'); }
   if (mod && e.altKey && /^[1-3]$/.test(e.key)) { e.preventDefault(); setBlockStyle(`h${e.key}`); }
@@ -446,6 +448,7 @@ function paginate() {
   positionImgBox();
   clearTimeout(paginate.navT); paginate.navT = setTimeout(() => { F.renderNav(); }, 400);
   PG.drawLineNumbers();
+  if (state.hyphenate) { clearTimeout(paginate.hyT); paginate.hyT = setTimeout(() => { if (HT.hyphenateDoc()) schedulePaginate(); }, 900); }
 }
 
 function hfText(tpl, i, n) { return (tpl || '').replace(/\{pagina\}/gi, String(i + 1)).replace(/\{paginas\}/gi, String(n)); }
@@ -507,7 +510,7 @@ function drawRuler() {
 function updateCounts() {
   clearTimeout(updateCounts.t);
   updateCounts.t = setTimeout(() => {
-    const text = editor.innerText || '';
+    const text = (editor.innerText || '').replace(/\u00AD/g, '');
     const words = (text.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
     statusWords.textContent = `${words.toLocaleString('es-MX')} palabras`;
     statusWords.dataset.chars = String(text.replace(/\s/g, '').length);
@@ -742,9 +745,13 @@ function openFind(replace = false, initial = '') {
     const q = h('input', { placeholder: 'Buscar', 'aria-label': 'Buscar' });
     const rep = h('input', { placeholder: 'Reemplazar con', 'aria-label': 'Reemplazar con' });
     const count = h('span', { class: 'count' });
-    const mc = h('input', { type: 'checkbox' }), acc = h('input', { type: 'checkbox' });
+    const mc = h('input', { type: 'checkbox' }), acc = h('input', { type: 'checkbox' }), ww = h('input', { type: 'checkbox' }), rx = h('input', { type: 'checkbox' }), insel = h('input', { type: 'checkbox' });
+    const stSel = h('select', { 'aria-label': t('Estilo de párrafo'), style: { maxWidth: '150px' } });
+    const fillStyles = () => { const cur = stSel.value; stSel.replaceChildren(h('option', { value: '' }, t('(cualquier estilo)')), ...ES.allPara().map((x) => h('option', { value: x.id }, t(x.name)))); stSel.value = cur; };
+    let selRange = null;
+    const opts = () => ({ matchCase: mc.checked, accents: acc.checked, words: ww.checked, regex: rx.checked, style: stSel.value, inSel: insel.checked ? selRange : null });
     const run = () => {
-      findState.ranges = findAll(q.value, { matchCase: mc.checked, accents: acc.checked });
+      try { findState.ranges = HT.findRanges(editor, q.value, opts()); q.classList.remove('bad'); } catch { findState.ranges = []; q.classList.add('bad'); }
       findState.idx = findState.ranges.length ? 0 : -1;
       count.textContent = q.value ? (findState.ranges.length ? `1 de ${findState.ranges.length}` : 'Sin resultados') : '';
       paintFind();
@@ -758,24 +765,27 @@ function openFind(replace = false, initial = '') {
     const replaceOne = () => {
       const r = findState.ranges[findState.idx]; if (!r) return;
       const s = document.getSelection(); s.removeAllRanges(); s.addRange(r);
-      document.execCommand('insertText', false, rep.value);
+      document.execCommand('insertText', false, HT.replacementFor(r, rep.value, opts()));
       shell.markDirty(); run();
     };
     const replaceAll = () => {
       const n = findState.ranges.length; if (!n) return;
-      for (let i = n - 1; i >= 0; i--) { const s = document.getSelection(); s.removeAllRanges(); s.addRange(findState.ranges[i]); document.execCommand('insertText', false, rep.value); }
+      for (let i = n - 1; i >= 0; i--) { const s = document.getSelection(); s.removeAllRanges(); s.addRange(findState.ranges[i]); document.execCommand('insertText', false, HT.replacementFor(findState.ranges[i], rep.value, opts())); }
       shell.markDirty(); run(); toast(`${n} reemplazos`);
     };
     q.addEventListener('input', run);
     q.addEventListener('keydown', (e) => { if (e.key === 'Enter') step(e.shiftKey ? -1 : 1); if (e.key === 'Escape') closeFind(); });
     rep.addEventListener('keydown', (e) => { if (e.key === 'Enter') replaceOne(); if (e.key === 'Escape') closeFind(); });
-    mc.addEventListener('change', run); acc.addEventListener('change', run);
+    mc.addEventListener('change', run); acc.addEventListener('change', run); ww.addEventListener('change', run); rx.addEventListener('change', run); stSel.addEventListener('change', run);
+    insel.addEventListener('change', () => { if (insel.checked) { const s = getSelection(); selRange = savedRange ? savedRange.cloneRange() : s.rangeCount ? s.getRangeAt(0).cloneRange() : null; } run(); });
+    stSel.addEventListener('focus', fillStyles);
     const repRow = h('div', { class: 'row' }, rep, h('button', { class: 'btn', onclick: replaceOne }, 'Reemplazar'), h('button', { class: 'btn', onclick: replaceAll }, 'Todos'));
     findbar = h('div', { class: 'findbar' },
       h('div', { class: 'row' }, q, count, h('button', { class: 'rb sm', title: 'Anterior', html: icon('chevronDown', 16).replace('M6 9l6 6 6-6', 'M6 15l6-6 6 6'), onclick: () => step(-1) }), h('button', { class: 'rb sm', title: 'Siguiente', html: icon('chevronDown', 16), onclick: () => step(1) }), h('button', { class: 'rb sm', title: 'Cerrar', html: icon('close', 16), onclick: () => closeFind() })),
       repRow,
-      h('div', { class: 'row', style: { gap: '14px', fontSize: '12px' } }, h('label', { class: 'check' }, mc, 'Mayúsculas'), h('label', { class: 'check' }, acc, 'Distinguir acentos')));
-    findbar.q = q; findbar.rep = repRow; findbar.run = run;
+      h('div', { class: 'row', style: { gap: '14px', fontSize: '12px', flexWrap: 'wrap' } }, h('label', { class: 'check' }, mc, 'Mayúsculas'), h('label', { class: 'check' }, acc, 'Distinguir acentos'), h('label', { class: 'check' }, ww, 'Palabras completas'), h('label', { class: 'check' }, rx, 'Expresiones regulares'), h('label', { class: 'check' }, insel, 'Solo en la selección'), stSel));
+    fillStyles();
+    findbar.q = q; findbar.rep = repRow; findbar.run = run; findbar.opts = { mc, acc, ww, rx, insel, stSel };
     shell.workspace.append(findbar);
   }
   findbar.hidden = false;
@@ -867,13 +877,13 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador del archivo
 function snapshotSettings() {
-  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor, defTab: state.defTab || null, styles: state.styles || {}, chapnum: state.chapnum || null, headerFirst: state.headerFirst, footerFirst: state.footerFirst, headerEven: state.headerEven, footerEven: state.footerEven, hfFirst: !!state.hfFirst, hfOddEven: !!state.hfOddEven, hfStyle: state.hfStyle || null, firstPageNum: state.firstPageNum || 1, pageBorder: state.pageBorder || null, lineNum: state.lineNum || null };
+  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor, defTab: state.defTab || null, styles: state.styles || {}, chapnum: state.chapnum || null, headerFirst: state.headerFirst, footerFirst: state.footerFirst, headerEven: state.headerEven, footerEven: state.footerEven, hfFirst: !!state.hfFirst, hfOddEven: !!state.hfOddEven, hfStyle: state.hfStyle || null, firstPageNum: state.firstPageNum || 1, pageBorder: state.pageBorder || null, lineNum: state.lineNum || null, hyphenate: !!state.hyphenate };
 }
 function setContent(html, settings) {
   editor.innerHTML = html || '<p><br></p>';
   if (settings) {
     if (settings.page) Object.assign(state.page, settings.page);
-    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor', 'defTab', 'styles', 'chapnum', 'headerFirst', 'footerFirst', 'headerEven', 'footerEven', 'hfFirst', 'hfOddEven', 'hfStyle', 'firstPageNum', 'pageBorder', 'lineNum'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor', 'defTab', 'styles', 'chapnum', 'headerFirst', 'footerFirst', 'headerEven', 'footerEven', 'hfFirst', 'hfOddEven', 'hfStyle', 'firstPageNum', 'pageBorder', 'lineNum', 'hyphenate'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
     editor.classList.toggle('tracking', !!state.track);
   }
   ES.render();
@@ -901,7 +911,7 @@ const adapter = {
   async newDoc(tplId) {
     const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0];
     state.page = { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 };
-    state.header = ''; state.footer = ''; state.defTab = null; state.styles = {}; state.chapnum = null; Object.assign(state, { headerFirst: '', footerFirst: '', headerEven: undefined, footerEven: undefined, hfFirst: false, hfOddEven: false, hfStyle: null, firstPageNum: 1, pageBorder: null, lineNum: null }); state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
+    state.header = ''; state.footer = ''; state.defTab = null; state.styles = {}; state.chapnum = null; Object.assign(state, { headerFirst: '', footerFirst: '', headerEven: undefined, footerEven: undefined, hfFirst: false, hfOddEven: false, hfStyle: null, firstPageNum: 1, pageBorder: null, lineNum: null, hyphenate: false }); state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
     Object.assign(state, { comments: [], footnotes: {}, endnotes: {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
     editor.classList.remove('tracking');
     setContent(localizeHtml(t.html()));
@@ -915,7 +925,7 @@ const adapter = {
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
       state.header = r.header || ''; state.footer = r.footer || ''; state.pageNumbers = 'none'; state.defTab = r.defTab || null; state.styles = r.styles || {}; state.chapnum = r.chapnum || null;
-      Object.assign(state, { headerFirst: r.headerFirst ?? '', footerFirst: r.footerFirst ?? '', headerEven: r.headerEven, footerEven: r.footerEven, hfFirst: !!r.hfFirst, hfOddEven: !!r.hfOddEven, hfStyle: null, firstPageNum: r.firstPageNum || 1, pageBorder: r.pageBorder || null, lineNum: r.lineNum || null });
+      Object.assign(state, { headerFirst: r.headerFirst ?? '', footerFirst: r.footerFirst ?? '', headerEven: r.headerEven, footerEven: r.footerEven, hfFirst: !!r.hfFirst, hfOddEven: !!r.hfOddEven, hfStyle: null, firstPageNum: r.firstPageNum || 1, pageBorder: r.pageBorder || null, lineNum: r.lineNum || null, hyphenate: /\u00AD/.test(r.html || '') });
       Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
@@ -1037,6 +1047,10 @@ async function onCommand(cmd, arg) {
     case 'updateAll': return IN.updateAll();
     case 'columnBreak': return IN.insertColumnBreak();
     case 'pageBorder': return PG.pageBorderDialog();
+    case 'thesaurus': saveSelection(); return HT.thesaurusDialog();
+    case 'autocorrect': return HT.autocorrectDialog();
+    case 'hyphenation': return HT.hyphenationDialog();
+    case 'sortParas': saveSelection(); return HT.sortDialog();
     case 'lineNum': return PG.lineNumDialog();
     case 'headerFooter': return headerFooter();
     case 'pageSetup': return pageSetup();
@@ -1243,7 +1257,8 @@ const TABS = [
   },
   {
     id: 'review', label: 'Revisar', groups: [
-      { label: 'Revisión', items: [{ cmd: 'spell', label: 'Ortografía', icon: 'spell', size: 'lg' }, { cmd: 'wordCount', label: 'Contar palabras', icon: 'words', size: 'lg' }] },
+      { label: 'Revisión', items: [{ cmd: 'spell', label: 'Ortografía', icon: 'spell', size: 'lg' }, { cmd: 'wordCount', label: 'Contar palabras', icon: 'words', size: 'lg' }, { cmd: 'thesaurus', label: 'Sinónimos', icon: 'thesaurus', size: 'lg', kbd: 'Ctrl+F7' }] },
+      { label: 'Herramientas', items: [{ stack: [{ cmd: 'autocorrect', label: 'Autocorrección…', icon: 'check', showLabel: true }, { cmd: 'hyphenation', label: 'Separación silábica…', icon: 'hyphen', showLabel: true }, { cmd: 'sortParas', label: 'Ordenar párrafos…', icon: 'sortAsc', showLabel: true }] }] },
       { label: 'Comentarios', items: [{ cmd: 'comment', label: 'Nuevo comentario', icon: 'comment', size: 'lg' }, { cmd: 'showComments', label: 'Mostrar comentarios', icon: 'notes', size: 'lg' }] },
       { label: 'Seguimiento', items: [{ cmd: 'track', label: 'Control de cambios', icon: 'replace', size: 'lg' }, { cmd: 'showChanges', label: 'Panel de revisiones', icon: 'words', size: 'lg' }] },
       { label: 'Comparar', items: [{ cmd: 'compare', label: 'Comparar', icon: 'columns', size: 'lg' }] },
@@ -1313,6 +1328,7 @@ F.initFeatures({
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
 ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
+HT.init({ editor, state, shell, saveSelection, restoreSelection, schedulePaginate, currentBlock, selectedBlocks });
 PG.init({ state, editor, get pagesEl() { return pagesEl; }, shell, schedulePaginate });
 IN.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, currentBlock, schedulePaginate });
 TB.init({ editor, shell, currentBlock, restoreSelection, saveSelection, schedulePaginate, selectedBlocks, layoutTabs: () => F.layoutTabs?.() });
@@ -1334,4 +1350,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, IN, saveSelection, insertCite: (s) => F3.insertCitation(s) };
+window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, IN, HT, PG, saveSelection, insertCite: (s) => F3.insertCitation(s) };

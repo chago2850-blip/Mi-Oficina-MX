@@ -64,6 +64,8 @@ const P = {
   merge: 'M3 5h18v14H3z M8 12H3 M21 12h-5 M8 9l3 3-3 3 M16 9l-3 3 3 3',
   wrap: 'M4 6h16 M4 12h13a3 3 0 010 6h-4 M15 16l-2 2 2 2 M4 18h5',
   borders: 'M3 3h18v18H3z M3 12h18 M12 3v18',
+  thesaurus: 'M4 5h7v14H4z M13 5h7v14h-7z M6 9h3 M6 12h3 M15 9h3 M15 12h3 M10 21l2-2 2 2',
+  hyphen: 'M3 12h6 M15 7h6 M15 12h6 M15 17h6 M11 12h2',
   bookmark: 'M6 3h12v18l-6-5-6 5z',
   fields: 'M4 6h16v12H4z M8 10h3 M8 14h8 M14 10h2',
   caption: 'M4 4h16v10H4z M7 11l3-3 3 3 2-2 2 2 M6 18h12 M6 21h8',
