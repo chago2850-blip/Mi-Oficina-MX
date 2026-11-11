@@ -30,19 +30,24 @@ jobs:
           node-version: 22
           cache: npm
       - name: Herramientas del sistema
+        # solo hacen falta para el .dmg; si los servidores de Ubuntu fallan, se sigue sin ellos
+        continue-on-error: true
+        timeout-minutes: 12
         run: |
-          # solo se instala lo que falta; cada intento con tiempo límite y espejo alterno si el de Azure no responde
           MISSING=""
           for p in rpm hfsprogs cmake libssl-dev zlib1g-dev libbz2-dev xvfb; do dpkg -s "$p" >/dev/null 2>&1 || MISSING="$MISSING $p"; done
           echo "faltan:$MISSING"
           [ -z "$MISSING" ] && exit 0
-          for i in 1 2 3 4; do
-            timeout 300 sudo apt-get update -o Acquire::Retries=2 -o Acquire::http::Timeout=20 && timeout 400 sudo apt-get install -y -o Acquire::Retries=2 -o Acquire::http::Timeout=20 $MISSING && exit 0
-            echo "apt falló (intento $i); cambiando de espejo"
-            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null || true
-            sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
-            sleep $((i * 15))
+          # si el espejo de Azure no resuelve, se apunta al archivo oficial de Ubuntu
+          if ! getent hosts azure.archive.ubuntu.com >/dev/null; then
+            echo "espejo de Azure caído: se usa archive.ubuntu.com"
+            printf 'Types: deb\nURIs: http://archive.ubuntu.com/ubuntu/\nSuites: noble noble-updates noble-backports\nComponents: main universe restricted multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nTypes: deb\nURIs: http://security.ubuntu.com/ubuntu/\nSuites: noble-security\nComponents: main universe restricted multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' | sudo tee /etc/apt/sources.list.d/ubuntu.sources >/dev/null
+          fi
+          for i in 1 2 3; do
+            timeout 180 sudo apt-get update -o Acquire::Retries=2 -o Acquire::http::Timeout=15 && timeout 300 sudo apt-get install -y -o Acquire::Retries=2 $MISSING && exit 0
+            sleep 20
           done
+          pip install --user cmake || true
           exit 1
       - run: npm ci
       - name: Diccionarios de ortografía (sin internet en la app)
@@ -79,6 +84,8 @@ jobs:
       - name: Instaladores de Linux
         run: npx electron-builder --linux AppImage deb rpm --x64 --publish never
       - name: Herramientas para el .dmg (rcodesign + libdmg-hfsplus)
+        id: dmgtools
+        continue-on-error: true
         run: |
           mkdir -p "$RUNNER_TEMP/tools" && cd "$RUNNER_TEMP/tools"
           curl -sSL -o rcs.tgz "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz"
@@ -87,6 +94,8 @@ jobs:
           cmake -S libdmg-hfsplus -B libdmg-hfsplus/build >/dev/null
           make -C libdmg-hfsplus/build -j"$(nproc)" >/dev/null
       - name: Instaladores de macOS (firma ad-hoc)
+        if: steps.dmgtools.outcome == 'success'
+        continue-on-error: true
         run: |
           T="$RUNNER_TEMP/tools"
           RCODESIGN="$(find "$T" -type f -name rcodesign | head -1)" \
