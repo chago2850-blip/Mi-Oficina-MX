@@ -22,6 +22,29 @@ export function lenToPx(v) {
 }
 const rgb = (c) => { if (!c) return null; if (c.startsWith('#')) return c.length === 4 ? `#${[...c.slice(1)].map((y) => y + y).join('')}` : c.slice(0, 7); const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(',').map(parseFloat); if (p[3] === 0) return null; return `#${p.slice(0, 3).map((n) => Math.round(n).toString(16).padStart(2, '0')).join('')}`; };
 
+
+// formato de texto a partir del estilo CSS de un elemento
+function readFmt(st, g, el) {
+  if (!st) return g;
+  if (st.fontWeight === 'bold' || Number(st.fontWeight) >= 600) g.bold = true; else if (st.fontWeight === 'normal' || st.fontWeight === '400') g.bold = false;
+  if (st.fontStyle === 'italic') g.italic = true; else if (st.fontStyle === 'normal') g.italic = false;
+  const dec = st.textDecorationLine || st.textDecoration || ''; const dst = st.textDecorationStyle || (/(double|dotted|dashed|wavy)/.exec(st.textDecoration || '') || [])[1] || '';
+  if (dec.includes('underline')) { g.underline = true; g.uStyle = dst; }
+  if (dec.includes('line-through')) { if (dst === 'double') g.dstrike = true; else g.strike = true; }
+  if (st.color && st.color !== 'transparent') g.color = rgb(st.color); if (st.backgroundColor) g.bg = rgb(st.backgroundColor);
+  if (st.fontSize) { const v = st.fontSize; g.size = v.endsWith('pt') ? parseFloat(v) : v.endsWith('px') ? parseFloat(v) * 0.75 : g.size; }
+  if (st.fontFamily) g.font = st.fontFamily.split(',')[0].replace(/["']/g, '').trim();
+  if (st.fontVariant === 'small-caps' || st.fontVariantCaps === 'small-caps') g.smallCaps = true;
+  if (st.textTransform === 'uppercase') g.caps = true;
+  if (st.letterSpacing && st.letterSpacing !== 'normal') g.ls = lenToPx(st.letterSpacing) * 0.75;
+  if (/(pt|px)$/.test(st.verticalAlign || '')) g.pos = lenToPx(st.verticalAlign) * 0.75;
+  const sc = /scaleX\(([\d.]+)\)/.exec(st.transform || ''); if (sc) g.scale = Math.round(Number(sc[1]) * 100);
+  if (st.textShadow && st.textShadow !== 'none') g.shadow = true;
+  if (st.webkitTextStroke && parseFloat(st.webkitTextStrokeWidth || st.webkitTextStroke) > 0) { g.outline = true; const m = /(#[0-9a-f]{3,8}|rgba?\([^)]*\))\s*$/i.exec(st.webkitTextStroke); if (m) g.color = rgb(m[1]); }
+  if (el?.classList?.contains('hidden-text')) g.hidden = true;
+  return g;
+}
+
 // ================================================================ escribir
 export async function htmlToOdt(editorEl, settings) {
   const zip = new JSZip();
@@ -29,33 +52,66 @@ export async function htmlToOdt(editorEl, settings) {
   const autoStyles = new Map(); // clave -> nombre
   const styleXml = [];
   const pictures = [];
-  let fnNum = 0, enNum = 0;
+  let fnNum = 0, enNum = 0; let tableNo = 0;
+  const pg = settings.page;
   const formulas = [];
-  const textStyle = (f) => {
+  const textProps = (f) => {
     const props = [];
-    if (f.bold) props.push('fo:font-weight="bold"'); if (f.italic) props.push('fo:font-style="italic"');
-    if (f.underline) props.push('style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"');
-    if (f.strike) props.push('style:text-line-through-style="solid"');
+    if (f.bold) props.push('fo:font-weight="bold"'); else if (f.bold === false) props.push('fo:font-weight="normal"');
+    if (f.italic) props.push('fo:font-style="italic"'); else if (f.italic === false) props.push('fo:font-style="normal"');
+    if (f.underline) props.push(`style:text-underline-style="${{ dotted: 'dotted', dashed: 'dash', wavy: 'wave' }[f.uStyle] || 'solid'}" style:text-underline-width="auto" style:text-underline-color="font-color"${f.uStyle === 'double' ? ' style:text-underline-type="double"' : ''}`);
+    if (f.strike || f.dstrike) props.push(`style:text-line-through-style="solid"${f.dstrike ? ' style:text-line-through-type="double"' : ''}`);
     if (f.color) props.push(`fo:color="${f.color}"`); if (f.bg) props.push(`fo:background-color="${f.bg}"`);
     if (f.size) props.push(`fo:font-size="${f.size}pt"`); if (f.font) props.push(`style:font-name="${x(f.font)}" fo:font-family="'${x(f.font)}'"`);
-    if (f.sup) props.push('style:text-position="super 58%"'); if (f.sub) props.push('style:text-position="sub 58%"');
+    if (f.sup) props.push('style:text-position="super 58%"'); else if (f.sub) props.push('style:text-position="sub 58%"'); else if (f.pos) props.push(`style:text-position="${Math.round((f.pos / (f.size || 11)) * 100)}% 100%"`);
+    if (f.smallCaps) props.push('fo:font-variant="small-caps"');
+    if (f.caps) props.push('fo:text-transform="uppercase"');
+    if (f.ls) props.push(`fo:letter-spacing="${(f.ls).toFixed(2)}pt"`);
+    if (f.shadow) props.push('fo:text-shadow="1pt 1pt"');
+    if (f.outline) props.push('style:text-outline="true"');
+    if (f.scale) props.push(`style:text-scale="${f.scale}%"`);
+    if (f.hidden) props.push('text:display="none"');
+    return props;
+  };
+  const textStyle = (f) => {
+    const props = textProps(f);
     if (!props.length) return null;
     const key = `T|${props.join(' ')}`;
     if (!autoStyles.has(key)) { const name = `T${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="text"><style:text-properties ${props.join(' ')}/></style:style>`); }
     return autoStyles.get(key);
   };
+  const cm = (px) => px2cm(px);
+  const borderOdf = (style, width, color) => (style && style !== 'none' && parseFloat(width) > 0 ? `${(lenToPx(width) * 0.75).toFixed(2)}pt ${{ double: 'double', dotted: 'dotted', dashed: 'dashed' }[style] || 'solid'} ${rgb(color) || '#000000'}` : null);
   const paraStyle = (el, parent) => {
-    const st = el.style || {};
+    const st = el.style || {}; const ds = el.dataset || {};
     const props = [];
     const al = st.textAlign; if (al && al !== 'left' && al !== 'start') props.push(`fo:text-align="${al === 'justify' ? 'justify' : al === 'center' ? 'center' : 'end'}"`);
-    const ml = parseFloat(st.marginLeft) || 0; if (ml) props.push(`fo:margin-left="${px2cm(ml)}"`);
-    const ti = parseFloat(st.textIndent) || 0; if (ti) props.push(`fo:text-indent="${px2cm(ti)}"`);
-    const lh = parseFloat(st.lineHeight); if (lh && !/px|pt/.test(st.lineHeight)) props.push(`fo:line-height="${Math.round(lh * 100)}%"`);
-    const tabs = String(el.dataset?.tabs || '').split(',').map((t) => /^([lcr]):(\d+)/.exec(t)).filter(Boolean)
+    const hasBL = st.borderLeftStyle && st.borderLeftStyle !== 'none';
+    const ml = lenToPx(st.marginLeft) || (!hasBL ? lenToPx(st.paddingLeft) : 0); if (ml) props.push(`fo:margin-left="${cm(ml)}"`);
+    const mr = lenToPx(st.marginRight); if (mr) props.push(`fo:margin-right="${cm(mr)}"`);
+    const ti = lenToPx(st.textIndent); if (ti) props.push(`fo:text-indent="${cm(ti)}"`);
+    const mt = ds.push ? ds.mt0 : st.marginTop; if (mt) props.push(`fo:margin-top="${cm(lenToPx(mt))}"`);
+    if (st.marginBottom) props.push(`fo:margin-bottom="${cm(lenToPx(st.marginBottom))}"`);
+    const lhs = String(st.lineHeight || '');
+    if (/(pt|px)$/.test(lhs)) props.push(ds.lr === 'atLeast' ? `style:line-height-at-least="${(lenToPx(lhs) * 0.75).toFixed(2)}pt"` : `fo:line-height="${(lenToPx(lhs) * 0.75).toFixed(2)}pt"`);
+    else if (parseFloat(lhs)) props.push(`fo:line-height="${Math.round(parseFloat(lhs) * 100)}%"`);
+    for (const sd of ['top', 'right', 'bottom', 'left']) {
+      const S = sd[0].toUpperCase() + sd.slice(1);
+      const b = borderOdf(st[`border${S}Style`], st[`border${S}Width`], st[`border${S}Color`]);
+      if (b) { props.push(`fo:border-${sd}="${b}"`); props.push(`fo:padding-${sd}="${(lenToPx(st[`padding${S}`]) * 0.75).toFixed(2)}pt"`); }
+    }
+    const bg = rgb(st.backgroundColor); if (bg) props.push(`fo:background-color="${bg}"`);
+    if (ds.keepnext) props.push('fo:keep-with-next="always"');
+    if (ds.keeplines) props.push('fo:keep-together="always"');
+    if (ds.pbb) props.push('fo:break-before="page"');
+    if (ds.widow === '0') props.push('fo:widows="0" fo:orphans="0"');
+    const tabs = String(ds.tabs || '').split(',').map((t) => /^([lcr]):(\d+)/.exec(t)).filter(Boolean)
       .map((m) => `<style:tab-stop style:position="${px2cm(Number(m[2]) - ml)}"${m[1] === 'l' ? '' : ` style:type="${m[1] === 'c' ? 'center' : 'right'}"`}/>`).join('');
-    if (!props.length && !tabs) return parent;
-    const key = `P|${parent}|${props.join(' ')}|${tabs}`;
-    if (!autoStyles.has(key)) { const name = `P${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="paragraph" style:parent-style-name="${parent}"><style:paragraph-properties ${props.join(' ')}${tabs ? `><style:tab-stops>${tabs}</style:tab-stops></style:paragraph-properties>` : '/>'}</style:style>`); }
+    // letra del propio párrafo
+    const tprops = textProps(readFmt(st, {}, null));
+    if (!props.length && !tabs && !tprops.length) return parent;
+    const key = `P|${parent}|${props.join(' ')}|${tabs}|${tprops.join(' ')}`;
+    if (!autoStyles.has(key)) { const name = `P${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="paragraph" style:parent-style-name="${parent}"><style:paragraph-properties ${props.join(' ')}>${tabs ? `<style:tab-stops>${tabs}</style:tab-stops>` : ''}</style:paragraph-properties>${tprops.length ? `<style:text-properties ${tprops.join(' ')}/>` : ''}</style:style>`); }
     return autoStyles.get(key);
   };
   const inline = async (node, f = {}) => {
@@ -91,14 +147,7 @@ export async function htmlToOdt(editorEl, settings) {
       const g = { ...f };
       if (tag === 'B' || tag === 'STRONG') g.bold = true; if (tag === 'I' || tag === 'EM') g.italic = true; if (tag === 'U') g.underline = true;
       if (tag === 'S' || tag === 'STRIKE') g.strike = true; if (tag === 'SUP') g.sup = true; if (tag === 'SUB') g.sub = true;
-      const st = n.style;
-      if (st) {
-        if (st.fontWeight === 'bold' || Number(st.fontWeight) >= 600) g.bold = true; if (st.fontStyle === 'italic') g.italic = true;
-        const dec = st.textDecorationLine || st.textDecoration || ''; if (dec.includes('underline')) g.underline = true; if (dec.includes('line-through')) g.strike = true;
-        if (st.color) g.color = rgb(st.color); if (st.backgroundColor) g.bg = rgb(st.backgroundColor);
-        if (st.fontSize) { const v = st.fontSize; g.size = v.endsWith('pt') ? parseFloat(v) : v.endsWith('px') ? parseFloat(v) * 0.75 : g.size; }
-        if (st.fontFamily) g.font = st.fontFamily.split(',')[0].replace(/["']/g, '').trim();
-      }
+      readFmt(n.style, g, n);
       if (tag === 'A' && n.getAttribute('href')) { out += `<text:a xlink:type="simple" xlink:href="${x(n.getAttribute('href'))}">${await inline(n, g)}</text:a>`; continue; }
       if (n.classList?.contains('cm')) {
         const c = settings.comments?.find((cc) => cc.id === n.dataset.cid);
@@ -123,7 +172,9 @@ export async function htmlToOdt(editorEl, settings) {
     for (const li of el.children) {
       if (li.tagName !== 'LI') continue;
       const clone = li.cloneNode(true); clone.querySelectorAll('ul,ol').forEach((y) => y.remove());
-      out += `<text:list-item><text:p text:style-name="${paraStyle(li, 'List_20_Paragraph')}">${await inline(clone)}</text:p>`;
+      const ps = [...clone.children].filter((c) => /^(P|H[1-6])$/.test(c.tagName));
+      if (ps.length) { out += '<text:list-item>'; for (const pp of ps) out += `<text:p text:style-name="${paraStyle(pp, 'List_20_Paragraph')}">${await inline(pp)}</text:p>`; }
+      else out += `<text:list-item><text:p text:style-name="${paraStyle(li, 'List_20_Paragraph')}">${await inline(clone)}</text:p>`;
       for (const sub of li.children) if (sub.tagName === 'UL' || sub.tagName === 'OL') out += await list(sub, depth + 1);
       out += '</text:list-item>';
     }
@@ -139,15 +190,38 @@ export async function htmlToOdt(editorEl, settings) {
     if (tag === 'HR') return '<text:p text:style-name="HRule"/>';
     if (tag === 'TABLE') {
       const rows = [...el.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr')];
-      const cols = Math.max(1, ...rows.map((r) => r.children.length));
-      let o = `<table:table table:name="Tabla${Math.random().toString(36).slice(2, 6)}" table:style-name="Tbl"><table:table-column table:number-columns-repeated="${cols}"/>`;
-      for (const r of rows) {
+      // cuadrícula con celdas combinadas
+      const occ = []; const placed = [];
+      rows.forEach((tr, ri) => { occ[ri] ||= []; let ci = 0; for (const td of tr.children) { while (occ[ri][ci]) ci++; const cs = td.colSpan || 1; const rs = td.rowSpan || 1; placed.push({ td, ri, ci, cs, rs }); for (let r = ri; r < ri + rs; r++) { occ[r] ||= []; for (let c = ci; c < ci + cs; c++) occ[r][c] = r === ri && c === ci ? 'own' : 'cov'; } ci += cs; } });
+      const cols = Math.max(1, ...occ.map((r) => r.length));
+      const tblW = el.offsetWidth || (pg.w - pg.ml - pg.mr);
+      let widths = [...el.querySelectorAll(':scope > colgroup > col')].map((c) => (/%$/.test(c.style.width) ? (parseFloat(c.style.width) / 100) * tblW : lenToPx(c.style.width) || 0));
+      if (widths.length !== cols || widths.some((w) => !w)) { widths = Array(cols).fill(0); for (const pc of placed) if (pc.cs === 1 && !widths[pc.ci]) widths[pc.ci] = pc.td.offsetWidth || 0; const known = widths.filter(Boolean); const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : (pg.w - pg.ml - pg.mr) / cols; widths = widths.map((w) => w || avg); }
+      const tn = `Tabla${++tableNo}`;
+      const tw = widths.reduce((a, b) => a + b, 0);
+      const ts = el.style; const center = ts.marginLeft === 'auto' && ts.marginRight === 'auto'; const right = ts.marginLeft === 'auto' && !center;
+      styleXml.push(`<style:style style:name="${tn}" style:family="table"><style:table-properties style:width="${px2cm(tw)}" table:align="${center ? 'center' : right ? 'right' : 'left'}"${!center && !right && lenToPx(ts.marginLeft) ? ` fo:margin-left="${px2cm(lenToPx(ts.marginLeft))}"` : ''}/></style:style>`);
+      let o = `<table:table table:name="${tn}" table:style-name="${tn}">`;
+      widths.forEach((w, i) => { styleXml.push(`<style:style style:name="${tn}.C${i + 1}" style:family="table-column"><style:table-column-properties style:column-width="${px2cm(w)}"/></style:style>`); o += `<table:table-column table:style-name="${tn}.C${i + 1}"/>`; });
+      const live = el.isConnected;
+      const cellStyle = (td) => {
+        const cs = live ? getComputedStyle(td) : td.style; const pr = [];
+        for (const sd of ['top', 'right', 'bottom', 'left']) { const S = sd[0].toUpperCase() + sd.slice(1); const b = borderOdf(cs[`border${S}Style`], cs[`border${S}Width`], cs[`border${S}Color`]); pr.push(`fo:border-${sd}="${b || 'none'}"`); pr.push(`fo:padding-${sd}="${(lenToPx(cs[`padding${S}`]) * 0.75).toFixed(2)}pt"`); }
+        const bg = rgb(cs.backgroundColor); if (bg) pr.push(`fo:background-color="${bg}"`);
+        if (cs.verticalAlign === 'middle' || cs.verticalAlign === 'bottom') pr.push(`style:vertical-align="${cs.verticalAlign}"`);
+        const key = `C|${pr.join(' ')}`;
+        if (!autoStyles.has(key)) { const name = `Ce${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="table-cell"><style:table-cell-properties ${pr.join(' ')}/></style:style>`); }
+        return autoStyles.get(key);
+      };
+      for (let ri = 0; ri < rows.length; ri++) {
         o += '<table:table-row>';
-        for (const td of r.children) {
-          const kids = [...td.children].filter((c) => /^(P|H[1-6]|UL|OL)$/.test(c.tagName));
+        for (let ci = 0; ci < cols; ci++) {
+          const pc = placed.find((p) => p.ri === ri && p.ci === ci);
+          if (!pc) { o += occ[ri]?.[ci] === 'cov' ? '<table:covered-table-cell/>' : '<table:table-cell><text:p/></table:table-cell>'; continue; }
+          const { td, cs, rs } = pc;
+          const kids = [...td.children].filter((c) => /^(P|H[1-6]|UL|OL|TABLE|BLOCKQUOTE|DIV)$/.test(c.tagName));
           const inner = kids.length ? (await Promise.all(kids.map(block))).join('') : `<text:p>${await inline(td, td.tagName === 'TH' ? { bold: true } : {})}</text:p>`;
-          o += `<table:table-cell table:style-name="${td.tagName === 'TH' ? 'CellH' : 'Cell'}" office:value-type="string"${td.colSpan > 1 ? ` table:number-columns-spanned="${td.colSpan}"` : ''}>${inner}</table:table-cell>`;
-          for (let k = 1; k < (td.colSpan || 1); k++) o += '<table:covered-table-cell/>';
+          o += `<table:table-cell table:style-name="${cellStyle(td)}" office:value-type="string"${cs > 1 ? ` table:number-columns-spanned="${cs}"` : ''}${rs > 1 ? ` table:number-rows-spanned="${rs}"` : ''}>${inner}</table:table-cell>`;
         }
         o += '</table:table-row>';
       }
@@ -159,7 +233,6 @@ export async function htmlToOdt(editorEl, settings) {
   };
   let body = '';
   for (const el of editorEl.children) body += await block(el);
-  const pg = settings.page;
   const content = `<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content ${NSDECL} office:version="1.3"><office:automatic-styles>
 <style:style style:name="PBreak" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:break-after="page"/></style:style>
@@ -171,6 +244,8 @@ export async function htmlToOdt(editorEl, settings) {
 <text:list-style style:name="LNum">${[...Array(6)].map((_, i) => `<text:list-level-style-number text:level="${i + 1}" style:num-suffix="." style:num-format="${['1', 'a', 'i'][i % 3]}"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" fo:text-indent="-0.635cm" fo:margin-left="${(0.635 * (i + 1) + 0.6).toFixed(2)}cm"/></style:list-level-properties></text:list-level-style-number>`).join('')}</text:list-style>
 ${styleXml.join('\n')}
 </office:automatic-styles><office:body><office:text>${body || '<text:p/>'}</office:text></office:body></office:document-content>`;
+  // {pagina} y {paginas} → campos de ODF; cada línea, un párrafo
+  const hfOdt = (text, tail = '') => { const lines = String(text || '').split('\n'); return lines.map((l, i) => `<text:p>${x(l).replace(/\{pagina\}/gi, '<text:page-number text:select-page="current"/>').replace(/\{paginas\}/gi, '<text:page-count/>')}${i === lines.length - 1 ? tail : ''}</text:p>`).join(''); };
   const heading = (n, size, color) => `<style:style style:name="Heading_20_${n}" style:display-name="Heading ${n}" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Standard" style:default-outline-level="${n}"><style:paragraph-properties fo:margin-top="0.3cm" fo:margin-bottom="0.15cm" fo:keep-with-next="always"/><style:text-properties fo:font-size="${size}pt" fo:font-weight="bold" fo:color="${color}"/></style:style>`;
   const styles = `<?xml version="1.0" encoding="UTF-8"?>
 <office:document-styles ${NSDECL} office:version="1.3"><office:font-face-decls><style:font-face style:name="Calibri" svg:font-family="Calibri, Carlito"/></office:font-face-decls>
@@ -187,7 +262,7 @@ ${heading(1, 16, '#2F2496')}${heading(2, 13, '#3D30B5')}${heading(3, 12, '#3D30B
 <text:notes-configuration text:note-class="endnote" style:num-format="i" text:start-value="0"/>
 </office:styles>
 <office:automatic-styles><style:page-layout style:name="PL1"><style:page-layout-properties fo:page-width="${px2cm(pg.w)}" fo:page-height="${px2cm(pg.h)}" style:print-orientation="${pg.landscape ? 'landscape' : 'portrait'}" fo:margin-top="${px2cm(pg.mt)}" fo:margin-bottom="${px2cm(pg.mb)}" fo:margin-left="${px2cm(pg.ml)}" fo:margin-right="${px2cm(pg.mr)}"${settings.pageColor ? ` fo:background-color="${settings.pageColor}"` : ''}/></style:page-layout></office:automatic-styles>
-<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="PL1">${settings.header ? `<style:header><text:p>${x(settings.header)}</text:p></style:header>` : ''}${settings.footer || (settings.pageNumbers && settings.pageNumbers !== 'none') ? `<style:footer><text:p>${x(settings.footer || '')}${settings.pageNumbers && settings.pageNumbers !== 'none' ? ` ${t('Página')} <text:page-number text:select-page="current"/>` : ''}</text:p></style:footer>` : ''}</style:master-page></office:master-styles></office:document-styles>`;
+<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="PL1">${settings.header ? `<style:header>${hfOdt(settings.header)}</style:header>` : ''}${settings.footer || (settings.pageNumbers && settings.pageNumbers !== 'none') ? `<style:footer>${hfOdt(settings.footer || '', settings.pageNumbers && settings.pageNumbers !== 'none' ? ` ${t('Página')} <text:page-number text:select-page="current"/>` : '')}</style:footer>` : ''}</style:master-page></office:master-styles></office:document-styles>`;
   const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta ${NSDECL} office:version="1.3"><office:meta><meta:generator>Escribiente · Mi Oficina MX</meta:generator><dc:title>${x(settings.title)}</dc:title><dc:creator>${x(settings.author)}</dc:creator><dc:subject>${x(settings.subject)}</dc:subject><meta:keyword>${x(settings.keywords)}</meta:keyword><dc:date>${new Date().toISOString()}</dc:date></office:meta></office:document-meta>`;
   zip.file('content.xml', content); zip.file('styles.xml', styles); zip.file('meta.xml', meta);
   zip.file('META-INF/manifest.xml', `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>${pictures.map((p) => `<manifest:file-entry manifest:full-path="${p}" manifest:media-type="image/${p.split('.').pop().replace('jpg', 'jpeg').replace('svg', 'svg+xml')}"/>`).join('')}${formulas.map((d) => `<manifest:file-entry manifest:full-path="${d}/" manifest:version="1.3" manifest:media-type="application/vnd.oasis.opendocument.formula"/><manifest:file-entry manifest:full-path="${d}/content.xml" manifest:media-type="text/xml"/>`).join('')}</manifest:manifest>`);
@@ -223,6 +298,8 @@ function collectStyles(doc, map) {
   }
 }
 export async function odtToHtml(bytes) {
+  // lector con formato completo; si falla, el lector sencillo de abajo
+  try { const { readOdt } = await import('./odt-read.js'); return await readOdt(bytes); } catch (e) { console.warn('lector odt', e); }
   const zip = await JSZip.loadAsync(bytes);
   const parse = async (f) => { const t = await zip.file(f)?.async('string'); return t ? new DOMParser().parseFromString(t, 'application/xml') : null; };
   const content = await parse('content.xml'); if (!content) throw new Error('No es un documento ODF válido');

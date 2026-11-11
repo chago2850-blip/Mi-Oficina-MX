@@ -6,6 +6,7 @@ import { docxToHtml, textToHtml, markdownToHtml, sanitize, htmlToText } from './
 import { readCoreProps } from '../../shared/coreprops.js';
 import * as F from './features.js';
 import * as F3 from './fase3.js';
+import * as FX from './formato.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -116,6 +117,40 @@ function selectedBlocks() {
 const exec = (cmd, val = null) => { restoreSelection(); document.execCommand(cmd, false, val); saveSelection(); shell.markDirty(); schedulePaginate(); reflectState(); };
 
 // Aplica un estilo de texto (tamaño, fuente) a la selección mediante <span style>
+// Aplica varias propiedades CSS a la selección (cadena vacía = quitar la propiedad)
+function applySpanStyles(styles, { hidden } = {}) {
+  restoreSelection();
+  const s = document.getSelection();
+  if (!s.rangeCount) return;
+  const setOn = (span) => {
+    for (const [k, v] of Object.entries(styles)) { if (v === '' || v == null) span.style[k] = ''; else span.style[k] = v; }
+    if (hidden != null) span.classList.toggle('hidden-text', !!hidden);
+    // los descendientes con el mismo estilo directo dejan de pisarlo
+    span.querySelectorAll('span').forEach((d) => { for (const k of Object.keys(styles)) d.style[k] = ''; if (hidden != null) d.classList.remove('hidden-text'); if (!d.getAttribute('style')) d.removeAttribute('style'); });
+  };
+  if (s.isCollapsed) {
+    const span = document.createElement('span'); setOn(span); span.textContent = '\u200B';
+    const r = s.getRangeAt(0); r.insertNode(span);
+    r.setStart(span.firstChild, 1); r.collapse(true); s.removeAllRanges(); s.addRange(r);
+  } else {
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('fontSize', false, '7');
+    const marked = [...editor.querySelectorAll('[style*="xxx-large"], font[size="7"]')];
+    for (const el of marked) {
+      const span = document.createElement('span');
+      if (el.tagName === 'SPAN' || el.tagName === 'FONT') {
+        span.setAttribute('style', (el.getAttribute('style') || '').replace(/font-size:\s*xxx-large;?/, ''));
+        span.innerHTML = el.innerHTML; el.replaceWith(span);
+      } else {
+        // Chrome puso el tamaño en un <b>/<i>/<u>…: se quita de ahí y el estilo va en un span interior
+        el.style.fontSize = ''; if (!el.getAttribute('style')) el.removeAttribute('style');
+        span.append(...el.childNodes); el.append(span);
+      }
+      setOn(span);
+    }
+  }
+  saveSelection(); shell.markDirty(); schedulePaginate(); reflectState();
+}
 function applySpanStyle(prop, value) {
   restoreSelection();
   const s = document.getSelection();
@@ -178,7 +213,7 @@ function setLineHeight(v) {
 function setIndent(delta) {
   const b = selectedBlocks();
   if (b.some((x) => x.tagName === 'LI')) { exec(delta > 0 ? 'indent' : 'outdent'); return; }
-  b.forEach((x) => { const cur = parseFloat(x.style.marginLeft) || 0; const n = Math.max(0, cur + delta * 48); x.style.marginLeft = n ? `${n}px` : ''; });
+  b.forEach((x) => { const cur = x.style.marginLeft ? parseFloat(getComputedStyle(x).marginLeft) || 0 : 0; const n = Math.max(0, cur + delta * 48); x.style.marginLeft = n ? `${n}px` : ''; });
   shell.markDirty(); schedulePaginate();
 }
 
@@ -198,7 +233,10 @@ function onEditorKey(e) {
     else if (k === 'enter') { e.preventDefault(); insertPageBreak(); }
     else if (k === ']') { e.preventDefault(); adjustSize(1); }
     else if (k === '[') { e.preventDefault(); adjustSize(-1); }
+    else if (k === 'd' && !e.shiftKey) { e.preventDefault(); saveSelection(); FX.fontDialog(); }
+    else if (k === 'f10') { e.preventDefault(); onCommand('marks'); }
   }
+  if (e.shiftKey && !mod && e.key === 'F3') { e.preventDefault(); saveSelection(); const sel = document.getSelection().toString(); FX.changeCase(sel === sel.toLocaleUpperCase('es') ? 'lower' : sel === sel.toLocaleLowerCase('es') ? 'title' : 'upper'); }
   if (mod && e.altKey && /^[1-3]$/.test(e.key)) { e.preventDefault(); setBlockStyle(`h${e.key}`); }
   if (mod && e.altKey && e.key === '0') { e.preventDefault(); setBlockStyle('p'); }
   if (e.key === 'Tab') {
@@ -253,11 +291,15 @@ function paginate() {
   pagesEl.style.width = `${W}px`;
   F.layoutTabs();
   const blocks = [...editor.children];
-  for (const b of blocks) if (b.dataset.push) { b.style.marginTop = ''; delete b.dataset.push; }
+  // se quita el empuje anterior y se restaura el margen superior propio del párrafo
+  for (const b of blocks) if (b.dataset.push) { b.style.marginTop = b.dataset.mt0 || ''; delete b.dataset.push; delete b.dataset.mt0; }
   const tops = blocks.map((b) => b.offsetTop);
   const hs = blocks.map((b) => b.offsetHeight);
   // se leen todos los márgenes antes de escribir estilos (leerlos dentro del bucle forzaba recalcular la página en cada salto: muy lento en documentos largos)
-  const mbs = blocks.map((b) => parseFloat(getComputedStyle(b).marginBottom) || 0);
+  const css = blocks.map((b) => getComputedStyle(b));
+  const mbs = css.map((c) => parseFloat(c.marginBottom) || 0);
+  const mts = css.map((c) => parseFloat(c.marginTop) || 0);
+  const shiftAt = [];
   let shift = 0, forceNext = false;
   const pageOf = [];
   // notas al pie: reducen el espacio de la página donde aparece su llamada
@@ -266,21 +308,41 @@ function paginate() {
   const pageFns = []; const pageFnH = [];
   const fnsOf = (b) => [...new Set([...(b.matches('sup.fn') ? [b] : []), ...b.querySelectorAll('sup.fn')].map((x) => x.dataset.fid))].filter((f) => state.footnotes[f] != null);
   const extraFor = (page, fids) => { const cur = pageFns[page] || []; const add = fids.filter((f) => !cur.includes(f)); if (!add.length) return 0; return (cur.length ? 0 : 14) + add.reduce((a, f) => a + (fnH[f] || 16), 0); };
+  const pushBlock = (j, add) => {
+    const bj = blocks[j];
+    const prevMB = j > 0 ? mbs[j - 1] : 0;
+    if (!bj.dataset.push) bj.dataset.mt0 = bj.style.marginTop || '';
+    bj.style.marginTop = `${Math.max(prevMB, mts[j]) + add}px`;
+    bj.dataset.push = String(add);
+  };
   blocks.forEach((b, i) => {
+    shiftAt[i] = shift;
     let top = tops[i] + shift;
     let page = Math.floor(top / S);
     const fids = fnOrder.length ? fnsOf(b) : [];
     const zoneEnd = page * S + H - (pageFnH[page] || 0) - extraFor(page, fids);
     let add = 0;
     if (b.classList.contains('pb')) { pageOf.push(page); forceNext = true; return; }
-    if (forceNext) { add = (page + 1) * S - top; forceNext = false; }
-    else if (top >= zoneEnd - 0.5) add = (page + 1) * S - top;
-    else if (top + hs[i] > zoneEnd && hs[i] <= H && top > page * S + 1) add = (page + 1) * S - top;
+    let overflow = false;
+    if (forceNext || (b.dataset.pbb && i > 0 && pageOf[i - 1] === page && !blocks[i - 1].classList.contains('pb'))) { add = (page + 1) * S - top; forceNext = false; }
+    else if (top >= zoneEnd - 0.5) { add = (page + 1) * S - top; overflow = true; }
+    else if (top + hs[i] > zoneEnd && hs[i] <= H && top > page * S + 1) { add = (page + 1) * S - top; overflow = true; }
+    // conservar con el siguiente: los párrafos marcados se van a la página nueva junto con este
+    if (overflow && add > 0) {
+      let j = i;
+      while (j > 0 && blocks[j - 1].dataset.keepnext && pageOf[j - 1] === page && !blocks[j - 1].dataset.push && !blocks[j - 1].classList.contains('pb')) j--;
+      const chainTop = tops[j] + shiftAt[j];
+      if (j < i && chainTop > Math.floor(chainTop / S) * S + 1 && (tops[i] + hs[i]) - tops[j] <= H) {
+        const pg = Math.floor(chainTop / S);
+        const addJ = (pg + 1) * S - chainTop;
+        pushBlock(j, addJ);
+        shift = shiftAt[j] + addJ;
+        for (let k = j; k < i; k++) pageOf[k] = pg + 1;
+        top = tops[i] + shift; page = Math.floor(top / S); add = 0;
+      }
+    }
     if (add > 0) {
-      const prev = blocks[i - 1];
-      const prevMB = prev ? mbs[i - 1] : 0;
-      b.style.marginTop = `${prevMB + add}px`;
-      b.dataset.push = String(add);
+      pushBlock(i, add);
       shift += add; top += add; page = Math.floor(top / S);
     }
     if (fids.length) { const ex = extraFor(page, fids); pageFns[page] = [...new Set([...(pageFns[page] || []), ...fids])]; pageFnH[page] = (pageFnH[page] || 0) + ex; }
@@ -782,14 +844,14 @@ const adapter = {
     const text = () => new TextDecoder('utf-8').decode(f.bytes);
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
-      state.header = ''; state.footer = ''; state.pageNumbers = 'none';
+      state.header = r.header || ''; state.footer = r.footer || ''; state.pageNumbers = 'none';
       Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
     }
     if (f.ext === 'odt') {
       const r = await odtToHtml(f.bytes);
-      Object.assign(state, { header: '', footer: '', pageNumbers: 'none', comments: [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { header: r.header || '', footer: r.footer || '', pageNumbers: 'none', comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { props: r.props };
     }
@@ -865,6 +927,11 @@ async function onCommand(cmd, arg) {
     case 'insertUnorderedList': case 'insertOrderedList':
       return exec(cmd);
     case 'removeFormat': exec('removeFormat'); exec('unlink'); return;
+    case 'fontDialog': return FX.fontDialog();
+    case 'paraDialog': return FX.paragraphDialog();
+    case 'paraBorders': return FX.paragraphDialog('borders');
+    case 'changeCase': return;
+    case 'marks': { const on = FX.toggleMarks(); shell.ribbon.setOn('marks', on); return; }
     case 'fontName': return applyFontFamily(arg);
     case 'fontSize': return applySpanStyle('fontSize', `${parseFloat(arg) || 11}pt`);
     case 'grow': return adjustSize(1);
@@ -988,13 +1055,16 @@ const TABS = [
             { cmd: 'strikeThrough', label: 'Tachado', icon: 'strike' }, { cmd: 'subscript', label: 'Subíndice', icon: 'sub' }, { cmd: 'superscript', label: 'Superíndice', icon: 'sup' },
             { cmd: 'hiliteColor', label: 'Color de resaltado', icon: 'highlight', color: true, colorValue: '#FFF59D', colorOpts: { noneLabel: 'Sin resaltado' } },
             { cmd: 'foreColor', label: 'Color de fuente', icon: 'textColor', color: true, colorValue: '#C62828', colorOpts: { allowNone: false } },
+            { cmd: 'changeCase', label: 'Cambiar mayúsculas y minúsculas', icon: 'changeCase', menu: () => FX.caseMenu() },
+            { cmd: 'removeFormat', label: 'Borrar formato', icon: 'clear' },
+            { cmd: 'fontDialog', label: 'Fuente… (Ctrl+D)', icon: 'dialogLauncher' },
           ] },
         ] },
       ] },
       { label: 'Párrafo', items: [
         { stack: [
           { row: [{ cmd: 'insertUnorderedList', label: 'Viñetas', icon: 'bullets' }, { cmd: 'insertOrderedList', label: 'Numeración', icon: 'numbers' }, { cmd: 'outdent', label: 'Disminuir sangría', icon: 'outdent' }, { cmd: 'indent', label: 'Aumentar sangría', icon: 'indent' }] },
-          { row: [{ cmd: 'justifyLeft', label: 'Alinear a la izquierda', icon: 'alignLeft', kbd: 'Ctrl+L' }, { cmd: 'justifyCenter', label: 'Centrar', icon: 'alignCenter', kbd: 'Ctrl+E' }, { cmd: 'justifyRight', label: 'Alinear a la derecha', icon: 'alignRight', kbd: 'Ctrl+R' }, { cmd: 'justifyFull', label: 'Justificar', icon: 'justify', kbd: 'Ctrl+J' }, { cmd: 'lineSpacing', label: 'Interlineado', icon: 'lineSpacing', menu: lineMenu }] },
+          { row: [{ cmd: 'justifyLeft', label: 'Alinear a la izquierda', icon: 'alignLeft', kbd: 'Ctrl+L' }, { cmd: 'justifyCenter', label: 'Centrar', icon: 'alignCenter', kbd: 'Ctrl+E' }, { cmd: 'justifyRight', label: 'Alinear a la derecha', icon: 'alignRight', kbd: 'Ctrl+R' }, { cmd: 'justifyFull', label: 'Justificar', icon: 'justify', kbd: 'Ctrl+J' }, { cmd: 'lineSpacing', label: 'Interlineado', icon: 'lineSpacing', menu: lineMenu }, { cmd: 'paraBorders', label: 'Bordes y sombreado', icon: 'paraBorder' }, { cmd: 'marks', label: 'Marcas de formato (Ctrl+F10)', icon: 'pilcrow' }, { cmd: 'paraDialog', label: 'Párrafo…', icon: 'dialogLauncher' }] },
         ] },
       ] },
       { label: 'Estilos', items: [{ render: styleGallery }] },
@@ -1106,6 +1176,7 @@ F.initFeatures({
   editor, state, shell, scroller, ruler, pagesEl, schedulePaginate, paginate, insertHTMLAtCursor, restoreSelection, saveSelection, selectedBlocks, currentBlock, applySpanStyle,
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
+FX.init({ editor, selectedBlocks, restoreSelection, saveSelection, markDirty: () => shell.markDirty(), schedulePaginate, reflectState, FONTS, applySpanStyles, exec });
 F3.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, schedulePaginate, paginate, setContent: (html, s) => setContent(html, s), zoomWidth: () => onCommand('zoomWidth'), setZoom: (v) => zoom.set(v) });
 adapter.onPrefs = (p) => { editor.spellcheck = p.spellcheck !== false; };
 statusPages = h('span', {}, 'Página 1 de 1');
@@ -1123,4 +1194,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, saveSelection, insertCite: (s) => F3.insertCitation(s) };
+window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, saveSelection, insertCite: (s) => F3.insertCitation(s) };

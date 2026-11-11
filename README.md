@@ -31,7 +31,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 ![Calcula Datos](docs/calcula.png)
 ![Impresiona](docs/impresiona.png)
 
-## Funciones (versión 0.4)
+## Funciones (versión 0.5)
 
 **Común a las tres apps:** cinta con pestañas, inicio con plantillas y recientes, guardar / guardar como, exportar a PDF, imprimir, deshacer y rehacer, buscar y reemplazar, arrastrar y soltar archivos, **recuperación automática** si la app se cierra sin guardar, revisión ortográfica en español e inglés, y el botón para volver a la dona.
 
@@ -52,6 +52,7 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 - Plantillas: carta formal, reporte y currículum
 - **0.2:** comentarios con respuestas, **control de cambios** (aceptar/rechazar), **notas al pie y al final**, **tabulaciones** (izquierda, centro, derecha) en la regla, columnas, cuadros de texto y formas, marca de agua y color de página, panel de navegación por títulos, brocha para copiar formato, sangrías arrastrables en la regla y **combinar correspondencia** desde CSV o XLSX. Todo se guarda en el `.docx` de forma que Word lo entiende
 - **0.3:** **ecuaciones** (escritas en LaTeX con vista previa; en el `.docx` quedan como ecuaciones de Word y en el `.odt` como fórmulas), **citas y bibliografía** (APA), **comparar documentos** (el resultado queda como control de cambios), **etiquetas y sobres** (también con los destinatarios de la combinación), **diagramas** tipo SmartArt (lista, proceso, ciclo, jerarquía y pirámide), **modo lectura** y **modo enfoque**, reacciones en comentarios, exportar a **Markdown** y abrir documentos `.doc` de Word 97-2003
+- **0.5 — Escribiente como LibreOffice Writer, parte 1 (abrir y guardar sin perder formato):** lector propio de `.docx` y `.odt` que conserva estilos, fuentes, tamaños, colores, resaltado, espaciado antes y después, interlineado (múltiple, mínimo y exacto), sangrías, bordes y sombreado de párrafo, versalitas, mayúsculas, texto oculto, doble tachado, espaciado entre letras, listas con su numeración, tablas con celdas combinadas, anchos, bordes y fondos, imágenes, encabezado y pie con número de página, saltos y notas. Nuevos cuadros **Formato → Párrafo** (sangrías y espaciado, flujo del texto —conservar con el siguiente, no dividir, salto de página antes, viudas y huérfanas—, bordes y sombreado) y **Fuente** (efectos tipográficos, posición y espaciado, escala), **Cambiar mayúsculas y minúsculas** (Mayús+F3) y **Marcas de formato ¶** (Ctrl+F10). Todo se guarda en `.docx` y `.odt` y se comprueba en las pruebas abriéndolo también con LibreOffice
 - **0.4.2:** el **control de cambios** se ve en la barra de estado (*Control de cambios: activado/desactivado*, con un clic se apaga); con el control de cambios activo, lo que tú escribiste se borra normalmente con Retroceso, el cursor ya no salta y la ortografía sigue marcando palabras y dando sugerencias con el clic derecho
 - **0.4:** abre las **ecuaciones de Word y LibreOffice** como ecuaciones editables, abre los `.doc` antiguos **con su formato** (títulos, negritas, colores, tamaños, tablas, listas y alineación), y guarda dentro del `.docx`/`.odt` las **reacciones** a comentarios, los diagramas tipo SmartArt editables, las fuentes de las citas y el LaTeX de las ecuaciones
 
@@ -87,12 +88,12 @@ Atajos de la dona: **1–4** abren cada app, las **flechas** recorren los sector
 
 | Sistema | Archivo | Cómo |
 | --- | --- | --- |
-| Windows 10/11 | `Mi.Oficina.MX.Setup.0.4.2.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
-| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.4.2-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
-| macOS Intel | `MiOficinaMX-0.4.2-x64.dmg` | Igual que el anterior. |
-| Ubuntu, Debian, Mint | `mi-oficina-mx_0.4.2_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.4.2_amd64.deb` |
-| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.4.2.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.4.2.x86_64.rpm` |
-| Cualquier Linux | `Mi.Oficina.MX-0.4.2.AppImage` | `chmod +x Mi.Oficina.MX-0.4.2.AppImage` y ábrelo |
+| Windows 10/11 | `Mi.Oficina.MX.Setup.0.5.0.exe` | Ábrelo y sigue el asistente. Como no está firmado, SmartScreen puede avisar: **Más información → Ejecutar de todas formas**. |
+| macOS Apple Silicon (M1–M4) | `MiOficinaMX-0.5.0-arm64.dmg` | Abre el `.dmg` y arrastra Mi Oficina MX a Aplicaciones. Ve abajo, *Primera vez en macOS*. |
+| macOS Intel | `MiOficinaMX-0.5.0-x64.dmg` | Igual que el anterior. |
+| Ubuntu, Debian, Mint | `mi-oficina-mx_0.5.0_amd64.deb` | `sudo apt install ./mi-oficina-mx_0.5.0_amd64.deb` |
+| Fedora, RHEL, openSUSE | `mi-oficina-mx-0.5.0.x86_64.rpm` | `sudo dnf install ./mi-oficina-mx-0.5.0.x86_64.rpm` |
+| Cualquier Linux | `Mi.Oficina.MX-0.5.0.AppImage` | `chmod +x Mi.Oficina.MX-0.5.0.AppImage` y ábrelo |
 
 El instalador asocia los archivos `.docx`, `.xlsx`, `.csv`, `.pptx` y `.pdf`: con doble clic se abren en la app correcta.
 
@@ -116,6 +117,7 @@ npm i --no-save playwright@1.49.1 && xvfb-run -a node test/e2e.mjs   # punta a p
 xvfb-run -a node test/e2e-fase2.mjs              # funciones de la fase 2 (OFICINA_LANG=en para probar en inglés)
 xvfb-run -a node test/e2e-fase3.mjs              # funciones de la fase 3
 xvfb-run -a node test/e2e-fase4.mjs              # funciones de la fase 4
+xvfb-run -a node test/e2e-fase5.mjs              # fase 5: Escribiente como LibreOffice Writer
 xvfb-run -a node test/a11y.mjs                   # auditoría de accesibilidad (axe-core)
 xvfb-run -a node test/perf.mjs calcula           # tiempos con archivos grandes (o: escribiente)
 xvfb-run -a npx electron --no-sandbox scripts/dict   # descarga los diccionarios de ortografía a build/dict
@@ -149,7 +151,7 @@ replica/                mapa de funciones y pantallas del proyecto
 
 Revisa [`replica/features.csv`](replica/features.csv) para la lista completa. Las fases 1 a 4 están completas: todas las funciones *must*, *should* y *could* del mapa; solo el SmartArt queda con alcance parcial (ver abajo). Lo que queda fuera a propósito (*skip*) son las funciones en la nube: coautoría en tiempo real, Copilot, OneDrive y cuentas.
 
-**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y al final, tabulaciones, comentarios con sus respuestas, control de cambios y alineación, pero no siempre los colores ni las fuentes de cada palabra; los diagramas tipo SmartArt se ven en Word como imagen (en Escribiente siguen editables); los `.doc` antiguos se abren sin imágenes; PowerPoint ve el patrón de Impresiona aplanado en cada diapositiva y la transición Transformación como un cambio sin efecto; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; Excel no ve las consultas de *Obtener y transformar* (solo la hoja con el resultado); la cámara en vivo se guarda en el `.pptx` pero PowerPoint no la reconoce; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
+**Limitaciones conocidas:** al abrir un `.docx` se conservan texto, estilos de título, negritas, listas, tablas, imágenes, notas al pie y al final, tabulaciones, comentarios con sus respuestas, control de cambios y alineación, pero no siempre los colores ni las fuentes de cada palabra; los diagramas tipo SmartArt se ven en Word como imagen (en Escribiente siguen editables); los `.doc` antiguos se abren sin imágenes; los gráficos, formas, imágenes WMF/EMF y la sombra o contorno de letra de un `.docx` todavía no se conservan; PowerPoint ve el patrón de Impresiona aplanado en cada diapositiva y la transición Transformación como un cambio sin efecto; los gráficos de Calcula Datos se recuperan en Calcula Datos, pero Excel no los muestra; Excel no ve las consultas de *Obtener y transformar* (solo la hoja con el resultado); la cámara en vivo se guarda en el `.pptx` pero PowerPoint no la reconoce; la protección de hoja no usa contraseña cifrada. Las macros VBA nunca se ejecutan.
 
 ## Licencia
 

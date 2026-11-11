@@ -76,11 +76,40 @@ function applyAligns(container, aligns) {
 // ------------------------------------------------------------------ comentarios y revisiones
 // mammoth no conserva comentarios ni texto eliminado: antes de convertir, se marcan con
 // caracteres privados (U+E000…U+E001) dentro de document.xml y después se envuelven en el HTML.
-const MK0 = '\uE000', MK1 = '\uE001';
-const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+export const MK0 = '\uE000', MK1 = '\uE001';
+export const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
 const unb64 = (s) => decodeURIComponent(escape(atob(s)));
 const attr = (el, a) => el.getAttributeNS(W, a) || el.getAttribute(`w:${a}`) || '';
 const textOf = (el) => [...el.getElementsByTagNameNS(W, 'p')].map((p) => [...p.getElementsByTagNameNS(W, 't')].map((t) => t.textContent).join('')).join('\n').trim();
+// Comentarios de comments.xml (+ respuestas de commentsExtended.xml)
+export async function readComments(zip) {
+  const cxml = await zip.file('word/comments.xml')?.async('string');
+  if (!cxml) return null;
+  const cd = new DOMParser().parseFromString(cxml, 'application/xml');
+  const byPara = new Map(); const list = [];
+  for (const c of cd.getElementsByTagNameNS(W, 'comment')) {
+    const item = { wid: attr(c, 'id'), author: attr(c, 'author') || 'Autor', date: attr(c, 'date') || new Date().toISOString(), text: textOf(c), replies: [], resolved: false };
+    const lines = item.text.split('\n'); const main = [];
+    for (const l of lines) { const m = /^↪\s*([^:]*):\s?(.*)$/.exec(l); if (m) item.replies.push({ author: m[1].trim() || 'Autor', date: item.date, text: m[2] }); else main.push(l); }
+    item.text = main.join('\n').trim();
+    list.push(item);
+    const ps = c.getElementsByTagNameNS(W, 'p'); const last = ps[ps.length - 1];
+    const pid = last && (last.getAttribute('w14:paraId') || [...last.attributes].find((a) => a.localName === 'paraId')?.value);
+    if (pid) byPara.set(pid, item);
+  }
+  const ext = await zip.file('word/commentsExtended.xml')?.async('string');
+  if (ext) {
+    const ed = new DOMParser().parseFromString(ext, 'application/xml');
+    for (const e of ed.getElementsByTagName('*')) {
+      if (e.localName !== 'commentEx') continue;
+      const a = (n) => [...e.attributes].find((x) => x.localName === n)?.value;
+      const me = byPara.get(a('paraId')); const parent = byPara.get(a('paraIdParent'));
+      if (me && a('done') === '1') me.resolved = true;
+      if (me && parent && me !== parent) { parent.replies.push({ author: me.author, date: me.date, text: me.text }); me.reply = true; }
+    }
+  }
+  return { list, replyIds: new Set(list.filter((c) => c.reply).map((c) => c.wid)) };
+}
 async function markRevisions(bytes) {
   const out = { bytes, comments: [], endnoteIds: new Set() };
   try {
@@ -92,35 +121,11 @@ async function markRevisions(bytes) {
     const mkRun = (txt) => { const r = d.createElementNS(W, 'w:r'); const t = d.createElementNS(W, 'w:t'); t.setAttribute('xml:space', 'preserve'); t.textContent = MK0 + txt + MK1; r.append(t); return r; };
     let changed = false;
     // Comentarios
-    const cxml = await zip.file('word/comments.xml')?.async('string');
-    if (cxml) {
-      const cd = new DOMParser().parseFromString(cxml, 'application/xml');
-      const byPara = new Map(); const list = [];
-      for (const c of cd.getElementsByTagNameNS(W, 'comment')) {
-        const item = { wid: attr(c, 'id'), author: attr(c, 'author') || 'Autor', date: attr(c, 'date') || new Date().toISOString(), text: textOf(c), replies: [], resolved: false };
-        // respuestas escritas por Escribiente como párrafos "↪ Autor: texto"
-        const lines = item.text.split('\n'); const main = [];
-        for (const l of lines) { const m = /^↪\s*([^:]*):\s?(.*)$/.exec(l); if (m) item.replies.push({ author: m[1].trim() || 'Autor', date: item.date, text: m[2] }); else main.push(l); }
-        item.text = main.join('\n').trim();
-        list.push(item);
-        const ps = c.getElementsByTagNameNS(W, 'p'); const last = ps[ps.length - 1];
-        const pid = last && (last.getAttribute('w14:paraId') || [...last.attributes].find((a) => a.localName === 'paraId')?.value);
-        if (pid) byPara.set(pid, item);
-      }
-      // Respuestas (commentsExtended.xml: paraIdParent)
-      const ext = await zip.file('word/commentsExtended.xml')?.async('string');
-      if (ext) {
-        const ed = new DOMParser().parseFromString(ext, 'application/xml');
-        for (const e of ed.getElementsByTagName('*')) {
-          if (e.localName !== 'commentEx') continue;
-          const a = (n) => [...e.attributes].find((x) => x.localName === n)?.value;
-          const me = byPara.get(a('paraId')); const parent = byPara.get(a('paraIdParent'));
-          if (me && a('done') === '1') me.resolved = true;
-          if (me && parent && me !== parent) { parent.replies.push({ author: me.author, date: me.date, text: me.text }); me.reply = true; }
-        }
-      }
+    const rc = await readComments(zip);
+    if (rc) {
+      const { list } = rc;
       out.comments = list.filter((c) => !c.reply);
-      const replyIds = new Set(list.filter((c) => c.reply).map((c) => c.wid));
+      const replyIds = rc.replyIds;
       for (const tag of ['commentRangeStart', 'commentRangeEnd']) {
         for (const el of [...d.getElementsByTagNameNS(W, tag)]) {
           const id = attr(el, 'id');
@@ -159,7 +164,7 @@ async function markRevisions(bytes) {
   } catch (e) { console.warn('revisiones', e); }
   return out;
 }
-function wrapMarks(box, comments) {
+export function wrapMarks(box, comments) {
   const re = /\uE000([^\uE001]*)\uE001/g;
   const ids = new Map(); const used = new Set();
   const cid = (w) => { if (!ids.has(w)) ids.set(w, `c${Math.random().toString(36).slice(2, 9)}`); return ids.get(w); };
@@ -195,6 +200,8 @@ function wrapMarks(box, comments) {
 }
 
 export async function docxToHtml(bytes) {
+  // lector propio (conserva el formato); si falla, se usa mammoth
+  try { const { readDocx } = await import('./docx-read.js'); return await readDocx(bytes); } catch (e) { console.warn('lector docx propio', e); }
   const marked = await markRevisions(bytes);
   const src = marked.bytes;
   const buf = src.buffer.slice(src.byteOffset, src.byteOffset + src.byteLength);

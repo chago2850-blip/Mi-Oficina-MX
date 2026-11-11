@@ -54,7 +54,10 @@ function conv(el) {
       const beg = pr && kid(pr, 'begChr') ? attr(kid(pr, 'begChr')) : '(';
       const end = pr && kid(pr, 'endChr') ? attr(kid(pr, 'endChr')) : ')';
       const sep = pr && kid(pr, 'sepChr') ? attr(kid(pr, 'sepChr')) : '|';
-      const L = (c) => (c === '' ? '.' : c === '{' ? '\\{' : c === '}' ? '\\}' : c === '|' ? '|' : c === '‖' ? '\\|' : c === '⟨' ? '\\langle' : c === '⟩' ? '\\rangle' : c === '⌊' ? '\\lfloor' : c === '⌋' ? '\\rfloor' : c === '⌈' ? '\\lceil' : c === '⌉' ? '\\rceil' : c);
+      const L = (c) => (c === '' ? '.' : c === '{' ? '\\{' : c === '}' ? '\\}' : c === '|' ? '|' : c === '‖' ? '\\|' : c === '⟨' || c === '〈' || c === '<' ? '\\langle' : c === '⟩' || c === '〉' || c === '>' ? '\\rangle' : c === '⟦' ? '\\llbracket' : c === '⟧' ? '\\rrbracket' : c === '⌊' ? '\\lfloor' : c === '⌋' ? '\\rfloor' : c === '⌈' ? '\\lceil' : c === '⌉' ? '\\rceil' : c);
+      // delimitadores que LaTeX no admite: se escriben como texto
+      const ok = (c) => /^(\\?.|\\[a-z]+)$/.test(c) && !/[^\x20-\x7e]/.test(c);
+      if (!ok(L(beg)) || !ok(L(end))) return `\\mathrm{${escTxt(beg)}}${kids(el, 'e').map(seq).join(escTxt(sep))}\\mathrm{${escTxt(end)}}`;
       return `\\left${L(beg)}${kids(el, 'e').map(seq).join(sep === '|' ? '\\middle|' : escTxt(sep))}\\right${L(end)}`;
     }
     case 'func': return `${seq(kid(el, 'fName'))}${grp(seq(kid(el, 'e')))}`;

@@ -173,3 +173,33 @@ body[data-theme="dark"].focus-mode .workspace { background: #11131B; }
 .mode-exit:hover { opacity: 1; }
 .sb-track.on { background: #FDECEC; color: #A3212F; font-weight: 600; border-radius: 4px; }
 body[data-theme="dark"] .sb-track.on { background: #4A2026; color: #FFC9CF; }
+
+/* texto oculto: invisible salvo con las marcas de formato activas */
+.doc .hidden-text { display: none; }
+.doc.marks .hidden-text { display: inline; text-decoration: underline dotted #888; }
+
+/* marcas de formato (¶) */
+.doc.marks p::after, .doc.marks h1::after, .doc.marks h2::after, .doc.marks h3::after, .doc.marks h4::after, .doc.marks h5::after, .doc.marks h6::after, .doc.marks li > p:last-child::after, .doc.marks blockquote::after, .doc.marks li:not(:has(> p))::after { content: "¶"; color: #8A90B0; font-weight: normal; font-style: normal; font-size: .9em; margin-left: 1px; text-decoration: none; display: inline; }
+.doc.marks .otab { background: linear-gradient(transparent 45%, #B8BCD3 45%, #B8BCD3 55%, transparent 55%); }
+.doc.marks br::before { content: "↵"; }
+.doc [data-keepnext].keepmark { outline: none; }
+
+/* cuadros Párrafo y Fuente */
+.fx-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: -4px 0 12px; }
+.fx-tab { border: 0; background: none; padding: 7px 12px; font: inherit; font-size: 13px; color: var(--ink-2); cursor: pointer; border-bottom: 2px solid transparent; }
+.fx-tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.fx-pane { min-height: 250px; }
+.fx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; align-items: end; }
+.fx-grid h4, .fx-col h4 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-3); }
+.fx-grid h4:first-child, .fx-col h4:first-child { margin-top: 0; }
+.fx-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
+.fx-field.wide { grid-column: 1 / -1; }
+.fx-field select, .fx-field input[type=number], .fx-field input[type=text] { width: 100%; }
+.fx-field input[type=color] { width: 100%; height: 30px; padding: 2px; }
+.fx-num { display: flex; align-items: center; gap: 6px; }
+.fx-num input { flex: 1; min-width: 0; }
+.fx-num small { color: var(--ink-3); min-width: 18px; }
+.fx-col { display: flex; flex-direction: column; gap: 8px; }
+.fx-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.fx-check { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.fx-preview { margin-top: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 14px; text-align: center; background: #fff; color: #111; min-height: 40px; overflow: hidden; white-space: nowrap; }

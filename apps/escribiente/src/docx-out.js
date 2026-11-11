@@ -2,7 +2,7 @@
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ExternalHyperlink, ImageRun,
   Table, TableRow, TableCell, WidthType, ShadingType, PageBreak, Header, Footer, PageNumber,
-  LevelFormat, PageOrientation, BorderStyle, TabStopType,
+  LevelFormat, PageOrientation, BorderStyle, TabStopType, LineRuleType, VerticalMergeType, VerticalAlignTable, TableLayoutType, AlignmentType as AT,
   CommentRangeStart, CommentRangeEnd, CommentReference, InsertedTextRun, DeletedTextRun, FootnoteReferenceRun, SectionType, Tab,
   Math as OMath, MathRun, MathFraction, MathSuperScript, MathSubScript, MathSubSuperScript, MathRadical, MathSum, MathIntegral,
 } from 'docx';
@@ -32,6 +32,44 @@ const hex = (c) => {
   }
   return null;
 };
+// longitud CSS → px (96 ppp)
+const lenPx = (v) => { if (!v) return 0; const n = parseFloat(v); if (Number.isNaN(n)) return 0; if (/pt$/.test(v)) return n / 0.75; if (/cm$/.test(v)) return (n * 96) / 2.54; if (/mm$/.test(v)) return (n * 96) / 25.4; if (/in$/.test(v)) return n * 96; return n; };
+const BSTYLE = { solid: BorderStyle.SINGLE, double: BorderStyle.DOUBLE, dotted: BorderStyle.DOTTED, dashed: BorderStyle.DASHED, inset: BorderStyle.INSET, outset: BorderStyle.OUTSET || BorderStyle.SINGLE, groove: BorderStyle.SINGLE, ridge: BorderStyle.SINGLE };
+// borde CSS (estilo, ancho y color calculados) → borde de Word
+function cssBorder(style, width, color, spacePx = 0) {
+  if (!style || style === 'none' || style === 'hidden' || !(parseFloat(width) > 0)) return null;
+  const wpt = lenPx(width) * 0.75;
+  return { style: BSTYLE[style] || BorderStyle.SINGLE, size: Math.max(2, Math.round((style === 'double' ? wpt / 3 : wpt) * 8)), color: hex(color) || '000000', space: Math.round(spacePx * 0.75) };
+}
+// formato de texto a partir de un estilo CSS (de un <span> o del propio párrafo)
+function fmtFromStyle(st, f, el) {
+  if (!st) return f;
+  if (st.fontWeight === 'bold' || Number(st.fontWeight) >= 600) f.bold = true;
+  if (st.fontWeight === 'normal' || st.fontWeight === '400') f.bold = false;
+  if (st.fontStyle === 'italic') f.italics = true;
+  if (st.fontStyle === 'normal') f.italics = false;
+  const line = st.textDecorationLine || st.textDecoration || '';
+  const dstyle = st.textDecorationStyle || (/(double|dotted|dashed|wavy)/.exec(st.textDecoration || '') || [])[1] || '';
+  if (line.includes('underline')) { f.underline = true; f.underlineType = { double: 'double', dotted: 'dotted', dashed: 'dash', wavy: 'wave' }[dstyle] || f.underlineType; }
+  if (line.includes('line-through')) { if (dstyle === 'double') f.dstrike = true; else f.strike = true; }
+  if (line === 'none') { f.underline = false; f.strike = false; f.dstrike = false; }
+  if (st.color && st.color !== 'transparent') f.color = hex(st.color);
+  if (st.backgroundColor) f.shade = hex(st.backgroundColor);
+  if (st.fontSize) f.size = ptFromCss(st.fontSize);
+  if (st.fontFamily) f.font = firstFont(st.fontFamily);
+  if (st.verticalAlign === 'super') f.superScript = true;
+  if (st.verticalAlign === 'sub') f.subScript = true;
+  if (/(pt|px)$/.test(st.verticalAlign || '')) f.position = Math.round(lenPx(st.verticalAlign) * 0.75 * 2);
+  if (st.fontVariant === 'small-caps' || st.fontVariantCaps === 'small-caps') f.smallCaps = true;
+  if (st.textTransform === 'uppercase') f.allCaps = true;
+  if (st.textTransform === 'none') f.allCaps = false;
+  if (st.letterSpacing && st.letterSpacing !== 'normal') f.spacing = Math.round(lenPx(st.letterSpacing) * 15);
+  const sc = /scaleX\(([\d.]+)\)/.exec(st.transform || ''); if (sc) f.scale = Math.round(Number(sc[1]) * 100);
+  if (st.textShadow && st.textShadow !== 'none') { if (/#fff/i.test(st.textShadow)) f[/^-1px/.test(st.textShadow) ? 'emboss' : 'imprint'] = true; else f.shadow = true; }
+  if (st.webkitTextStroke && parseFloat(st.webkitTextStrokeWidth || st.webkitTextStroke) > 0) { f.outline = true; const m = /(#[0-9a-f]{3,8}|rgba?\([^)]*\))\s*$/i.exec(st.webkitTextStroke); if (m) f.color = hex(m[1]); }
+  if (el?.classList?.contains('hidden-text')) f.vanish = true;
+  return f;
+}
 const firstFont = (f) => (f ? f.split(',')[0].trim().replace(/^["']|["']$/g, '') : null);
 const ALIGN = { center: AlignmentType.CENTER, right: AlignmentType.RIGHT, justify: AlignmentType.JUSTIFIED, left: AlignmentType.LEFT, start: AlignmentType.LEFT, end: AlignmentType.RIGHT };
 
@@ -106,20 +144,7 @@ class Builder {
       if (tag === 'SUP') f.superScript = true;
       if (tag === 'SUB') f.subScript = true;
       if (tag === 'FONT') { if (n.color) f.color = hex(n.color); if (n.face) f.font = firstFont(n.face); }
-      const st = n.style;
-      if (st) {
-        if (st.fontWeight === 'bold' || Number(st.fontWeight) >= 600) f.bold = true;
-        if (st.fontWeight === 'normal' || st.fontWeight === '400') f.bold = false;
-        if (st.fontStyle === 'italic') f.italics = true;
-        if ((st.textDecorationLine || st.textDecoration || '').includes('underline')) f.underline = true;
-        if ((st.textDecorationLine || st.textDecoration || '').includes('line-through')) f.strike = true;
-        if (st.color) f.color = hex(st.color);
-        if (st.backgroundColor) f.shade = hex(st.backgroundColor);
-        if (st.fontSize) f.size = ptFromCss(st.fontSize);
-        if (st.fontFamily) f.font = firstFont(st.fontFamily);
-        if (st.verticalAlign === 'super') f.superScript = true;
-        if (st.verticalAlign === 'sub') f.subScript = true;
-      }
+      fmtFromStyle(n.style, f, n);
       if (tag === 'A' && n.getAttribute('href')) {
         const inner = await this.runs(n, { ...f, link: true }, []);
         out.push(new ExternalHyperlink({ link: n.getAttribute('href'), children: inner }));
@@ -143,6 +168,16 @@ class Builder {
     if (f.size) p.size = Math.round(f.size * 2);
     if (f.font) p.font = f.font;
     if (f.shade) p.shading = { type: ShadingType.CLEAR, color: 'auto', fill: f.shade };
+    if (f.underlineType && p.underline) p.underline = { type: f.underlineType };
+    if (f.dstrike) { p.doubleStrike = true; delete p.strike; }
+    if (f.smallCaps) p.smallCaps = true;
+    if (f.allCaps) p.allCaps = true;
+    if (f.vanish) p.vanish = true;
+    if (f.spacing) p.characterSpacing = f.spacing;
+    if (f.scale && f.scale !== 100) p.scale = f.scale;
+    if (f.position) p.position = `${f.position / 2}pt`;
+    if (f.emboss) p.emboss = true;
+    if (f.imprint) p.imprint = true;
     return p;
   }
 
@@ -161,29 +196,51 @@ class Builder {
 
   paraProps(el, extra = {}) {
     const st = el.style || {};
+    const ds = el.dataset || {};
     const p = { ...extra };
     const al = st.textAlign || el.getAttribute?.('align');
     if (al && ALIGN[al]) p.alignment = ALIGN[al];
-    const ml = parseFloat(st.marginLeft) || parseFloat(st.paddingLeft) || 0;
-    const ti = parseFloat(st.textIndent) || 0;
-    if (ml || ti) p.indent = { ...(ml ? { left: Math.round(ml * PX_TWIP) } : {}), ...(ti > 0 ? { firstLine: Math.round(ti * PX_TWIP) } : ti < 0 ? { hanging: Math.round(-ti * PX_TWIP) } : {}) };
-    const tabs = parseTabs(el.dataset?.tabs);
+    const hasBL = st.borderLeftStyle && st.borderLeftStyle !== 'none';
+    const ml = lenPx(st.marginLeft) || (!hasBL ? lenPx(st.paddingLeft) : 0);
+    const mr = lenPx(st.marginRight);
+    const ti = lenPx(st.textIndent);
+    if (ml || ti || mr) p.indent = { ...(ml ? { left: Math.round(ml * PX_TWIP) } : {}), ...(mr ? { right: Math.round(mr * PX_TWIP) } : {}), ...(ti > 0 ? { firstLine: Math.round(ti * PX_TWIP) } : ti < 0 ? { hanging: Math.round(-ti * PX_TWIP) } : {}) };
+    const tabs = parseTabs(ds.tabs);
     if (tabs.length) p.tabStops = tabs.map((t) => ({ type: { l: TabStopType.LEFT, c: TabStopType.CENTER, r: TabStopType.RIGHT }[t.k], position: Math.round(t.x * PX_TWIP) }));
-    const lh = parseFloat(st.lineHeight);
     const spacing = {};
-    if (lh && !String(st.lineHeight).match(/px|pt/)) { spacing.line = Math.round(240 * lh); spacing.lineRule = 'auto'; }
+    const mt = ds.push ? ds.mt0 : st.marginTop;
+    if (mt) spacing.before = Math.round(lenPx(mt) * PX_TWIP);
+    if (st.marginBottom) spacing.after = Math.round(lenPx(st.marginBottom) * PX_TWIP);
+    const lhs = String(st.lineHeight || '');
+    if (/(pt|px)$/.test(lhs)) { spacing.line = Math.round(lenPx(lhs) * PX_TWIP); spacing.lineRule = ds.lr === 'atLeast' ? LineRuleType.AT_LEAST : LineRuleType.EXACT; }
+    else if (parseFloat(lhs)) { spacing.line = Math.round(240 * parseFloat(lhs)); spacing.lineRule = LineRuleType.AUTO; }
     if (Object.keys(spacing).length) p.spacing = spacing;
+    if (ds.keepnext) p.keepNext = true;
+    if (ds.keeplines) p.keepLines = true;
+    if (ds.pbb) p.pageBreakBefore = true;
+    if (ds.widow === '0') p.widowControl = false;
+    const border = {};
+    for (const s of ['top', 'right', 'bottom', 'left']) {
+      const S = s[0].toUpperCase() + s.slice(1);
+      const b = cssBorder(st[`border${S}Style`], st[`border${S}Width`], st[`border${S}Color`], lenPx(st[`padding${S}`]));
+      if (b) border[s] = b;
+    }
+    if (Object.keys(border).length) p.border = border;
+    const bg = hex(st.backgroundColor); if (bg) p.shading = { type: ShadingType.CLEAR, color: 'auto', fill: bg };
     return p;
   }
 
   async paragraph(el, extra = {}) {
     const tag = el.tagName;
     const props = this.paraProps(el, extra);
-    if (/^H[1-6]$/.test(tag)) props.heading = HeadingLevel[`HEADING_${tag[1]}`];
+    if (/^H[1-6]$/.test(tag)) { props.heading = HeadingLevel[`HEADING_${tag[1]}`]; props.outlineLevel = Number(tag[1]) - 1; }
     if (tag === 'P' && el.classList.contains('title')) props.heading = HeadingLevel.TITLE;
     if (tag === 'P' && el.classList.contains('subtitle')) props.style = 'Subtitle';
     if (tag === 'BLOCKQUOTE') props.style = 'Quote';
-    const children = await this.runs(el, el.classList?.contains('subtitle') ? { color: '6B6F80', size: 14 } : {});
+    // la letra del propio párrafo (fuente, tamaño, color…) pasa a cada fragmento de texto
+    const base = fmtFromStyle(el.style, el.classList?.contains('subtitle') ? { color: '6B6F80', size: 14 } : {});
+    delete base.shade;
+    const children = await this.runs(el, base);
     return new Paragraph({ ...props, children });
   }
 
@@ -205,33 +262,91 @@ class Builder {
   }
 
   async table(el, contentWidthPx) {
-    const rows = [];
     const trs = [...el.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr')];
-    const cols = Math.max(1, ...trs.map((tr) => [...tr.children].reduce((n, c) => n + (c.colSpan || 1), 0)));
-    const colW = Math.round((contentWidthPx * PX_TWIP) / cols);
-    for (const tr of trs) {
-      const cells = [];
+    // cuadrícula: posición de cada celda contando las combinadas (colspan / rowspan)
+    const occ = []; const placed = [];
+    trs.forEach((tr, ri) => {
+      occ[ri] ||= [];
+      let ci = 0;
       for (const td of tr.children) {
+        while (occ[ri][ci]) ci++;
+        const cs = td.colSpan || 1; const rs = td.rowSpan || 1;
+        placed.push({ td, ri, ci, cs, rs });
+        for (let r = ri; r < ri + rs; r++) { occ[r] ||= []; for (let c = ci; c < ci + cs; c++) occ[r][c] = r === ri ? 'own' : { cont: td, first: c === ci, cs }; }
+        ci += cs;
+      }
+    });
+    const cols = Math.max(1, ...occ.map((r) => r.length));
+    // anchos de columna: <col> o lo que mide en pantalla, escalado al ancho disponible
+    const tblW = el.offsetWidth || contentWidthPx;
+    let widths = [...el.querySelectorAll(':scope > colgroup > col')].map((c) => (/%$/.test(c.style.width) ? (parseFloat(c.style.width) / 100) * tblW : lenPx(c.style.width) || Number(c.getAttribute('width')) || 0));
+    if (widths.length !== cols || widths.some((w) => !w)) {
+      widths = Array(cols).fill(0);
+      const r0 = placed.filter((x) => x.cs === 1);
+      for (const x of r0) { const w = x.td.offsetWidth || 0; if (w && !widths[x.ci]) widths[x.ci] = w; }
+      const known = widths.filter(Boolean); const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : contentWidthPx / cols;
+      widths = widths.map((w) => w || avg);
+    }
+    const total = widths.reduce((a, b) => a + b, 0) || contentWidthPx;
+    const pctW = /%$/.test(el.style.width || '') ? parseFloat(el.style.width) / 100 : null;
+    const target = pctW ? contentWidthPx * pctW : Math.min(total, contentWidthPx * 1.2);
+    const colTw = widths.map((w) => Math.max(200, Math.round((w / total) * target * PX_TWIP)));
+    const live = el.isConnected;
+    const cellOpts = (td) => {
+      const cs = live ? getComputedStyle(td) : td.style;
+      const borders = {};
+      for (const s of ['top', 'right', 'bottom', 'left']) {
+        const S = s[0].toUpperCase() + s.slice(1);
+        const b = cssBorder(cs[`border${S}Style`], cs[`border${S}Width`], cs[`border${S}Color`]);
+        borders[s] = b || { style: BorderStyle.NIL, size: 0, color: 'auto' };
+      }
+      const bg = hex(cs.backgroundColor);
+      const va = cs.verticalAlign === 'middle' ? VerticalAlignTable.CENTER : cs.verticalAlign === 'bottom' ? VerticalAlignTable.BOTTOM : undefined;
+      const pad = (k) => Math.round(lenPx(cs[`padding${k}`]) * PX_TWIP);
+      return { borders, shading: bg ? { type: ShadingType.CLEAR, color: 'auto', fill: bg } : undefined, verticalAlign: va, margins: { top: pad('Top'), bottom: pad('Bottom'), left: pad('Left'), right: pad('Right') } };
+    };
+    const rows = [];
+    for (let ri = 0; ri < trs.length; ri++) {
+      const tr = trs[ri];
+      const cells = [];
+      for (let ci = 0; ci < cols;) {
+        const o = occ[ri]?.[ci];
+        if (o && typeof o === 'object') {
+          // celda que continúa una combinación vertical
+          if (o.first) cells.push(new TableCell({ children: [new Paragraph({})], verticalMerge: VerticalMergeType.CONTINUE, columnSpan: o.cs > 1 ? o.cs : undefined, width: { size: colTw.slice(ci, ci + o.cs).reduce((a, b) => a + b, 0), type: WidthType.DXA }, ...cellOpts(o.cont) }));
+          ci += o.cs; continue;
+        }
+        const pc = placed.find((x) => x.ri === ri && x.ci === ci);
+        if (!pc) { cells.push(new TableCell({ children: [new Paragraph({})], width: { size: colTw[ci], type: WidthType.DXA } })); ci++; continue; }
+        const { td, cs, rs } = pc;
         const kids = [];
-        const blocks = [...td.children].filter((c) => /^(P|H[1-6]|DIV|UL|OL|BLOCKQUOTE)$/.test(c.tagName));
-        if (blocks.length) { for (const b of blocks) kids.push(...(await this.block(b, contentWidthPx / cols))); }
+        const blocks = [...td.children].filter((c) => /^(P|H[1-6]|DIV|UL|OL|BLOCKQUOTE|TABLE)$/.test(c.tagName));
+        const wPx = widths.slice(ci, ci + cs).reduce((a, b) => a + b, 0);
+        if (blocks.length) { for (const b of blocks) kids.push(...(await this.block(b, wPx))); }
         else kids.push(new Paragraph({ ...this.paraProps(td), children: await this.runs(td, td.tagName === 'TH' ? { bold: true } : {}) }));
-        if (!kids.length) kids.push(new Paragraph({}));
-        const bg = hex(td.style.backgroundColor) || (td.tagName === 'TH' ? 'EEECFB' : null);
+        if (!kids.length || kids[kids.length - 1] instanceof Table) kids.push(new Paragraph({}));
         cells.push(new TableCell({
           children: kids,
-          columnSpan: td.colSpan > 1 ? td.colSpan : undefined,
-          width: { size: colW * (td.colSpan || 1), type: WidthType.DXA },
-          shading: bg ? { type: ShadingType.CLEAR, color: 'auto', fill: bg } : undefined,
-          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          columnSpan: cs > 1 ? cs : undefined,
+          verticalMerge: rs > 1 ? VerticalMergeType.RESTART : undefined,
+          width: { size: colTw.slice(ci, ci + cs).reduce((a, b) => a + b, 0), type: WidthType.DXA },
+          ...cellOpts(td),
         }));
+        ci += cs;
       }
-      rows.push(new TableRow({ children: cells, tableHeader: tr.parentElement.tagName === 'THEAD' || undefined }));
+      const hgt = lenPx(tr.style.height);
+      rows.push(new TableRow({ children: cells, tableHeader: tr.parentElement.tagName === 'THEAD' || [...tr.children].every((c) => c.tagName === 'TH') || undefined, height: hgt ? { value: Math.round(hgt * PX_TWIP), rule: 'atLeast' } : undefined }));
     }
-    const border = { style: BorderStyle.SINGLE, size: 4, color: '9A9EAD' };
+    const ts = el.style;
+    const center = ts.marginLeft === 'auto' && ts.marginRight === 'auto';
+    const right = ts.marginLeft === 'auto' && !center;
+    const none = { style: BorderStyle.NIL, size: 0, color: 'auto' };
     return new Table({
-      rows, width: { size: cols * colW, type: WidthType.DXA }, columnWidths: Array(cols).fill(colW),
-      borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
+      rows, width: pctW ? { size: Math.round(pctW * 5000), type: WidthType.PERCENTAGE } : { size: colTw.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: colTw,
+      layout: TableLayoutType.FIXED,
+      alignment: center ? AT.CENTER : right ? AT.RIGHT : undefined,
+      indent: !center && !right && lenPx(ts.marginLeft) ? { size: Math.round(lenPx(ts.marginLeft) * PX_TWIP), type: WidthType.DXA } : undefined,
+      borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
     });
   }
 
@@ -295,15 +410,30 @@ export async function htmlToDocx(editorEl, settings) {
   const sectionsData = groups.filter((g, i) => g.children.length || i === 0);
   if (!sectionsData[0].children.length) sectionsData[0].children.push(new Paragraph({}));
 
-  const hfPara = (text, numPos) => {
+  // texto del encabezado/pie: {pagina} y {paginas} se vuelven campos de Word; cada línea, un párrafo
+  const tokRuns = (line) => {
     const kids = [];
-    if (text) kids.push(new TextRun({ text, size: 20, color: '555555' }));
-    if (numPos) { if (text) kids.push(new TextRun({ text: '   ', size: 20 })); kids.push(new TextRun({ children: [`${t('Página')} `, PageNumber.CURRENT, ` ${t('de')} `, PageNumber.TOTAL_PAGES], size: 20, color: '555555' })); }
-    return new Paragraph({ alignment: numPos === 'right' ? AlignmentType.RIGHT : numPos === 'center' ? AlignmentType.CENTER : AlignmentType.LEFT, children: kids });
+    for (const part of line.split(/(\{pagina\}|\{paginas\})/i)) {
+      if (!part) continue;
+      if (/^\{pagina\}$/i.test(part)) kids.push(new TextRun({ children: [PageNumber.CURRENT], size: 20, color: '555555' }));
+      else if (/^\{paginas\}$/i.test(part)) kids.push(new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 20, color: '555555' }));
+      else kids.push(new TextRun({ text: part, size: 20, color: '555555' }));
+    }
+    return kids;
+  };
+  const hfParas = (text, numPos) => {
+    const lines = text ? String(text).split('\n') : [];
+    const out = lines.map((l, i) => {
+      const kids = tokRuns(l);
+      if (numPos && i === lines.length - 1) { kids.push(new TextRun({ text: '   ', size: 20 }), new TextRun({ children: [`${t('Página')} `, PageNumber.CURRENT, ` ${t('de')} `, PageNumber.TOTAL_PAGES], size: 20, color: '555555' })); }
+      return new Paragraph({ alignment: numPos === 'right' ? AlignmentType.RIGHT : numPos === 'center' ? AlignmentType.CENTER : AlignmentType.LEFT, children: kids });
+    });
+    if (!lines.length && numPos) out.push(new Paragraph({ alignment: numPos === 'right' ? AlignmentType.RIGHT : numPos === 'center' ? AlignmentType.CENTER : AlignmentType.LEFT, children: [new TextRun({ children: [`${t('Página')} `, PageNumber.CURRENT, ` ${t('de')} `, PageNumber.TOTAL_PAGES], size: 20, color: '555555' })] }));
+    return out;
   };
   const pn = settings.pageNumbers || 'none';
-  const headerChildren = (settings.header || pn.startsWith('header')) ? [hfPara(settings.header, pn === 'header-right' ? 'right' : null)] : null;
-  const footerChildren = (settings.footer || pn.startsWith('footer')) ? [hfPara(settings.footer, pn === 'footer-center' ? 'center' : pn === 'footer-right' ? 'right' : null)] : null;
+  const headerChildren = (settings.header || pn.startsWith('header')) ? hfParas(settings.header, pn === 'header-right' ? 'right' : null) : null;
+  const footerChildren = (settings.footer || pn.startsWith('footer')) ? hfParas(settings.footer, pn === 'footer-center' ? 'center' : pn === 'footer-right' ? 'right' : null) : null;
 
   const bulletLevels = Array.from({ length: 9 }, (_, l) => ({
     level: l, format: LevelFormat.BULLET, text: ['•', '◦', '▪'][l % 3], alignment: AlignmentType.LEFT,
