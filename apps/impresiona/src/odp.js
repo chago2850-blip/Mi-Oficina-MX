@@ -160,7 +160,7 @@ export async function writeOdp(pres, props = {}) {
     const notes = s.notes ? `<presentation:notes><draw:frame presentation:class="notes" svg:x="2cm" svg:y="14cm" svg:width="17cm" svg:height="10cm"><draw:text-box>${s.notes.split('\n').map((l) => `<text:p>${x(l)}</text:p>`).join('')}</draw:text-box></draw:frame></presentation:notes>` : '';
     pages += `<draw:page draw:name="Diapositiva${i + 1}" draw:style-name="${dp}" draw:master-page-name="Default">${master}${objs}${notes}</draw:page>`;
   });
-  const content = `<?xml version="1.0" encoding="UTF-8"?><office:document-content ${NSDECL} office:version="1.3"><office:automatic-styles>${autos.join('')}</office:automatic-styles><office:body><office:presentation>${pages}</office:presentation></office:body></office:document-content>`;
+  const content = `<?xml version="1.0" encoding="UTF-8"?><office:document-content ${NSDECL} office:version="1.3"><office:automatic-styles>${autos.join('')}</office:automatic-styles><office:body><office:presentation>${pages}${showSettingsXml(pres)}</office:presentation></office:body></office:document-content>`;
   const styles = `<?xml version="1.0" encoding="UTF-8"?><office:document-styles ${NSDECL} office:version="1.3"><office:styles>${[...defs.values()].join('')}<style:default-style style:family="graphic"><style:text-properties fo:font-size="18pt" fo:language="es" fo:country="MX"/></style:default-style></office:styles><office:automatic-styles><style:page-layout style:name="PM1"><style:page-layout-properties fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm" fo:page-width="${cm(pres.size.w)}" fo:page-height="${cm(pres.size.h)}" style:print-orientation="landscape"/></style:page-layout></office:automatic-styles><office:master-styles><style:master-page style:name="Default" style:page-layout-name="PM1"/></office:master-styles></office:document-styles>`;
   const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta ${NSDECL} office:version="1.3"><office:meta><meta:generator>Impresiona · Mi Oficina MX</meta:generator><dc:title>${x(props.title)}</dc:title><dc:creator>${x(props.author)}</dc:creator><meta:user-defined meta:name="impresiona-tema">${x(pres.theme)}</meta:user-defined></office:meta></office:document-meta>`;
   zip.file('content.xml', content); zip.file('styles.xml', styles); zip.file('meta.xml', meta);
@@ -171,6 +171,33 @@ export async function writeOdp(pres, props = {}) {
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', mimeType: 'application/vnd.oasis.opendocument.presentation' });
 }
 
+// presentaciones personalizadas y configuración de la presentación (como las guarda LibreOffice Impress)
+function showSettingsXml(pres) {
+  const ss = pres.showSettings || {}; const cs = (pres.customShows || []).filter((c) => c.ids?.length);
+  const nameOf = (id) => { const i = pres.slides.findIndex((s) => s.id === id); return i >= 0 ? `Diapositiva${i + 1}` : null; };
+  const attrs = [];
+  if (ss.loop) { attrs.push('presentation:endless="true"'); attrs.push(`presentation:pause="PT${Math.max(0, Math.round(ss.pause ?? 5))}S"`); }
+  if (ss.manual) attrs.push('presentation:force-manual="true"');
+  if (ss.clickBg === false) attrs.push('presentation:mouse-as-pen="false"');
+  if (ss.pen) attrs.push('presentation:mouse-as-pen="true"');
+  if (ss.range === 'from' && ss.from > 0 && pres.slides[ss.from]) attrs.push(`presentation:start-page="Diapositiva${ss.from + 1}"`);
+  if (ss.range === 'custom' && ss.custom && cs.some((c) => c.name === ss.custom)) attrs.push(`presentation:show="${x(ss.custom)}"`);
+  if (!attrs.length && !cs.length) return '';
+  return `<presentation:settings ${attrs.join(' ')}>${cs.map((c) => `<presentation:show presentation:name="${x(c.name)}" presentation:pages="${c.ids.map(nameOf).filter(Boolean).join(',')}"/>`).join('')}</presentation:settings>`;
+}
+function readShowSettings(doc, slides, pres) {
+  const st = doc.getElementsByTagNameNS(NS.presentation, 'settings')[0]; if (!st) return;
+  const names = [...doc.getElementsByTagNameNS(NS.draw, 'page')].map((p) => A(p, 'draw', 'name'));
+  const shows = [...st.getElementsByTagNameNS(NS.presentation, 'show')].map((e) => ({ name: A(e, 'presentation', 'name'), ids: String(A(e, 'presentation', 'pages') || '').split(',').map((n) => slides[names.indexOf(n.trim())]?.id).filter(Boolean) })).filter((c) => c.name);
+  if (shows.length) pres.customShows = shows;
+  const ss = {};
+  if (A(st, 'presentation', 'endless') === 'true') { ss.loop = true; const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?/.exec(A(st, 'presentation', 'pause') || ''); ss.pause = m ? (Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0)) : 0; }
+  if (A(st, 'presentation', 'force-manual') === 'true') ss.manual = true;
+  if (A(st, 'presentation', 'mouse-as-pen') === 'true') ss.pen = true;
+  const sp = A(st, 'presentation', 'start-page'); if (sp && names.indexOf(sp) > 0) { ss.range = 'from'; ss.from = names.indexOf(sp); }
+  const sh = A(st, 'presentation', 'show'); if (sh && shows.some((c) => c.name === sh)) { ss.range = 'custom'; ss.custom = sh; }
+  if (Object.keys(ss).length) pres.showSettings = ss;
+}
 export async function readOdp(bytes, uid) {
   const zip = await JSZip.loadAsync(bytes);
   const t = await zip.file('content.xml')?.async('string'); if (!t) throw new Error('No es una presentación ODF válida');
@@ -322,5 +349,7 @@ export async function readOdp(bytes, uid) {
   }
   const themeMeta = mdoc ? [...mdoc.getElementsByTagNameNS(NS.meta, 'user-defined')].find((u) => A(u, 'meta', 'name') === 'impresiona-tema')?.textContent : null;
   const g = (n) => mdoc?.getElementsByTagNameNS(NS.dc, n)[0]?.textContent || '';
-  return { pres: { size: { w: 960, h: Math.round(H * k) }, theme: themeMeta || 'claro', slides }, props: { title: g('title'), author: g('creator') }, warnings: [] };
+  const outPres = { size: { w: 960, h: Math.round(H * k) }, theme: themeMeta || 'claro', slides };
+  readShowSettings(doc, slides, outPres);
+  return { pres: outPres, props: { title: g('title'), author: g('creator') }, warnings: [] };
 }

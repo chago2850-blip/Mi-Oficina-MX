@@ -8,7 +8,7 @@ const NS = {
   text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0', table: 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
   fo: 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0', number: 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0',
   of: 'urn:oasis:names:tc:opendocument:xmlns:of:1.2', dc: 'http://purl.org/dc/elements/1.1/', meta: 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0',
-  svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0', xlink: 'http://www.w3.org/1999/xlink',
+  svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0', xlink: 'http://www.w3.org/1999/xlink', tableooo: 'http://openoffice.org/2009/table',
 };
 const NSDECL = Object.entries(NS).map(([k, v]) => `xmlns:${k}="${v}"`).join(' ');
 const x = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -91,9 +91,11 @@ export async function writeOds(wb, props = {}) {
   const colStyles = new Map();
   const colStyle = (w) => { const k = Math.round(w); if (!colStyles.has(k)) { const n = `co${colStyles.size + 1}`; colStyles.set(k, n); styleXml.push(`<style:style style:name="${n}" style:family="table-column"><style:table-column-properties style:column-width="${(k / 37.7953).toFixed(3)}cm"/></style:style>`); } return colStyles.get(k); };
   let tables = '';
-  for (const s of wb.sheets) {
+  for (const [si, s] of wb.sheets.entries()) {
     const u = wb.usedRange(s);
-    let t = `<table:table table:name="${x(s.name)}">`;
+    let tstyle = '';
+    if (s.x3?.hidden || s.x3?.tabColor) { tstyle = `ta${si + 1}`; styleXml.push(`<style:style style:name="${tstyle}" style:family="table"><style:table-properties table:display="${s.x3?.hidden ? 'false' : 'true'}"${s.x3?.tabColor ? ` tableooo:tab-color="${s.x3.tabColor}"` : ''}/></style:style>`); }
+    let t = `<table:table table:name="${x(s.name)}"${tstyle ? ` table:style-name="${tstyle}"` : ''}>`;
     for (let c = 0; c <= u.c2; c++) t += `<table:table-column table:style-name="${colStyle(s.cw(c) || DEF_W)}" table:default-cell-style-name="Default"/>`;
     const covered = new Set();
     for (let r = 0; r <= u.r2; r++) {
@@ -167,6 +169,8 @@ function readStyles(doc, map, nums) {
     const rowp = st.getElementsByTagNameNS(NS.style, 'table-row-properties')[0];
     if (rowp && A(rowp, 'style', 'use-optimal-row-height') !== 'true') { const rh = A(rowp, 'style', 'row-height'); if (rh) o.rowH = Math.round(parseFloat(rh) * (rh.endsWith('in') ? 96 : rh.endsWith('mm') ? 3.77953 : rh.endsWith('pt') ? 1.3333 : 37.7953)); }
     const ds = A(st, 'style', 'data-style-name'); if (ds && nums.has(ds)) o.fmt = nums.get(ds);
+    const tblp = st.getElementsByTagNameNS(NS.style, 'table-properties')[0];
+    if (tblp) { if (A(tblp, 'table', 'display') === 'false') o.hiddenSheet = true; const tc = A(tblp, 'tableooo', 'tab-color'); if (tc) o.tabColor = tc.toLowerCase(); }
     if (colp) o.colW = Math.round(parseFloat(A(colp, 'style', 'column-width')) * (A(colp, 'style', 'column-width')?.endsWith('in') ? 96 : 37.7953));
     map.set(name, o);
   }
@@ -183,6 +187,7 @@ export async function readOds(wb, bytes) {
   for (const tbl of doc.getElementsByTagNameNS(NS.table, 'table')) {
     if (tbl.parentElement?.localName !== 'spreadsheet') continue;
     const s = wb.addSheet(A(tbl, 'table', 'name') || undefined);
+    const ts = map.get(A(tbl, 'table', 'style-name')); if (ts?.hiddenSheet || ts?.tabColor) { s.x3 ||= {}; if (ts.hiddenSheet) s.x3.hidden = true; if (ts.tabColor) s.x3.tabColor = ts.tabColor; }
     const data = [];
     let c0 = 0;
     for (const col of tbl.getElementsByTagNameNS(NS.table, 'table-column')) { const rep = Math.min(Number(A(col, 'table', 'number-columns-repeated') || 1), 200); const cs = map.get(A(col, 'table', 'style-name')); for (let k = 0; k < rep; k++, c0++) if (cs?.colW && Math.abs(cs.colW - DEF_W) > 4 && c0 < MAXC) s.colW.set(c0, cs.colW); }

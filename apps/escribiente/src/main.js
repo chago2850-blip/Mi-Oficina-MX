@@ -12,6 +12,8 @@ import * as TB from './tablas.js';
 import * as IN from './insertar.js';
 import * as PG from './pagina.js';
 import * as HT from './herramientas.js';
+import * as AR from './archivo.js';
+import { rtfToHtml } from './rtf.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -895,8 +897,8 @@ function setContent(html, settings) {
 
 const adapter = {
   i18nSkip: '#pages, .doc, .fnmeasure, .cm-text, .cmcard .reply-text, .nav-item',
-  exts: ['docx', 'odt', 'doc', 'txt', 'html', 'htm', 'md'],
-  writable: ['docx', 'odt', 'html', 'htm', 'txt', 'md'],
+  exts: ['docx', 'odt', 'doc', 'rtf', 'txt', 'html', 'htm', 'md'],
+  writable: ['docx', 'odt', 'rtf', 'html', 'htm', 'txt', 'md'],
   saveExt: 'docx',
   docIcon: 'doc',
   homeHint: 'Escribe cartas, reportes y documentos que se abren en cualquier procesador de textos.',
@@ -904,8 +906,11 @@ const adapter = {
   exportFormats: [
     { ext: 'docx', ic: 'doc', label: 'Documento de Word (.docx)', desc: 'Para editar en cualquier procesador de textos compatible.' },
     { ext: 'odt', ic: 'doc', label: 'Documento ODF (.odt)', desc: 'Formato abierto, compatible con LibreOffice y otros procesadores.' },
+    { ext: 'rtf', ic: 'doc', label: 'Formato de texto enriquecido (.rtf)', desc: 'Texto con formato que abre casi cualquier programa, incluso los más antiguos.' },
+    { ext: 'epub', ic: 'doc', label: 'Libro electrónico (.epub)', desc: 'Para leer en lectores de libros electrónicos, teléfonos y tabletas.', run: () => { shell.hideBackstage(); AR.epubDialog(); } },
     { ext: 'html', ic: 'link', label: 'Página web (.html)', desc: 'Para publicar en internet o abrir en el navegador.' },
     { ext: 'txt', ic: 'words', label: 'Texto sin formato (.txt)', desc: 'Solo el texto, sin estilos ni imágenes.' },
+    { ext: 'txt', ic: 'words', label: 'Texto codificado (.txt)…', desc: 'Solo el texto, eligiendo la codificación (UTF-8, Windows-1252, UTF-16) y el fin de línea.', run: () => { shell.hideBackstage(); AR.txtDialog(); } },
     { ext: 'md', ic: 'words', label: 'Markdown (.md)', desc: 'Texto con títulos, listas, negritas y tablas, para GitHub, blogs y notas.' },
   ],
   async newDoc(tplId) {
@@ -947,7 +952,13 @@ const adapter = {
       setContent(html);
       return { warnings: [d.html ? t('Documento de Word 97-2003 (.doc): se recuperaron el texto, los títulos, las tablas, las listas y el formato básico. Se guardará como .docx (modo compatibilidad)') : t('Documento de Word 97-2003 (.doc): se recuperó el texto; el formato se pierde (modo compatibilidad)')] };
     }
-    if (f.ext === 'txt') { setContent(textToHtml(text())); return {}; }
+    if (f.ext === 'rtf') {
+      const r = rtfToHtml(f.bytes);
+      Object.assign(state, { header: r.header || '', footer: r.footer || '', headerFirst: r.headerFirst || '', footerFirst: r.footerFirst || '', hfFirst: !!r.hfFirst, hfOddEven: false, headerEven: undefined, footerEven: undefined, hfStyle: null, firstPageNum: r.firstPageNum || 1, pageBorder: null, lineNum: null, hyphenate: false, pageNumbers: 'none', defTab: null, comments: [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
+      setContent(r.html, r.page?.w ? { page: { ...state.page, ...r.page, size: matchSize({ ...state.page, ...r.page }) } } : null);
+      return { props: r.props };
+    }
+    if (f.ext === 'txt') { setContent(textToHtml(decodeText(f.bytes))); return {}; }
     if (f.ext === 'md') { setContent(markdownToHtml(text())); return {}; }
     if (f.ext === 'html' || f.ext === 'htm') {
       const raw = text();
@@ -961,6 +972,7 @@ const adapter = {
   async serialize(ext) {
     // sin las filas de relleno de la paginación ni la selección de celdas
     editor.querySelectorAll('tr.tpush, tr.trep').forEach((r) => r.remove()); TB.clearSel(); setTimeout(schedulePaginate, 0);
+    const extra = await AR.serializeExtra(ext); if (extra != null) return extra;
     if (ext === 'txt') return htmlToText(editor);
     if (ext === 'md') return F3.htmlToMarkdown(editor);
     if (ext === 'html' || ext === 'htm') return exportHtml();
@@ -970,6 +982,7 @@ const adapter = {
   snapshot() { return JSON.stringify({ html: editor.innerHTML.replace(/<tr class="(tpush|trep)"[\s\S]*?<\/tr>/g, ''), settings: snapshotSettings() }); },
   async restore(s) { const j = JSON.parse(s); setContent(j.html, j.settings); },
   isPristine() { return !shell.doc.dirty && (editor.innerText || '').trim() === '' && !editor.querySelector('img,table'); },
+  currentPage: () => AR.currentPage(),
   pdfOptions() { return { landscape: false, pageSize: { width: state.page.w / 96, height: state.page.h / 96 } }; },
   beforePrint() { buildPrint(); },
   afterPrint() { $('#printRoot').replaceChildren(); },
@@ -985,6 +998,12 @@ const adapter = {
   onCommand,
 };
 
+// texto en UTF-8, UTF-16 (con BOM) o, si no es UTF-8 válido, Windows-1252
+function decodeText(bytes) {
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes);
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
+}
 function matchSize(pg) {
   const w = Math.min(pg.w, pg.h), hh = Math.max(pg.w, pg.h);
   return Object.entries(PAGE_SIZES).find(([, s]) => Math.abs(s.w - w) < 6 && Math.abs(s.h - hh) < 6)?.[0] || 'custom';
@@ -1048,6 +1067,9 @@ async function onCommand(cmd, arg) {
     case 'columnBreak': return IN.insertColumnBreak();
     case 'pageBorder': return PG.pageBorderDialog();
     case 'thesaurus': saveSelection(); return HT.thesaurusDialog();
+    case 'exportEpub': return AR.epubDialog();
+    case 'exportRtf': return shell.saveAsFormat('rtf', 'Formato de texto enriquecido');
+    case 'exportTxt': return AR.txtDialog();
     case 'autocorrect': return HT.autocorrectDialog();
     case 'hyphenation': return HT.hyphenationDialog();
     case 'sortParas': saveSelection(); return HT.sortDialog();
@@ -1330,6 +1352,7 @@ F.initFeatures({
 ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
 HT.init({ editor, state, shell, saveSelection, restoreSelection, schedulePaginate, currentBlock, selectedBlocks });
 PG.init({ state, editor, get pagesEl() { return pagesEl; }, shell, schedulePaginate });
+AR.init({ state, editor, shell, settings: () => snapshotSettings() });
 IN.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, currentBlock, schedulePaginate });
 TB.init({ editor, shell, currentBlock, restoreSelection, saveSelection, schedulePaginate, selectedBlocks, layoutTabs: () => F.layoutTabs?.() });
 FX.init({ editor, selectedBlocks, restoreSelection, saveSelection, markDirty: () => shell.markDirty(), schedulePaginate, reflectState, FONTS, applySpanStyles, exec });

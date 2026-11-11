@@ -3,6 +3,8 @@
 // GPL-3.0-or-later
 import { icon } from './icons.js';
 import { t, tf, getLang, setLang, onLang, installTranslator, localizeHtml, longDate } from './i18n.js';
+import * as PR from './imprimir.js';
+import { withProps, readExtraProps, propertiesDialog } from './props.js';
 
 export { icon, t, tf, getLang, onLang, localizeHtml, longDate };
 export const $ = (s, r = document) => r.querySelector(s);
@@ -306,7 +308,7 @@ export class OfficeShell {
     if (api?.setPrefs) await api.setPrefs(v); else this.applyPrefs();
     toast('Opciones guardadas');
   }
-  docProps() { return { title: this.props.title || this.doc.name.replace(/\.[^.]+$/, ''), author: this.props.author || this.prefs.author || '', subject: this.props.subject || '', keywords: this.props.keywords || '' }; }
+  docProps() { return { title: this.props.title || this.doc.name.replace(/\.[^.]+$/, ''), author: this.props.author || this.prefs.author || '', subject: this.props.subject || '', keywords: this.props.keywords || '', description: this.props.description || '', category: this.props.category || '', custom: this.props.custom || [] }; }
 
   buildTop() {
     this.top.append(
@@ -381,11 +383,15 @@ export class OfficeShell {
         case 'open': return this.open();
         case 'save': return this.save();
         case 'saveAs': return this.save({ ask: true });
-        case 'exportPdf': return this.exportPdf();
-        case 'print': return this.print();
+        case 'exportPdf': return PR.pdfDialog(this);
+        case 'exportPdfDirect': return this.exportPdf();
+        case 'print': return PR.printDialog(this);
+        case 'printDirect': return this.print();
+        case 'printPreview': return PR.printPreview(this);
         case 'about': return this.about();
         case 'options': return this.optionsDialog();
         case 'properties': return this.showBackstage('info');
+        case 'docProperties': return propertiesDialog(this, arg || 0);
         case 'protectFile': return this.protectDialog();
         case 'customizeQat': return this.customizeQat();
         case 'find': this.searchBox.focus(); this.searchBox.select(); return this.adapter.onCommand('find', arg);
@@ -458,6 +464,7 @@ export class OfficeShell {
       this.props = {};
       const info = await this.adapter.load(f);
       if (info?.props) this.props = { ...info.props };
+      Object.assign(this.props, await readExtraProps(f));
       const nativeSave = this.adapter.writable ? this.adapter.writable.includes(f.ext) : f.ext === this.adapter.saveExt;
       this.doc = { name: f.name, path: nativeSave ? f.path : null, ext: nativeSave ? f.ext : this.adapter.saveExt, dirty: false, started: true, password: f.password || null };
       if (!nativeSave) this.doc.name = f.name.replace(/\.[^.]+$/, '') + '.' + this.adapter.saveExt;
@@ -474,7 +481,7 @@ export class OfficeShell {
   async save({ ask = false } = {}) {
     if (!api) return false;
     const ext = this.doc.path ? this.doc.ext : this.adapter.saveExt;
-    const data = await this.adapter.serialize(ext);
+    const data = await withProps(ext, await this.adapter.serialize(ext), this.docProps());
     const res = await api.save({
       ...(typeof data === 'string' ? { text: data } : { bytes: data }),
       path: ask ? null : this.doc.path, ask: ask || !this.doc.path,
@@ -489,7 +496,7 @@ export class OfficeShell {
   }
 
   async saveAsFormat(ext, filterName) {
-    const data = await this.adapter.serialize(ext);
+    const data = await withProps(ext, await this.adapter.serialize(ext), this.docProps());
     const res = await api.save({ ...(typeof data === 'string' ? { text: data } : { bytes: data }), ask: true, ext, filterName, suggestedName: this.doc.name.replace(/\.[^.]+$/, '') + '.' + ext });
     if (res) toast(`Exportado: ${res.name}`, { action: { label: 'Mostrar', run: () => api.showInFolder(res.path) } });
     return res;
@@ -505,16 +512,16 @@ export class OfficeShell {
     }
   }
 
-  async exportPdf() {
+  async exportPdf(extra = {}) {
     if (!api) return;
-    const opts = this.adapter.pdfOptions?.() || {};
+    const opts = { ...(this.adapter.pdfOptions?.() || {}), ...extra };
     const res = await this.withPrintLayout(() => api.exportPdf({ suggestedName: this.doc.name.replace(/\.[^.]+$/, '') + '.pdf', ...opts }));
     if (res) toast(`PDF listo: ${res.name}`, { action: { label: 'Abrir en PapelPDF', run: () => api.openInSuite(res.path) } });
   }
 
-  async print() {
+  async print(opts) {
     if (!api) { window.print(); return; }
-    await this.withPrintLayout(() => api.print());
+    return this.withPrintLayout(() => api.print(opts));
   }
 
   async about() {
@@ -549,7 +556,7 @@ export class OfficeShell {
       item('save', 'save', 'Guardar', () => this.save().then((ok) => ok && this.hideBackstage()), !started),
       item('saveAs', 'saveAs', 'Guardar como', () => this.save({ ask: true }).then((ok) => ok && this.hideBackstage()), !started),
       item('export', 'pdf', 'Exportar', () => this.showBackstage('export'), !started),
-      item('print', 'print', 'Imprimir', () => { this.hideBackstage(); this.print(); }, !started),
+      item('print', 'print', 'Imprimir', () => { this.hideBackstage(); PR.printDialog(this); }, !started),
       item('info', 'info', 'Información', () => this.showBackstage('info'), !started),
       h('div', { class: 'grow' }),
       item('options', 'brush', 'Opciones', () => this.optionsDialog()),
@@ -610,7 +617,7 @@ export class OfficeShell {
 
   renderExport(main) {
     main.append(h('h1', {}, 'Exportar'));
-    const opts = [{ id: 'pdf', ic: 'pdf', label: 'PDF', desc: 'Documento fijo para compartir o imprimir. Se puede abrir en PapelPDF.', run: () => { this.hideBackstage(); this.exportPdf(); } }, ...(this.adapter.exportFormats || [])];
+    const opts = [{ id: 'pdf', ic: 'pdf', label: 'PDF', desc: 'Documento fijo para compartir o imprimir. Se puede abrir en PapelPDF.', run: () => { this.hideBackstage(); PR.pdfDialog(this); } }, ...(this.adapter.exportFormats || [])];
     const box = h('div', { style: { display: 'grid', gap: '10px', maxWidth: '560px', marginTop: '18px' } });
     opts.forEach((o) => box.append(h('button', { class: 'recent', style: { gridTemplateColumns: '32px 1fr', textAlign: 'left', border: '1px solid var(--line)', background: '#fff' }, onclick: () => { if (o.run) o.run(); else this.saveAsFormat(o.ext, o.label); } },
       h('span', { html: icon(o.ic || 'doc', 22) }), h('div', {}, h('div', { style: { fontWeight: 600 } }, o.label), h('div', { class: 'p', style: { whiteSpace: 'normal' } }, o.desc)))));
@@ -628,7 +635,7 @@ export class OfficeShell {
     const fields = [['title', 'Título'], ['author', 'Autor'], ['subject', 'Asunto'], ['keywords', 'Palabras clave']];
     const inputs = {};
     fields.forEach(([k, l]) => { inputs[k] = h('input', { value: pr[k] || '', 'data-prop': k }); left.append(h('label', { class: 'field' }, h('span', {}, l), inputs[k])); });
-    left.append(h('button', { class: 'btn primary', onclick: () => { fields.forEach(([k]) => { this.props[k] = inputs[k].value.trim(); }); this.markDirty(); toast('Propiedades actualizadas (se guardan con el archivo)'); } }, 'Aplicar'));
+    left.append(h('button', { class: 'btn primary', onclick: () => { fields.forEach(([k]) => { this.props[k] = inputs[k].value.trim(); }); this.markDirty(); toast('Propiedades actualizadas (se guardan con el archivo)'); } }, 'Aplicar'), ' ', h('button', { class: 'btn', onclick: () => { this.hideBackstage(); propertiesDialog(this); } }, 'Más propiedades…'));
     const right = h('div', {}, h('h2', { style: { marginTop: 0 } }, 'Datos'), tbl);
     if (this.doc.path) right.append(h('p', {}, h('button', { class: 'btn', onclick: () => api.showInFolder(this.doc.path) }, 'Mostrar en la carpeta')));
     const prot = h('div', { class: 'protect-box' }, h('h2', {}, 'Proteger documento'),
@@ -645,7 +652,7 @@ export class OfficeShell {
     return [
       { cmd: 'save', label: 'Guardar', icon: 'save', kbd: 'Ctrl+S' }, { cmd: 'undo', label: 'Deshacer', icon: 'undo', kbd: 'Ctrl+Z' }, { cmd: 'redo', label: 'Rehacer', icon: 'redo', kbd: 'Ctrl+Y' },
       { cmd: 'new', label: 'Nuevo', icon: 'new' }, { cmd: 'open', label: 'Abrir', icon: 'open', kbd: 'Ctrl+O' }, { cmd: 'print', label: 'Imprimir', icon: 'print', kbd: 'Ctrl+P' },
-      { cmd: 'exportPdf', label: 'Exportar a PDF', icon: 'pdf' }, ...(this.adapter.qatExtra || []),
+      { cmd: 'exportPdf', label: 'Exportar a PDF', icon: 'pdf' }, { cmd: 'exportPdfDirect', label: 'Exportar directamente como PDF', icon: 'pdf' }, { cmd: 'printPreview', label: 'Vista previa de impresión', icon: 'print', kbd: 'Ctrl+Mayús+O' }, ...(this.adapter.qatExtra || []),
     ];
   }
   qatList() { const q = this.prefs?.qat?.[this.appId]; return Array.isArray(q) ? q : ['save', 'undo', 'redo']; }

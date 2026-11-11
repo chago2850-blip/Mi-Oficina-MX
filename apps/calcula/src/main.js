@@ -12,6 +12,7 @@ import * as Q from './query.js';
 import { readOds, writeOds } from './ods.js';
 import { injectVba } from './xlsx.js';
 import * as CE from './celdas.js';
+import * as DT from './datos.js';
 
 const wb = new Workbook();
 let shell, grid, nameBox, fxInput, tabsBar, statusInfo, zoom;
@@ -103,12 +104,13 @@ function refresh() {
 
 // ------------------------------------------------------------------ hojas
 function renderTabs() {
-  const key = wb.sheets.map((s) => `${s.name}${s.x3?.tabColor || ''}`).join('|') + wb.active;
+  const key = wb.sheets.map((s) => `${s.name}${s.x3?.tabColor || ''}${s.x3?.hidden ? '~' : ''}`).join('|') + wb.active;
   if (tabsBar.dataset.key === key) return;
   tabsBar.dataset.key = key;
   tabsBar.replaceChildren(h('button', { class: 'tabadd', title: 'Hoja nueva (Mayús+F11)', html: icon('plus', 16), onclick: () => newSheet() }));
   wb.sheets.forEach((s, i) => {
-    const t = h('button', { class: `stab${i === wb.active ? ' on' : ''}`, style: s.x3?.tabColor ? `--tabc:${s.x3.tabColor}` : null, onclick: () => switchSheet(i), ondblclick: () => renameSheet(i), oncontextmenu: (e) => { e.preventDefault(); switchSheet(i); dropdown(t, [{ label: 'Insertar hoja', icon: 'sheetAdd', run: newSheet }, { label: 'Cambiar nombre', icon: 'textbox', run: () => renameSheet(i) }, { label: 'Duplicar', icon: 'copy', run: () => duplicateSheet(i) }, { label: 'Color de pestaña…', icon: 'fill', run: () => setTimeout(() => CE.tabColorPicker(t, i), 0) }, '-', { label: 'Eliminar', icon: 'trash', run: () => deleteSheet(i) }]); } }, s.name);
+    if (s.x3?.hidden) return;
+    const t = h('button', { class: `stab${i === wb.active ? ' on' : ''}`, style: s.x3?.tabColor ? `--tabc:${s.x3.tabColor}` : null, onclick: () => switchSheet(i), ondblclick: () => renameSheet(i), oncontextmenu: (e) => { e.preventDefault(); switchSheet(i); dropdown(t, [{ label: 'Insertar hoja', icon: 'sheetAdd', run: newSheet }, { label: 'Cambiar nombre', icon: 'textbox', run: () => renameSheet(i) }, { label: 'Duplicar', icon: 'copy', run: () => duplicateSheet(i) }, { label: 'Mover o copiar…', icon: 'copy', run: () => DT.moveCopyDialog(i) }, { label: 'Color de pestaña…', icon: 'fill', run: () => setTimeout(() => CE.tabColorPicker(t, i), 0) }, '-', { label: 'Ocultar', icon: 'minus', run: () => DT.hideSheet(i) }, { label: 'Mostrar…', icon: 'plus', run: () => DT.showSheetDialog() }, '-', { label: 'Eliminar', icon: 'trash', run: () => deleteSheet(i) }]); } }, s.name);
     tabsBar.append(t);
   });
 }
@@ -591,6 +593,7 @@ async function odsProps(bytes) { try { const JSZip = (await import('jszip')).def
 function countFormulas() { let n = 0; const u = wb.usedRange(); for (let r = 0; r <= u.r2; r++) for (let c = 0; c <= u.c2; c++) if (wb.hf.doesCellHaveFormula({ sheet: wb.sid, row: r, col: c })) n++; return n; }
 function afterLoad() {
   tabsBar.dataset.key = '';
+  if (wb.sheet?.x3?.hidden) { const v = wb.sheets.findIndex((x) => !x.x3?.hidden); if (v >= 0) wb.active = v; }
   grid.scrollX = grid.scrollY = 0; grid.invalidate(); grid.touchMeta(); grid.updateSpacer(); grid.syncScroll();
   grid.select(0, 0);
   mountCharts(); refresh();
@@ -660,6 +663,25 @@ async function onCommand(cmd, arg) {
     case 'autofit': return grid.autofit(grid.sel.c);
     case 'newSheet': return newSheet();
     case 'sortAsc': return sortSel(true);
+    case 'sortDialog': return DT.sortDialog();
+    case 'fillDown': return DT.fillDir('down');
+    case 'fillRight': return DT.fillDir('right');
+    case 'fillUp': return DT.fillDir('up');
+    case 'fillLeft': return DT.fillDir('left');
+    case 'fillSeries': return DT.fillSeriesDialog();
+    case 'fillRandom': return DT.randomDialog();
+    case 'stats': return DT.statsDialog(arg || 'descriptive');
+    case 'consolidate': return DT.consolidateDialog();
+    case 'duplicates': return DT.duplicatesDialog();
+    case 'cellStyle': return DT.applyCellStyle(arg);
+    case 'caseUpper': return DT.textCase('upper');
+    case 'caseLower': return DT.textCase('lower');
+    case 'caseTitle': return DT.textCase('title');
+    case 'caseSentence': return DT.textCase('sentence');
+    case 'caseToggle': return DT.textCase('toggle');
+    case 'moveCopySheet': return DT.moveCopyDialog();
+    case 'hideSheet': return DT.hideSheet();
+    case 'showSheets': return DT.showSheetDialog();
     case 'sortDesc': return sortSel(false);
     case 'filter': return toggleFilter();
     case 'freezePanes': return;
@@ -757,10 +779,13 @@ const freezeMenu = () => [
 ];
 const sumMenu = () => [['SUM', 'Suma'], ['AVERAGE', 'Promedio'], ['COUNT', 'Contar números'], ['MAX', 'Máximo'], ['MIN', 'Mínimo']].map(([f, l]) => ({ label: l, run: () => autoSum(f) })).concat(['-', { label: 'Más funciones…', run: insertFunction }]);
 const chartMenu = () => CHART_TYPES.map(([k, l]) => ({ label: l, icon: { pie: 'chartPie', line: 'chartLine', area: 'chartLine' }[k] || 'chart', run: () => insertChart(k) }));
+const fillMenu = () => [{ label: 'Abajo', icon: 'arrow', kbd: 'Ctrl+D', run: () => DT.fillDir('down') }, { label: 'Derecha', icon: 'arrow', run: () => DT.fillDir('right') }, { label: 'Arriba', icon: 'arrow', run: () => DT.fillDir('up') }, { label: 'Izquierda', icon: 'arrow', run: () => DT.fillDir('left') }, '-', { label: 'Serie…', icon: 'sortAsc', run: () => DT.fillSeriesDialog() }, { label: 'Números aleatorios…', icon: 'func', run: () => DT.randomDialog() }];
+const caseMenu = () => [{ label: 'MAYÚSCULAS', run: () => DT.textCase('upper') }, { label: 'minúsculas', run: () => DT.textCase('lower') }, { label: 'Tipo oración', run: () => DT.textCase('sentence') }, { label: 'Tipo Título', run: () => DT.textCase('title') }, { label: 'aLTERNAR mAYÚSCULAS', run: () => DT.textCase('toggle') }];
+const statsMenu = () => [['descriptive', 'Estadística descriptiva…'], ['correlation', 'Correlación…'], ['covariance', 'Covarianza…'], ['moving', 'Media móvil…'], ['smoothing', 'Suavizado exponencial…'], ['sampling', 'Muestreo…'], ['regression', 'Regresión lineal…']].map(([k, l]) => ({ label: l, run: () => DT.statsDialog(k) }));
 const clearMenu = () => [{ label: 'Borrar todo', icon: 'trash', run: clearAll }, { label: 'Borrar formatos', icon: 'clear', run: clearFormats }, { label: 'Borrar contenido', icon: 'close', run: clearContents }];
 const insMenu = () => [{ label: 'Insertar celdas…', icon: 'rowAdd', kbd: 'Ctrl++', run: () => CE.insertCellsDialog() }, { label: 'Insertar filas', icon: 'rowAdd', run: () => insertRows(true) }, { label: 'Insertar columnas', icon: 'colAdd', run: () => insertCols(true) }, { label: 'Insertar hoja', icon: 'sheetAdd', run: newSheet }];
 const delMenu = () => [{ label: 'Eliminar celdas…', icon: 'rowDel', kbd: 'Ctrl+-', run: () => CE.deleteCellsDialog() }, { label: 'Eliminar filas', icon: 'rowDel', run: deleteRows }, { label: 'Eliminar columnas', icon: 'colDel', run: deleteCols }, { label: 'Eliminar hoja', icon: 'trash', run: () => deleteSheet(wb.active) }];
-const fmtMenu = () => [{ label: 'Autoajustar ancho de columna', icon: 'columns', run: () => grid.autofit(grid.sel.c) }, { label: 'Ancho de columna…', icon: 'columns', run: async () => { const v = await form('Ancho de columna', [{ name: 'w', label: 'Ancho (px)', type: 'number', value: wb.sheet.cw(grid.sel.c), min: 8, max: 800 }]); if (v) { const g = sel(); act('Ancho', () => { for (let c = g.c1; c <= Math.min(g.c2, g.c1 + 200); c++) wb.sheet.colW.set(c, v.w); }, { hf: false }); } } }, { label: 'Alto de fila…', icon: 'lineSpacing', run: async () => { const v = await form('Alto de fila', [{ name: 'h', label: 'Alto (px)', type: 'number', value: wb.sheet.rh(grid.sel.r), min: 10, max: 400 }]); if (v) { const g = clampToUsed(sel()); act('Alto', () => { for (let r = g.r1; r <= g.r2; r++) wb.sheet.rowH.set(r, v.h); }, { hf: false }); } } }, '-', { label: 'Cambiar nombre de hoja…', icon: 'textbox', run: () => renameSheet(wb.active) }, { label: 'Formato de celdas…', icon: 'brush', kbd: 'Ctrl+1', run: formatCells }];
+const fmtMenu = () => [{ label: 'Autoajustar ancho de columna', icon: 'columns', run: () => grid.autofit(grid.sel.c) }, { label: 'Ancho de columna…', icon: 'columns', run: async () => { const v = await form('Ancho de columna', [{ name: 'w', label: 'Ancho (px)', type: 'number', value: wb.sheet.cw(grid.sel.c), min: 8, max: 800 }]); if (v) { const g = sel(); act('Ancho', () => { for (let c = g.c1; c <= Math.min(g.c2, g.c1 + 200); c++) wb.sheet.colW.set(c, v.w); }, { hf: false }); } } }, { label: 'Alto de fila…', icon: 'lineSpacing', run: async () => { const v = await form('Alto de fila', [{ name: 'h', label: 'Alto (px)', type: 'number', value: wb.sheet.rh(grid.sel.r), min: 10, max: 400 }]); if (v) { const g = clampToUsed(sel()); act('Alto', () => { for (let r = g.r1; r <= g.r2; r++) wb.sheet.rowH.set(r, v.h); }, { hf: false }); } } }, '-', { label: 'Cambiar nombre de hoja…', icon: 'textbox', run: () => renameSheet(wb.active) }, { label: 'Mover o copiar hoja…', icon: 'copy', run: () => DT.moveCopyDialog() }, { label: 'Ocultar hoja', icon: 'minus', run: () => DT.hideSheet() }, { label: 'Mostrar hoja…', icon: 'plus', run: () => DT.showSheetDialog() }, '-', ...caseMenu(), '-', { label: 'Formato de celdas…', icon: 'brush', kbd: 'Ctrl+1', run: formatCells }];
 
 const TABS = [
   { id: 'home', label: 'Inicio', groups: [
@@ -777,9 +802,9 @@ const TABS = [
       { row: [{ cmd: 'numFmt', label: 'Formato de número', select: { options: [...FORMATS.map(([k, n]) => [k, n]), ['custom', 'Más formatos…']], width: '170px' } }] },
       { row: [{ cmd: 'currency', label: 'Moneda', icon: 'currency' }, { cmd: 'percent', label: 'Porcentaje', icon: 'percent' }, { cmd: 'thousands', label: 'Separador de miles', icon: 'hr' }, { cmd: 'decInc', label: 'Aumentar decimales', icon: 'decInc' }, { cmd: 'decDec', label: 'Disminuir decimales', icon: 'decDec' }] },
     ] }] },
-    { label: 'Estilos', items: [{ cmd: 'cf', label: 'Formato condicional', icon: 'fill', size: 'lg', menu: () => F.cfMenu() }, { cmd: 'tableStyle', label: 'Formato de tabla', icon: 'table', size: 'lg', menu: () => F.tableStyleMenu() }] },
+    { label: 'Estilos', items: [{ cmd: 'cf', label: 'Formato condicional', icon: 'fill', size: 'lg', menu: () => F.cfMenu() }, { cmd: 'tableStyle', label: 'Formato de tabla', icon: 'table', size: 'lg', menu: () => F.tableStyleMenu() }, { cmd: 'cellStyles', label: 'Estilos de celda', icon: 'brush', size: 'lg', menu: () => DT.cellStylesMenu() }] },
     { label: 'Celdas', items: [{ cmd: 'insert', label: 'Insertar', icon: 'rowAdd', size: 'lg', menu: insMenu }, { cmd: 'delete', label: 'Eliminar', icon: 'rowDel', size: 'lg', menu: delMenu }, { cmd: 'format', label: 'Formato', icon: 'brush', size: 'lg', menu: fmtMenu }] },
-    { label: 'Edición', items: [{ stack: [{ cmd: 'autoSum', label: 'Autosuma', icon: 'sum', showLabel: true, menu: sumMenu }, { cmd: 'clear', label: 'Borrar', icon: 'clear', showLabel: true, menu: clearMenu }, { cmd: 'sort', label: 'Ordenar y filtrar', icon: 'filter', showLabel: true, menu: () => [{ label: 'Ordenar de A a Z', icon: 'sortAsc', run: () => sortSel(true) }, { label: 'Ordenar de Z a A', icon: 'sortDesc', run: () => sortSel(false) }, '-', { label: 'Filtro', icon: 'filter', run: toggleFilter }] }] }] },
+    { label: 'Edición', items: [{ stack: [{ cmd: 'autoSum', label: 'Autosuma', icon: 'sum', showLabel: true, menu: sumMenu }, { cmd: 'fillMenu', label: 'Rellenar', icon: 'arrow', showLabel: true, menu: fillMenu }, { cmd: 'clear', label: 'Borrar', icon: 'clear', showLabel: true, menu: clearMenu }, { cmd: 'sort', label: 'Ordenar y filtrar', icon: 'filter', showLabel: true, menu: () => [{ label: 'Ordenar de A a Z', icon: 'sortAsc', run: () => sortSel(true) }, { label: 'Ordenar de Z a A', icon: 'sortDesc', run: () => sortSel(false) }, { label: 'Ordenar…', icon: 'sortAsc', run: () => DT.sortDialog() }, '-', { label: 'Filtro', icon: 'filter', run: toggleFilter }] }] }] },
   ] },
   { id: 'insert', label: 'Insertar', groups: [
     { label: 'Tablas', items: [{ cmd: 'pivot', label: 'Tabla dinámica', icon: 'layout', size: 'lg' }, { cmd: 'tableStyle', label: 'Tabla', icon: 'table', size: 'lg', menu: () => F.tableStyleMenu() }] },
@@ -800,8 +825,9 @@ const TABS = [
   ] },
   { id: 'data', label: 'Datos', groups: [
     { label: 'Obtener y transformar', items: [{ cmd: 'getData', label: 'Obtener datos', icon: 'open', size: 'lg', menu: () => [{ label: 'Desde texto/CSV…', run: () => onCommand('getDataCsv') }, { label: 'Desde un libro de Excel…', run: () => onCommand('getDataXlsx') }, { label: 'Desde JSON…', run: () => onCommand('getDataJson') }, '-', { label: 'Desde tabla o rango', run: () => onCommand('getDataRange') }] }, { cmd: 'refreshAll', label: 'Actualizar todo', icon: 'recover', size: 'lg' }, { cmd: 'queries', label: 'Consultas y conexiones', icon: 'layout', size: 'lg' }] },
-    { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }, { cmd: 'stdFilter', label: 'Filtro estándar…', icon: 'filter', size: 'lg' }] },
-    { label: 'Herramientas de datos', items: [{ cmd: 'textToColumns', label: 'Texto en columnas…', icon: 'columns', size: 'lg' }, { cmd: 'subtotals', label: 'Subtotales…', icon: 'sum', size: 'lg' }, { cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
+    { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'sortDialog', label: 'Ordenar…', icon: 'sortAsc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }, { cmd: 'stdFilter', label: 'Filtro estándar…', icon: 'filter', size: 'lg' }] },
+    { label: 'Herramientas de datos', items: [{ cmd: 'textToColumns', label: 'Texto en columnas…', icon: 'columns', size: 'lg' }, { cmd: 'subtotals', label: 'Subtotales…', icon: 'sum', size: 'lg' }, { cmd: 'duplicates', label: 'Quitar duplicados…', icon: 'trash', size: 'lg' }, { cmd: 'consolidate', label: 'Consolidar…', icon: 'layout', size: 'lg' }, { cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
+    { label: 'Análisis', items: [{ cmd: 'statsMenu', label: 'Estadísticas', icon: 'chart', size: 'lg', menu: statsMenu }, { cmd: 'fillRandom', label: 'Números aleatorios…', icon: 'func', size: 'lg' }] },
     { label: 'Previsión', items: [{ cmd: 'whatIf', label: 'Análisis de hipótesis', icon: 'func', size: 'lg', menu: () => [{ label: 'Buscar objetivo…', run: () => onCommand('goalSeek') }, { label: 'Solver…', run: () => onCommand('solver') }] }] },
     { label: 'Esquema', items: [{ stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }] }, { stack: [{ cmd: 'hideDetail', label: 'Ocultar detalle', icon: 'minus', showLabel: true }, { cmd: 'showDetail', label: 'Mostrar detalle', icon: 'plus', showLabel: true }] }] },
     { label: 'Exportar', items: [{ cmd: 'exportCsv', label: 'Guardar CSV', icon: 'words', size: 'lg' }, { cmd: 'exportOds', label: 'Guardar ODS', icon: 'sheet', size: 'lg' }] },
@@ -822,6 +848,7 @@ buildWorkspace(shell.workspace);
 F.initFeatures({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g) });
 F3.init({ wb, grid, shell, act, refresh, applyFilter, mountCharts, refreshCharts });
 Q.init({ wb, grid, shell, act, refresh, switchSheet, refreshCharts });
+DT.init({ wb, grid, shell, act, refresh, switchSheet, dup: (i) => duplicateSheet(i), refreshCharts, sel: () => grid.range, clamp: (g) => clampToUsed(g), renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 CE.init({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g), curStyle: () => curStyle(), FONTS, renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 { const pc = grid.positionCharts.bind(grid); grid.positionCharts = () => { pc(); F3.positionSlicers(); }; }
 statusInfo = h('span', { class: 'selstats' });
@@ -847,4 +874,4 @@ shell.start();
 // Al cambiar el idioma, las fórmulas y errores se vuelven a mostrar en el idioma nuevo
 onLang(() => { grid.invalidate(); grid.draw(); refresh(); });
 
-window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q, CE };
+window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q, CE, DT };

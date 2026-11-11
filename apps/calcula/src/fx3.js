@@ -152,6 +152,39 @@ class OficinaPlugin extends FunctionPlugin {
     return src;
   }
 }
+// ---- estadística que faltaba en HyperFormula (como en LibreOffice Calc y Excel)
+const nums = (v) => rows2d(v).flat().map(plain).filter((x) => typeof x === 'number');
+const pairs = (a, b) => { const A = rows2d(a).flat().map(plain); const B = rows2d(b).flat().map(plain); const o = []; for (let i = 0; i < Math.min(A.length, B.length); i++) if (typeof A[i] === 'number' && typeof B[i] === 'number') o.push([A[i], B[i]]); return o; };
+const NUMERR = () => new CellError(ErrorType.NUM);
+const NAERR = () => new CellError(ErrorType.NA);
+const DIV0 = () => new CellError(ErrorType.DIV_BY_ZERO);
+Object.assign(OficinaPlugin.prototype, {
+  kurt(ast, state) {
+    const x = ast.args.flatMap((a) => nums(this.val(a, state))); const n = x.length; if (n < 4) return DIV0();
+    const m = x.reduce((a, b) => a + b, 0) / n; const sd = Math.sqrt(x.reduce((a, b) => a + (b - m) ** 2, 0) / (n - 1)); if (!sd) return DIV0();
+    const s4 = x.reduce((a, b) => a + ((b - m) / sd) ** 4, 0);
+    return (n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3)) * s4 - (3 * (n - 1) ** 2) / ((n - 2) * (n - 3));
+  },
+  mode(ast, state) {
+    const x = ast.args.flatMap((a) => nums(this.val(a, state))); const cnt = new Map(); let best = null; let bc = 1;
+    for (const v of x) { const c = (cnt.get(v) || 0) + 1; cnt.set(v, c); if (c > bc) { bc = c; best = v; } }
+    return best == null ? NAERR() : best;
+  },
+  intercept(ast, state) {
+    const p = pairs(this.val(ast.args[0], state), this.val(ast.args[1], state)); if (p.length < 2) return DIV0();
+    const my = p.reduce((a, q) => a + q[0], 0) / p.length; const mx = p.reduce((a, q) => a + q[1], 0) / p.length;
+    const sxx = p.reduce((a, q) => a + (q[1] - mx) ** 2, 0); if (!sxx) return DIV0();
+    const b = p.reduce((a, q) => a + (q[1] - mx) * (q[0] - my), 0) / sxx; return my - b * mx;
+  },
+  forecast(ast, state) {
+    const x0 = num(plain(this.val(ast.args[0], state))); if (Number.isNaN(x0)) return ERR('PRONOSTICO: valor no numérico');
+    const p = pairs(this.val(ast.args[1], state), this.val(ast.args[2], state)); if (p.length < 2) return DIV0();
+    const my = p.reduce((a, q) => a + q[0], 0) / p.length; const mx = p.reduce((a, q) => a + q[1], 0) / p.length;
+    const sxx = p.reduce((a, q) => a + (q[1] - mx) ** 2, 0); if (!sxx) return DIV0();
+    const b = p.reduce((a, q) => a + (q[1] - mx) * (q[0] - my), 0) / sxx; return my + b * (x0 - mx);
+  },
+});
+void NUMERR;
 const LAZY = { doesNotNeedArgumentsToBeComputed: true };
 const any = (n) => Array.from({ length: n }, () => ({ argumentType: FunctionArgumentType.ANY }));
 OficinaPlugin.implementedFunctions = {
@@ -173,6 +206,12 @@ OficinaPlugin.implementedFunctions = {
   TEXTBEFORE: { method: 'textbefore', ...LAZY, parameters: any(3) },
   TEXTAFTER: { method: 'textafter', ...LAZY, parameters: any(3) },
   IMAGE: { method: 'image', ...LAZY, parameters: any(1), repeatLastArgs: 1 },
+  KURT: { method: 'kurt', ...LAZY, parameters: any(1), repeatLastArgs: 1 },
+  MODE: { method: 'mode', ...LAZY, parameters: any(1), repeatLastArgs: 1 },
+  'MODE.SNGL': { method: 'mode', ...LAZY, parameters: any(1), repeatLastArgs: 1 },
+  INTERCEPT: { method: 'intercept', ...LAZY, parameters: any(2) },
+  FORECAST: { method: 'forecast', ...LAZY, parameters: any(3) },
+  'FORECAST.LINEAR': { method: 'forecast', ...LAZY, parameters: any(3) },
 };
 const names = Object.keys(OficinaPlugin.implementedFunctions);
 HyperFormula.registerFunctionPlugin(OficinaPlugin, { enGB: Object.fromEntries(names.map((n) => [n, n])) });
@@ -181,5 +220,6 @@ HyperFormula.registerFunctionPlugin(OficinaPlugin, { enGB: Object.fromEntries(na
 export const ES_NAMES = {
   VSTACK: 'APILARV', HSTACK: 'APILARH', TAKE: 'TOMAR', DROP: 'EXCLUIR', TOCOL: 'ENCOL', TOROW: 'ENFILA', CHOOSECOLS: 'ELEGIRCOLS', CHOOSEROWS: 'ELEGIRFILAS',
   WRAPROWS: 'AJUSTARFILAS', TEXTBEFORE: 'TEXTOANTES', TEXTAFTER: 'TEXTODESPUES', IMAGE: 'IMAGEN',
+  KURT: 'CURTOSIS', MODE: 'MODA', 'MODE.SNGL': 'MODA.UNO', INTERCEPT: 'INTERSECCION.EJE', FORECAST: 'PRONOSTICO', 'FORECAST.LINEAR': 'PRONOSTICO.LINEAL',
   LAMBDA: 'LAMBDA', LET: 'LET', MAP: 'MAP', REDUCE: 'REDUCE', SCAN: 'SCAN', BYROW: 'BYROW', BYCOL: 'BYCOL', MAKEARRAY: 'MAKEARRAY',
 };

@@ -255,3 +255,28 @@ body[data-theme="dark"] .gallery .gi small { color: #5c5c70; }
 .fx-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 .fx-check { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .fx-note { color: var(--ink-3); font-size: 12px; margin: 4px 0 0; }
+
+/* Imprimir, vista previa de impresión (apps/shared/imprimir.js) */
+.pv-dlg { display: grid; grid-template-columns: 290px 1fr; gap: 18px; align-items: start; }
+.pv-left { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.pv-sheet { width: 280px; min-height: 300px; background: var(--bg-2, #e9e9ee); border-radius: 6px; padding: 10px; display: flex; align-items: center; justify-content: center; }
+.pv-grid { display: grid; gap: 4px; justify-items: center; align-items: center; }
+.pv-page { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); display: block; }
+.pv-nav { display: flex; gap: 8px; align-items: center; }
+.pv-info { font-size: 12px; color: var(--ink-3); }
+.pv-opts .wide { grid-column: 1 / -1; }
+.pv-opts input.bad { outline: 2px solid #c62828; }
+.pv-full { position: fixed; inset: 0; z-index: 900; background: #5b5d66; display: flex; flex-direction: column; }
+.pv-bar { display: flex; gap: 10px; align-items: center; padding: 8px 14px; background: var(--surface, #fff); border-bottom: 1px solid var(--line); }
+.pv-bar .grow { flex: 1; }
+.pv-area { flex: 1; overflow: auto; padding: 24px; }
+.pv-grid.big { gap: 24px; justify-content: center; align-items: start; }
+.pv-grid.big figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pv-grid.big figcaption { color: #fff; font-size: 12px; }
+@media print { .pv-full { display: none !important; } }
+.props-tbl { border-collapse: collapse; width: 100%; }
+.props-tbl th { text-align: left; font-weight: 400; color: var(--ink-3); padding: 5px 18px 5px 0; vertical-align: top; white-space: nowrap; }
+.props-tbl td { padding: 5px 0; word-break: break-all; }
+.cprops { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.cp-row { display: grid; grid-template-columns: 1.2fr 110px 1.4fr 32px; gap: 6px; align-items: center; }
+.cp-row input:not([type=checkbox]), .cp-row select { width: 100%; box-sizing: border-box; }

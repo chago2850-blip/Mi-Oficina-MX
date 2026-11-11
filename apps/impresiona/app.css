@@ -205,3 +205,27 @@ body.render-mode .show-stage.aud { display: block; }
 .thumb.hidden-slide .n::after { content: ' ⊘'; }
 .obj.has-link { cursor: pointer; }
 .otxt .tin p { margin-bottom: var(--para-sp, .25em); }
+/* bucle de la presentación (quiosco) */
+.show-pause { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #000; color: #ccc; font: 16px var(--font); z-index: 5; }
+.show-pause b { font-size: 64px; color: #fff; font-weight: 300; }
+/* presentaciones personalizadas y esquema */
+.cshow { display: grid; grid-template-columns: 1fr 140px; gap: 12px; }
+.cs-rows { max-height: 320px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.cs-row { display: grid; grid-template-columns: 1fr 30px 30px; gap: 4px; align-items: center; }
+.outline-ta { width: 100%; height: 420px; font: 14px/1.6 var(--font); tab-size: 4; resize: vertical; box-sizing: border-box; padding: 10px; }
+.slide .fld { background: none; }
+.m-edit .fld { background: rgba(120, 120, 255, .15); border-radius: 2px; }
+/* imprimir notas, folletos y esquema */
+#printRoot .pdoc { position: relative; background: #fff; color: #111; font: 13px/1.45 Inter, Carlito, sans-serif; padding: 50px 60px; box-sizing: border-box; overflow: hidden; }
+#printRoot .phead { display: flex; justify-content: space-between; color: #666; font-size: 11px; border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-bottom: 18px; }
+#printRoot .pfoot { position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; color: #666; font-size: 11px; }
+#printRoot .pmini { position: relative; overflow: hidden; outline: 1px solid #bbb; }
+#printRoot .pmini > .slide { position: absolute; left: 0; top: 0; }
+#printRoot .pnotes-slide { display: flex; justify-content: center; margin-bottom: 26px; }
+#printRoot .pnotes-text p { margin: 0 0 6px; white-space: pre-wrap; }
+#printRoot .phand { display: grid; gap: 24px 30px; justify-content: center; align-content: start; }
+#printRoot .phand.per3 { justify-content: stretch; }
+#printRoot .plines { display: flex; flex-direction: column; justify-content: space-around; }
+#printRoot .plines i { display: block; border-bottom: 1px solid #bbb; height: 22px; }
+#printRoot h3 { margin: 14px 0 6px; font-size: 15px; }
+#printRoot .pdoc p { margin: 2px 0; }

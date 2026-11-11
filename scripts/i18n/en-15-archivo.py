@@ -1,0 +1,28 @@
+# Fase 5, parte 7 (Escribiente como LibreOffice Writer): Archivo — imprimir, PDF, RTF, EPUB, texto y propiedades
+D = {
+'Imprimir': 'Print', 'Impresora': 'Printer', 'Elegir en el cuadro del sistema…': 'Choose in the system dialog…', 'Copias': 'Copies', 'Intercalar': 'Collate',
+'Intervalo': 'Range', 'Todas las páginas': 'All pages', 'Página actual': 'Current page', 'Páginas por hoja': 'Pages per sheet', 'Escala de grises': 'Grayscale',
+'Doble cara': 'Duplex', 'Una cara': 'One-sided', 'Doble cara, borde largo': 'Two-sided, long edge', 'Doble cara, borde corto': 'Two-sided, short edge',
+'{0} página en total': '{0} page in total', '{0} páginas en total': '{0} pages in total', 'Hoja {0} de {1}': 'Sheet {0} of {1}', 'Intervalo de páginas no válido': 'Invalid page range',
+'{0} página': '{0} page', '{0} páginas': '{0} pages', 'Páginas por fila': 'Pages per row', '{0} por fila': '{0} per row', 'Vista previa de impresión': 'Print preview', 'Cerrar vista previa': 'Close preview',
+'No se pudo preparar la vista previa.': 'The preview could not be prepared.', 'Exportar como PDF…': 'Export as PDF…', 'Exportar directamente como PDF': 'Export directly as PDF',
+'Opciones de PDF': 'PDF options', 'Todo': 'All', 'Exportar los títulos como marcadores': 'Export headings as bookmarks', 'PDF etiquetado (accesible para lectores de pantalla)': 'Tagged PDF (accessible to screen readers)',
+'Incluir las propiedades del documento (título, autor, asunto, palabras clave)': 'Include document properties (title, author, subject, keywords)', 'Abrir en PapelPDF después de exportar': 'Open in PapelPDF after exporting',
+'Vista inicial': 'Initial view', 'Panel': 'Panel', 'Solo la página': 'Page only', 'Marcadores y página': 'Bookmarks and page', 'Miniaturas y página': 'Thumbnails and page', 'Pantalla completa': 'Full screen',
+'Diseño de página': 'Page layout', 'Predeterminado': 'Default', 'Página individual': 'Single page', 'Continuo': 'Continuous', 'Páginas enfrentadas': 'Facing pages', 'Libro (la primera sola)': 'Book (first page alone)',
+'Ajustar la ventana a la página': 'Resize window to initial page', 'Mostrar el título del documento en la ventana': 'Display document title in the window',
+'Marca de agua': 'Watermark', 'Por ejemplo: BORRADOR': 'For example: DRAFT', 'Opacidad': 'Opacity', 'Seguridad': 'Security',
+'Contraseña para abrir': 'Password to open', 'Confirmar contraseña': 'Confirm password', 'Contraseña de permisos': 'Permissions password', 'Permitir imprimir': 'Allow printing',
+'Permitir copiar texto e imágenes': 'Allow copying text and images', 'Permitir modificar': 'Allow changes', 'Cifrado AES de 256 bits. Las contraseñas no se guardan.': '256-bit AES encryption. Passwords are not stored.',
+'Las contraseñas no coinciden': 'The passwords do not match',
+'Propiedades del documento': 'Document properties', 'Propiedades personalizadas': 'Custom properties', 'Estadísticas': 'Statistics', 'Descripción': 'Description', 'Categoría': 'Category', 'Comentarios': 'Comments',
+'Creado': 'Created', 'Número de revisión': 'Revision number', 'Modificado': 'Modified', 'Agregar propiedad': 'Add property', 'Sí o no': 'Yes or no', 'Valor': 'Value', 'Quitar': 'Remove', 'Más propiedades…': 'More properties…',
+'Formato de texto enriquecido (.rtf)': 'Rich Text Format (.rtf)', 'Texto con formato que abre casi cualquier programa, incluso los más antiguos.': 'Formatted text that almost any program can open, even old ones.',
+'Libro electrónico (.epub)': 'E-book (.epub)', 'Para leer en lectores de libros electrónicos, teléfonos y tabletas.': 'For e-book readers, phones and tablets.',
+'Exportar como EPUB': 'Export as EPUB', 'Dividir en capítulos': 'Split into chapters', 'En cada título de nivel 1': 'At each level 1 heading', 'En cada salto de página': 'At each page break', 'Un solo capítulo': 'A single chapter',
+'Agregar una portada con el título y el autor': 'Add a cover with the title and author', 'Español (México)': 'Spanish (Mexico)', 'Inglés': 'English',
+'Texto codificado (.txt)…': 'Text - Choose Encoding (.txt)…', 'Solo el texto, eligiendo la codificación (UTF-8, Windows-1252, UTF-16) y el fin de línea.': 'Text only, choosing the encoding (UTF-8, Windows-1252, UTF-16) and line ending.',
+'Exportar como texto codificado': 'Export as encoded text', 'Codificación': 'Encoding', 'Unicode (UTF-8)': 'Unicode (UTF-8)', 'Unicode (UTF-8 con BOM)': 'Unicode (UTF-8 with BOM)', 'Europa occidental (Windows-1252)': 'Western Europe (Windows-1252)',
+'Unicode (UTF-16)': 'Unicode (UTF-16)', 'Fin de línea': 'Line ending', 'Windows (CR+LF)': 'Windows (CR+LF)', 'Linux y macOS (LF)': 'Linux and macOS (LF)', 'Mac clásico (CR)': 'Classic Mac (CR)',
+}
+RULES = []

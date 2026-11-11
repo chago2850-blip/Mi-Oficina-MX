@@ -262,6 +262,28 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
 // diapositiva; al abrir, solo se usan para las diapositivas que nadie cambió en otro programa.
 const fnv = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16); };
 const slideFiles = (zip) => Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)).sort((a, b) => Number(/(\d+)\.xml/.exec(a)[1]) - Number(/(\d+)\.xml/.exec(b)[1]));
+// presentaciones personalizadas y bucle, como los guarda PowerPoint (p:custShowLst y p:showPr)
+async function nativeShows(zip, pres) {
+  const cs = (pres.customShows || []).filter((c) => c.ids?.length); const ss = pres.showSettings || {};
+  const pf = zip.file('ppt/presentation.xml'); if (!pf) return;
+  let px = await pf.async('string');
+  if (cs.length) {
+    const rids = [...px.matchAll(/<p:sldId\b[^>]*r:id="([^"]+)"/g)].map((m) => m[1]);
+    const xml = `<p:custShowLst>${cs.map((c, k) => `<p:custShow name="${c.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" id="${k}"><p:sldLst>${c.ids.map((id) => rids[pres.slides.findIndex((s) => s.id === id)]).filter(Boolean).map((r) => `<p:sld r:id="${r}"/>`).join('')}</p:sldLst></p:custShow>`).join('')}</p:custShowLst>`;
+    px = px.replace(/<p:custShowLst>[\s\S]*?<\/p:custShowLst>/, '');
+    px = /<p:defaultTextStyle/.test(px) ? px.replace('<p:defaultTextStyle', `${xml}<p:defaultTextStyle`) : px.replace('</p:presentation>', `${xml}</p:presentation>`);
+    zip.file('ppt/presentation.xml', px);
+  }
+  const pp = zip.file('ppt/presProps.xml');
+  if (pp && (ss.loop || ss.manual || (ss.range === 'custom' && ss.custom) || (ss.range === 'from' && ss.from > 0))) {
+    let x = await pp.async('string');
+    const inner = ss.range === 'custom' && cs.findIndex((c) => c.name === ss.custom) >= 0 ? `<p:custShow id="${cs.findIndex((c) => c.name === ss.custom)}"/>` : ss.range === 'from' && ss.from > 0 ? `<p:sldRg st="${ss.from + 1}" end="${pres.slides.length}"/>` : '<p:sldAll/>';
+    const show = `<p:showPr${ss.loop ? ' loop="1"' : ''} showNarration="1"${ss.manual ? ' useTimings="0"' : ''}><p:present/>${inner}</p:showPr>`;
+    x = x.replace(/<p:showPr\b[\s\S]*?(<\/p:showPr>|\/>)/, '');
+    x = /<p:presentationPr\b[^>]*\/>/.test(x) ? x.replace(/<p:presentationPr\b([^>]*?)\s*\/>/, `<p:presentationPr$1>${show}</p:presentationPr>`) : x.replace(/(<p:presentationPr\b[^>]*>)/, `$1${show}`);
+    zip.file('ppt/presProps.xml', x);
+  }
+}
 async function addSuiteMeta(bytes, pres) {
   try {
     const zip = await JSZip.loadAsync(bytes);
@@ -272,6 +294,7 @@ async function addSuiteMeta(bytes, pres) {
     // "Numerar desde" también para PowerPoint
     const pf = zip.file('ppt/presentation.xml');
     if (pf && (pres.firstNum ?? 1) !== 1) { let px = await pf.async('string'); px = px.replace(/\sfirstSlideNum="\d+"/, '').replace(/<p:presentation\b/, `<p:presentation firstSlideNum="${pres.firstNum}"`); zip.file('ppt/presentation.xml', px); }
+    await nativeShows(zip, pres);
     let ct = await zip.file('[Content_Types].xml').async('string');
     if (!/Extension="json"/.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="json" ContentType="application/json"/>');
     zip.file('[Content_Types].xml', ct);

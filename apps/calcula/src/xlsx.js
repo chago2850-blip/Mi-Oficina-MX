@@ -78,6 +78,7 @@ export async function readXlsx(wb, bytes) {
     const v = (ws.views || [])[0];
     if (v && v.state === 'frozen') s.freeze = { rows: v.ySplit || 0, cols: v.xSplit || 0 };
     const tc = ws.properties?.tabColor?.argb; if (tc) { s.x3 ||= {}; s.x3.tabColor = `#${tc.slice(-6)}`; }
+    if (ws.state === 'hidden' || ws.state === 'veryHidden') { s.x3 ||= {}; s.x3.hidden = true; }
     const u = wb.usedRange(s); s.nRows = Math.max(1000, u.r2 + 200); s.nCols = Math.max(52, u.c2 + 20);
     if (meta?.sheets?.[ws.name]) { const ms = meta.sheets[ws.name]; s.charts = ms.charts || []; if (ms.pivot) s.pivot = ms.pivot; if (ms.cf) s.cf = ms.cf; if (ms.x3) s.x3 = { ...s.x3, ...ms.x3 }; }
     // esquema (filas y columnas agrupadas) de Excel
@@ -125,7 +126,7 @@ export async function writeXlsx(wb, props = {}) {
   x.created = new Date();
   const meta = { app: 'Calcula Datos', v: 1, sheets: {} };
   for (const s of wb.sheets) {
-    const ws = x.addWorksheet(s.name, { views: s.freeze.rows || s.freeze.cols ? [{ state: 'frozen', xSplit: s.freeze.cols, ySplit: s.freeze.rows }] : [], ...(s.x3?.tabColor ? { properties: { tabColor: { argb: hexToArgb(s.x3.tabColor) } } } : {}) });
+    const ws = x.addWorksheet(s.name, { views: s.freeze.rows || s.freeze.cols ? [{ state: 'frozen', xSplit: s.freeze.cols, ySplit: s.freeze.rows }] : [], ...(s.x3?.tabColor ? { properties: { tabColor: { argb: hexToArgb(s.x3.tabColor) } } } : {}), ...(s.x3?.hidden ? { state: 'hidden' } : {}) });
     const dims = wb.hf.getSheetDimensions(s.id);
     const used = wb.usedRange(s);
     for (let r = 0; r <= Math.max(dims.height - 1, used.r2); r++) {

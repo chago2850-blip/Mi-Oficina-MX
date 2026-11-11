@@ -160,7 +160,7 @@ export class ShowEngine {
 }
 
 // ---------------------------------------------------------------- presentación en la misma ventana
-export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = false, onRehearsed, recording = false, onSlide }) {
+export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = false, onRehearsed, recording = false, onSlide, loop = false, pauseSec = 0, manual = false, clickBg = true, pen = false, laserOn = false }) {
   const show = h('div', { class: 'show', tabindex: 0 });
   const stageS = h('div', { class: 'show-stage' });
   const cnt = h('span', { class: 'cnt' });
@@ -182,7 +182,7 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = fals
     if (rehearse && st.i !== lastI) { times[lastI] = (times[lastI] || 0) + (Date.now() - tSlide); tSlide = Date.now(); lastI = st.i; }
     if (st.i !== slideSeen) { slideSeen = st.i; onSlide?.(st.i); }
   } });
-  eng.useTimings = !rehearse && !recording && getPres().useTimings !== false;
+  eng.useTimings = !rehearse && !recording && !manual && getPres().useTimings !== false;
   eng.noNarration = recording;
   // con intervalos, al terminar el tiempo se pasa a la siguiente diapositiva (con sus pasos ya incluidos)
   eng.onAuto = () => { if (ended()) return; if (eng.i < getPres().slides.length - 1) eng.mount(eng.i + 1, { dir: 1 }); else next(); };
@@ -196,10 +196,25 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = fals
     else if (/^(https?:|mailto:)/i.test(l)) { if (window.oficina?.openExternal) window.oficina.openExternal(l); else window.open(l, '_blank'); }
   }, true);
   const ended = () => show.classList.contains('ended');
-  const next = () => { if (ended()) { end(); return; } if (!eng.next()) { clearTimeout(eng.autoT); show.classList.add('ended'); stageS.append(h('div', { class: 'show-end' }, t('Fin de la presentación. Haz clic para salir.'))); } };
+  let loopT = 0;
+  const next = () => {
+    if (ended()) { end(); return; }
+    if (show.classList.contains('pausing')) return;
+    if (eng.next()) return;
+    clearTimeout(eng.autoT);
+    // en bucle: pausa (con cuenta atrás) y se vuelve a empezar, como en un quiosco
+    if (loop) {
+      show.classList.add('pausing');
+      const box = h('div', { class: 'show-pause' }, h('b', {}, String(Math.ceil(pauseSec))), h('span', {}, t('La presentación volverá a empezar')));
+      stageS.append(box); let left = pauseSec;
+      const tick = () => { if (!show.isConnected) return; if (left <= 0) { box.remove(); show.classList.remove('pausing'); eng.mount(0, { animate: false }); return; } box.firstChild.textContent = String(Math.ceil(left)); left -= 1; loopT = setTimeout(tick, 1000); };
+      tick(); return;
+    }
+    show.classList.add('ended'); stageS.append(h('div', { class: 'show-end' }, t('Fin de la presentación. Haz clic para salir.')));
+  };
   const prev = () => { if (ended()) { show.classList.remove('ended'); stageS.querySelector('.show-end')?.remove(); return; } eng.prev(); };
   const end = () => {
-    clearTimeout(eng.autoT); clearInterval(rehTick);
+    clearTimeout(eng.autoT); clearInterval(rehTick); clearTimeout(loopT);
     show.querySelectorAll('video, audio').forEach((m) => m.pause());
     eng.narr?.pause(); stopAllCams();
     show.remove(); if (document.fullscreenElement) document.exitFullscreen?.(); removeEventListener('resize', onResize);
@@ -210,7 +225,7 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = fals
   show.append(ctrls);
   const onResize = () => { if (!ended()) eng.mount(eng.i, { animate: false, step: eng.step }); };
   addEventListener('resize', onResize);
-  show.addEventListener('click', () => { if (!eng.pen) next(); });
+  show.addEventListener('click', (e) => { if (eng.pen) return; if (!clickBg && !e.target.closest?.('.show-ctrls')) return; next(); });
   show.addEventListener('contextmenu', (e) => { e.preventDefault(); prev(); });
   show.addEventListener('mousemove', (e) => { show.classList.add('moving'); clearTimeout(show.t); show.t = setTimeout(() => show.classList.remove('moving'), 1800); laser.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`; });
   let typed = '';
@@ -231,6 +246,7 @@ export function runShow({ renderSlide, getPres, from = 0, onEnd, rehearse = fals
   });
   show.focus();
   eng.mount(from, { animate: false });
+  if (pen) eng.setPen(true); if (laserOn) show.classList.add('laser');
   window.__show = { next, prev, end, inkCount: () => eng.inkCount(), engine: eng, times: () => times };
   return eng;
 }

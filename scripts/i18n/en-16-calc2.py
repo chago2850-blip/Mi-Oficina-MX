@@ -1,0 +1,32 @@
+# Calcula Datos, parte 2 (como LibreOffice Calc): ordenar, rellenar, estadísticas, consolidar, duplicados, estilos de celda y hojas
+D = {
+'Ordenar': 'Sort', 'Ordenar…': 'Sort…', 'Criterios de ordenación': 'Sort criteria', 'Criterio {0}': 'Sort key {0}', 'Orden': 'Order', 'Ascendente': 'Ascending', 'Descendente': 'Descending', '(ninguno)': '(none)',
+'El intervalo contiene etiquetas de columna': 'Range contains column labels', 'Orden natural (2 antes de 10, «a2» antes de «a10»)': 'Natural sort (2 before 10, “a2” before “a10”)', 'Incluir los formatos': 'Include formats',
+'De arriba abajo (ordenar filas)': 'Top to bottom (sort rows)', 'De izquierda a derecha (ordenar columnas)': 'Left to right (sort columns)', 'Copiar el resultado en': 'Copy results to', 'Por ejemplo: H1 (vacío: en su lugar)': 'For example: H1 (empty: in place)',
+'Dirección no válida': 'Invalid address', 'Selecciona los datos que quieres ordenar.': 'Select the data you want to sort.',
+'Rellenar': 'Fill', 'Rellenar serie': 'Fill series', 'Serie…': 'Series…', 'Abajo': 'Down', 'Arriba': 'Up', 'Tipo de serie': 'Series type', 'Lineal': 'Linear', 'Crecimiento': 'Growth', 'Autorrelleno': 'AutoFill',
+'Unidad de tiempo': 'Time unit', 'Día': 'Day', 'Día laborable': 'Weekday', 'Mes': 'Month', 'Año': 'Year', 'Valor inicial': 'Start value', 'Valor final': 'End value', 'Incremento': 'Increment', '(opcional)': '(optional)',
+'El valor inicial no es válido.': 'The start value is not valid.', 'Selecciona varias celdas para rellenar.': 'Select several cells to fill.',
+'Números aleatorios': 'Random numbers', 'Números aleatorios…': 'Random numbers…', 'Rellenar con números aleatorios': 'Fill with random numbers', 'Intervalo de celdas': 'Cell range', 'Distribución': 'Distribution', 'Uniforme': 'Uniform', 'Uniforme entera': 'Uniform integer',
+'Mínimo / media / probabilidad': 'Minimum / mean / probability', 'Máximo / desviación / ensayos': 'Maximum / deviation / trials', 'Semilla (opcional)': 'Seed (optional)', 'Vacío: al azar': 'Empty: random', 'Intervalo no válido': 'Invalid range',
+'Estadísticas': 'Statistics', 'Análisis': 'Analysis', 'Estadística descriptiva': 'Descriptive statistics', 'Estadística descriptiva…': 'Descriptive statistics…', 'Correlación': 'Correlation', 'Correlación…': 'Correlation…', 'Covarianza': 'Covariance', 'Covarianza…': 'Covariance…',
+'Media móvil': 'Moving average', 'Media móvil…': 'Moving average…', 'Suavizado exponencial': 'Exponential smoothing', 'Suavizado exponencial…': 'Exponential smoothing…', 'Muestreo': 'Sampling', 'Muestreo…': 'Sampling…', 'Regresión lineal': 'Linear regression', 'Regresión lineal…': 'Linear regression…',
+'Intervalo de entrada': 'Input range', 'Resultados en': 'Results to', 'Agrupado por': 'Grouped by', 'La primera fila (o columna) tiene etiquetas': 'First row (or column) has labels',
+'Intervalo (media móvil)': 'Interval (moving average)', 'Factor de suavizado': 'Smoothing factor', 'Aleatorio': 'Random', 'Periódico': 'Periodic', 'Tamaño de la muestra / período': 'Sample size / period', 'Con reemplazo (muestreo aleatorio)': 'With replacement (random sampling)',
+'Media': 'Mean', 'Error estándar': 'Standard error', 'Moda': 'Mode', 'Mediana': 'Median', 'Primer cuartil': 'First quartile', 'Tercer cuartil': 'Third quartile', 'Varianza': 'Variance', 'Desviación estándar': 'Standard deviation',
+'Curtosis': 'Kurtosis', 'Asimetría': 'Skewness', 'Rango': 'Range', 'Correlaciones': 'Correlations', 'Covarianzas': 'Covariances', 'Media móvil ({0})': 'Moving average ({0})', 'Suavizado ({0})': 'Smoothing ({0})', 'Muestra ({0})': 'Sample ({0})',
+'Pendiente': 'Slope', 'Intersección': 'Intercept', 'Correlación (r)': 'Correlation (r)', 'Error típico de la estimación': 'Standard error of estimate', 'Observaciones': 'Observations',
+'La regresión necesita dos series: la variable independiente (X) y la dependiente (Y).': 'Regression needs two series: the independent variable (X) and the dependent variable (Y).',
+'Consolidar': 'Consolidate', 'Consolidar…': 'Consolidate…', 'Intervalos de origen (uno por línea; por ejemplo: Hoja2!A1:C10)': 'Source ranges (one per line; for example: Sheet2!A1:C10)', 'Copiar los resultados en': 'Copy results to',
+'Usar la primera columna como etiquetas': 'Use first column as labels', 'Usar la primera fila como etiquetas': 'Use first row as labels', 'Intervalo de origen no válido: {0}': 'Invalid source range: {0}',
+'Gestionar duplicados': 'Handle duplicate records', 'Duplicados': 'Duplicates', 'Quitar duplicados…': 'Remove duplicates…', 'Comparar las columnas': 'Compare columns', 'Intervalo: {0}': 'Range: {0}', 'Acción': 'Action',
+'Quitar los duplicados': 'Remove duplicates', 'Resaltar los duplicados': 'Highlight duplicates', 'Resaltar duplicados': 'Highlight duplicates', 'Quitar duplicados': 'Remove duplicates', 'No se encontraron duplicados.': 'No duplicates were found.',
+'{0} filas duplicadas resaltadas': '{0} duplicate rows highlighted', 'Se quitaron {0} filas duplicadas; quedan {1}.': '{0} duplicate rows removed; {1} remain.',
+'Estilos de celda': 'Cell styles', 'Estilo de celda': 'Cell style', 'Predeterminado': 'Default', 'Título 1': 'Heading 1', 'Título 2': 'Heading 2', 'Texto': 'Text', 'Nota': 'Note', 'Resultado': 'Result', 'Nota al pie': 'Footnote',
+'Bueno': 'Good', 'Neutral': 'Neutral', 'Malo': 'Bad', 'Advertencia': 'Warning', 'Error': 'Error', 'Acento': 'Accent', 'Acento 1': 'Accent 1', 'Acento 2': 'Accent 2', 'Acento 3': 'Accent 3', 'Hipervínculo': 'Hyperlink',
+'Cambiar mayúsculas y minúsculas': 'Change case', 'MAYÚSCULAS': 'UPPERCASE', 'minúsculas': 'lowercase', 'Tipo oración': 'Sentence case', 'Tipo Título': 'Capitalize Every Word', 'aLTERNAR mAYÚSCULAS': 'tOGGLE cASE',
+'Mover o copiar hoja': 'Move/Copy Sheet', 'Mover o copiar hoja…': 'Move or copy sheet…', 'Mover o copiar…': 'Move or copy…', 'Mover': 'Move', 'Insertar antes de': 'Insert before', '- mover al final -': '- move to end position -', 'Nombre nuevo': 'New name',
+'Ocultar hoja': 'Hide sheet', 'Mostrar hoja': 'Show sheet', 'Mostrar hoja…': 'Show sheet…', 'Mostrar…': 'Show…', 'Hojas ocultas': 'Hidden sheets', 'No hay hojas ocultas.': 'There are no hidden sheets.', 'Debe quedar al menos una hoja visible.': 'At least one sheet must stay visible.',
+
+}
+RULES = []

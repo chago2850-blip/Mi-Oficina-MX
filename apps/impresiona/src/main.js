@@ -10,6 +10,7 @@ import * as F4 from './fase4.js';
 import * as SZ from './slidesize.js';
 import { readOdp, writeOdp } from './odp.js';
 import * as OB from './objetos.js';
+import * as DS from './diapositivas.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -105,6 +106,7 @@ function renderSlide(s, mode = 'thumb') {
   }
   if (mode === 'edit' && pres.grid?.on) { el.classList.add('show-grid'); el.style.setProperty('--grid', `${pres.grid.size || 20}px`); }
   if (isMaster && mode === 'edit') el.append(h('div', { class: 'master-banner' }, 'Patrón: lo que pongas aquí aparece en todas las diapositivas'));
+  DS.updateFields(el, s);
   return el;
 }
 
@@ -399,6 +401,7 @@ function onKey(e) {
   if (mod && e.key.toLowerCase() === 'd' && selected.size) { e.preventDefault(); duplicateObjects(); return; }
   if (e.key === 'F5') { e.preventDefault(); present(e.shiftKey ? cur : 0); return; }
   if (e.key === 'F4' && selected.size) { e.preventDefault(); OB.posSizeDialog(); return; }
+  if (e.key === 'F3' && e.shiftKey && selected.size) { e.preventDefault(); DS.duplicateDialog(); return; }
   if (mod && e.key.toLowerCase() === 'k' && selected.size) { e.preventDefault(); OB.linkDialog(); return; }
   if (mod && e.shiftKey && e.key.toLowerCase() === 'g') { e.preventDefault(); if (e.altKey) OB.ungroup(); else OB.group(); return; }
   if (mod && (e.key === '+' || e.key === '=') && selected.size) { e.preventDefault(); OB.zStep(e.shiftKey ? 9 : 1); return; }
@@ -687,11 +690,13 @@ function onStageContext(e) {
 function prepareShow() { if (editing) stopEditing(); if (masterMode) toggleMaster(false); }
 // presentación sin las diapositivas ocultas (los índices se traducen de ida y vuelta)
 function showView() { const vis = pres.slides.filter((s) => !s.hidden); return { pres: vis.length === pres.slides.length ? pres : { ...pres, slides: vis }, vis }; }
-function present(from = 0) {
+function present(from = 0, opts = {}) {
   prepareShow();
-  const { pres: P, vis } = showView(); if (!vis.length) { toast('Todas las diapositivas están ocultas.'); return; }
-  let start = vis.indexOf(pres.slides[from]); if (start < 0) start = Math.max(0, vis.findIndex((s) => pres.slides.indexOf(s) > from));
-  runShow({ renderSlide, getPres: () => P, from: start, onEnd: (i) => goto(Math.max(0, pres.slides.indexOf(vis[Math.min(i, vis.length - 1)]))) });
+  const ss = pres.showSettings || {};
+  const vis = DS.showSlides(opts); if (!vis.length) { toast('Todas las diapositivas están ocultas.'); return; }
+  const P = vis.length === pres.slides.length && vis.every((x, k) => x === pres.slides[k]) ? pres : { ...pres, slides: vis };
+  let start = from === 0 && !opts.current ? 0 : vis.indexOf(pres.slides[from]); if (start < 0) start = Math.max(0, vis.findIndex((s) => pres.slides.indexOf(s) > from));
+  runShow({ renderSlide, getPres: () => P, from: start, loop: !!ss.loop, pauseSec: ss.pause ?? 5, manual: !!ss.manual, clickBg: ss.clickBg !== false, pen: !!ss.pen, laserOn: !!ss.laser, onEnd: (i) => goto(Math.max(0, pres.slides.indexOf(vis[Math.min(i, vis.length - 1)]))) });
 }
 async function presenter(from = cur) {
   if (editing) stopEditing();
@@ -704,9 +709,10 @@ async function presenter(from = cur) {
 // ------------------------------------------------------------------ PDF / imprimir
 function buildPrint() {
   const root = $('#printRoot'); root.replaceChildren();
-  for (const s of pres.slides) root.append(h('div', { class: 'ppage', style: { width: `${pres.size.w}px`, height: `${pres.size.h}px` } }, renderSlide(s, 'print')));
+  DS.buildPrintPages(root);
+  const ps = DS.printPageSize();
   let st = $('#pagestyle'); if (!st) { st = h('style', { id: 'pagestyle' }); document.head.append(st); }
-  st.textContent = `@page { size: ${pres.size.w / 96}in ${pres.size.h / 96}in; margin: 0; }`;
+  st.textContent = `@page { size: ${ps.w / 96}in ${ps.h / 96}in; margin: 0; }`;
 }
 
 // ------------------------------------------------------------------ plantillas
@@ -775,7 +781,10 @@ const adapter = {
   snapshot() { return JSON.stringify(pres); },
   async restore(s) { pres = JSON.parse(s); cur = 0; selected.clear(); renderAll(); },
   isPristine() { return !shell.doc.dirty && pres.slides.length === 1 && pres.slides[0].objects.every((o) => !o.html); },
-  pdfOptions() { return { pageSize: { width: pres.size.w / 96, height: pres.size.h / 96 } }; },
+  pdfOptions() { const ps = DS.printPageSize(); return { pageSize: { width: ps.w / 96, height: ps.h / 96 } }; },
+  printChoices: () => DS.printChoices(),
+  setPrintChoice: (n, v) => DS.setPrintChoice(n, v),
+  currentPage: () => ((pres.printOpts?.content || 'slides') === 'slides' || pres.printOpts?.content === 'notes' ? cur + 1 : 1),
   beforePrint() { if (editing) stopEditing(); buildPrint(); },
   afterPrint() { $('#printRoot').replaceChildren(); },
   focus() {},
@@ -811,6 +820,14 @@ async function onCommand(cmd, arg) {
     case 'duplicateSlide': return duplicateSlide();
     case 'deleteSlide': return deleteSlide();
     case 'present': return present(0);
+    case 'customShows': return DS.customShowsDialog();
+    case 'showSettings': return DS.showSettingsDialog();
+    case 'outline': return DS.outlineView();
+    case 'summarySlide': return DS.summarySlide();
+    case 'expandSlide': return DS.expandSlide();
+    case 'insertSlidesFile': return DS.insertFromFileDialog();
+    case 'duplicateObj': return DS.duplicateDialog();
+    case 'field': return DS.insertField(arg || 'date');
     case 'insertVideo': return F3.insertMedia('video');
     case 'insertCamera': return F4.insertCamera();
     case 'cameraOptions': return F4.cameraOptions(selObjs()[0]);
@@ -825,7 +842,7 @@ async function onCommand(cmd, arg) {
     case 'useTimings': return F3.setUseTimings(pres.useTimings === false);
     case 'clearTimings': return F3.clearTimings();
     case 'exportVideo': return F3.exportVideoDialog();
-    case 'presentCurrent': return present(cur);
+    case 'presentCurrent': return present(cur, { current: true });
     case 'textbox': return addTextBox();
     case 'insertImage': return insertImage();
     case 'insertTable': return insertTable();
@@ -955,13 +972,13 @@ const TABS = [
     { label: 'Edición', items: [{ stack: [{ cmd: 'find', label: 'Buscar', icon: 'find', showLabel: true }, { cmd: 'replace', label: 'Reemplazar', icon: 'replace', showLabel: true }] }] },
   ] },
   { id: 'insert', label: 'Insertar', groups: [
-    { label: 'Diapositivas', items: [{ cmd: 'newSlideMenu', label: 'Nueva diapositiva', icon: 'slideAdd', size: 'lg', menu: () => layoutMenu(false) }] },
+    { label: 'Diapositivas', items: [{ cmd: 'newSlideMenu', label: 'Nueva diapositiva', icon: 'slideAdd', size: 'lg', menu: () => layoutMenu(false) }, { stack: [{ cmd: 'insertSlidesFile', label: 'Diapositivas desde archivo…', icon: 'open', showLabel: true }, { cmd: 'summarySlide', label: 'Diapositiva de resumen', icon: 'bullets', showLabel: true }, { cmd: 'expandSlide', label: 'Expandir diapositiva', icon: 'slideDup', showLabel: true }] }] },
     { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
     { label: 'Imágenes', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }] },
     { label: 'Multimedia', items: [{ cmd: 'insertVideo', label: 'Video', icon: 'present', size: 'lg' }, { cmd: 'insertAudio', label: 'Audio', icon: 'notes', size: 'lg' }, { cmd: 'insertCamera', label: 'Cámara en vivo', icon: 'image', size: 'lg' }] },
     { label: 'Ilustraciones', items: [{ cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: shapeMenu }, { cmd: 'chart', label: 'Gráfico', icon: 'chart', size: 'lg' }] },
     { label: 'Encabezado y pie', items: [{ cmd: 'footer', label: 'Pie y número', icon: 'footer', size: 'lg' }] },
-    { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }] },
+    { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }, { cmd: 'fieldMenu', label: 'Campo', icon: 'func', size: 'lg', menu: () => DS.fieldMenu() }] },
     { label: 'Vínculos', items: [{ cmd: 'objLink', label: 'Hipervínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
   ] },
   { id: 'design', label: 'Diseño', groups: [
@@ -980,11 +997,12 @@ const TABS = [
   { id: 'show', label: 'Presentación', groups: [
     { label: 'Iniciar', items: [{ cmd: 'present', label: 'Desde el principio', icon: 'present', size: 'lg', kbd: 'F5' }, { cmd: 'presentCurrent', label: 'Desde la actual', icon: 'presentCur', size: 'lg', kbd: 'Mayús+F5' }, { cmd: 'presenter', label: 'Vista del moderador', icon: 'notes', size: 'lg', kbd: 'Alt+F5' }] },
     { label: 'Grabar', items: [{ cmd: 'recordShow', label: 'Grabar con narración', icon: 'present', size: 'lg' }, { stack: [{ cmd: 'useNarration', label: 'Reproducir narración', icon: 'check', showLabel: true }, { cmd: 'clearNarration', label: 'Borrar narración', icon: 'trash', showLabel: true }] }] },
+    { label: 'Configuración', items: [{ cmd: 'showSettings', label: 'Configurar la presentación', icon: 'pageSetup', size: 'lg' }, { cmd: 'customShows', label: 'Presentación personalizada', icon: 'columns', size: 'lg' }] },
     { label: 'Configurar', items: [{ cmd: 'rehearse', label: 'Ensayar intervalos', icon: 'recover', size: 'lg' }, { stack: [{ cmd: 'useTimings', label: 'Usar intervalos', icon: 'check', showLabel: true }, { cmd: 'clearTimings', label: 'Borrar intervalos', icon: 'trash', showLabel: true }] }] },
     { label: 'Exportar', items: [{ cmd: 'exportImages', label: 'Imágenes PNG', icon: 'image', size: 'lg' }, { cmd: 'exportVideo', label: 'Video', icon: 'present', size: 'lg' }] },
   ] },
   { id: 'view', label: 'Vista', groups: [
-    { label: 'Vistas', items: [{ cmd: 'sorter', label: 'Clasificador', icon: 'columns', size: 'lg' }, { cmd: 'master', label: 'Patrón de diapositivas', icon: 'layout', size: 'lg' }] },
+    { label: 'Vistas', items: [{ cmd: 'sorter', label: 'Clasificador', icon: 'columns', size: 'lg' }, { cmd: 'outline', label: 'Esquema', icon: 'bullets', size: 'lg' }, { cmd: 'master', label: 'Patrón de diapositivas', icon: 'layout', size: 'lg' }] },
     { label: 'Secciones', items: [{ stack: [{ cmd: 'addSection', label: 'Agregar sección', icon: 'plus', showLabel: true }, { cmd: 'renameSection', label: 'Cambiar nombre', icon: 'textbox', showLabel: true }] }] },
     { label: 'Cuadrícula', items: [{ stack: [{ cmd: 'grid', label: 'Mostrar cuadrícula', icon: 'table', showLabel: true }, { cmd: 'snapGrid', label: 'Ajustar a la cuadrícula', icon: 'alignObj', showLabel: true }, { cmd: 'gridOpts', label: 'Opciones…', icon: 'pageSetup', showLabel: true }] }] },
     { label: 'Zoom', items: [{ cmd: 'zoomReset', label: 'Ajustar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomIn', label: 'Acercar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomOut', label: 'Alejar', icon: 'zoomOut', size: 'lg' }] },
@@ -997,7 +1015,7 @@ const TABS = [
   ] },
   { id: 'format', label: 'Formato de forma', contextual: true, groups: [
     { label: 'Estilos', items: [{ cmd: 'fill', label: 'Relleno', icon: 'fill', size: 'lg', color: true, colorValue: '#DC3A63' }, { cmd: 'stroke', label: 'Contorno', icon: 'rect', size: 'lg', color: true, colorValue: '#1D2030' }, { stack: [{ cmd: 'areaDlg', label: 'Área…', icon: 'fill', showLabel: true }, { cmd: 'lineDlg', label: 'Línea…', icon: 'line', showLabel: true }, { cmd: 'textDlg', label: 'Texto…', icon: 'textbox', showLabel: true }] }, { cmd: 'painter', label: 'Clonar formato', icon: 'brush', size: 'lg' }] },
-    { label: 'Organizar', items: [{ cmd: 'front', label: 'Al frente', icon: 'front', size: 'lg', split: () => [{ label: 'Traer al frente', run: () => arrange('front') }, { label: 'Traer adelante', kbd: 'Ctrl++', run: () => OB.zStep(1) }] }, { cmd: 'back', label: 'Al fondo', icon: 'back', size: 'lg', split: () => [{ label: 'Enviar al fondo', run: () => arrange('back') }, { label: 'Enviar atrás', kbd: 'Ctrl+-', run: () => OB.zStep(-1) }] }, { cmd: 'align', label: 'Alinear', icon: 'alignObj', size: 'lg', menu: arrangeMenu }, { stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }, { cmd: 'rotateMenu', label: 'Girar y voltear', icon: 'recover', showLabel: true, menu: rotateMenu }] }, { cmd: 'delete', label: 'Eliminar', icon: 'trash', size: 'lg' }] },
+    { label: 'Organizar', items: [{ cmd: 'front', label: 'Al frente', icon: 'front', size: 'lg', split: () => [{ label: 'Traer al frente', run: () => arrange('front') }, { label: 'Traer adelante', kbd: 'Ctrl++', run: () => OB.zStep(1) }] }, { cmd: 'back', label: 'Al fondo', icon: 'back', size: 'lg', split: () => [{ label: 'Enviar al fondo', run: () => arrange('back') }, { label: 'Enviar atrás', kbd: 'Ctrl+-', run: () => OB.zStep(-1) }] }, { cmd: 'align', label: 'Alinear', icon: 'alignObj', size: 'lg', menu: arrangeMenu }, { stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }, { cmd: 'rotateMenu', label: 'Girar y voltear', icon: 'recover', showLabel: true, menu: rotateMenu }, { cmd: 'duplicateObj', label: 'Duplicar…', icon: 'copy', showLabel: true, kbd: 'Mayús+F3' }] }, { cmd: 'delete', label: 'Eliminar', icon: 'trash', size: 'lg' }] },
     { label: 'Tamaño', items: [{ cmd: 'posSize', label: 'Posición y tamaño…', icon: 'pageSetup', size: 'lg', kbd: 'F4' }] },
     { label: 'Imagen', items: [{ stack: [{ cmd: 'crop', label: 'Recortar…', icon: 'image', showLabel: true }, { cmd: 'imgAdjust', label: 'Ajustes de imagen…', icon: 'brush', showLabel: true }, { cmd: 'origSize', label: 'Tamaño original', icon: 'zoomIn', showLabel: true }] }] },
     { label: 'Vínculo', items: [{ cmd: 'objLink', label: 'Acción al hacer clic…', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
@@ -1009,6 +1027,7 @@ const MODE = new URLSearchParams(location.search);
 if (MODE.get('audience') === '1' || MODE.get('render') === '1') {
   runAudience({ renderSlide, setPres: (p) => { pres = p; }, getPres: () => pres, api, render: MODE.get('render') === '1' });
 } else {
+DS.init({ getPres: () => pres, cur: () => cur, setCur: (i) => { cur = i; }, slide: () => slide(), commit, renderAll, renderSlide, uid, newSlide, stopEditing: () => { if (editing) stopEditing(); }, selObjs: () => selObjs(), select, present, readPptx, readOdp, docName: () => shell.doc?.name || '', docProps: () => shell.docProps() });
 OB.init({ getPres: () => pres, slide: () => slide(), commit, select, selObjs: () => selObjs(), renderAll, cur: () => cur, uid, arrange: (k) => arrange(k, true) });
 F4.init({ getPres: () => pres, slide: () => slide(), commit, select, center, uid, runShow, renderSlide, prepareShow, goto: (i) => goto(Math.min(i, pres.slides.length - 1)) });
 F3.init({ getPres: () => pres, slide: () => slide(), commit, select, center, uid, renderAll, runShow, renderSlide, prepareShow, goto: (i) => goto(Math.min(i, pres.slides.length - 1)), docName: () => shell.doc.name });
@@ -1025,4 +1044,4 @@ makePres('blank'); renderAll();
 shell.start();
 addEventListener('keydown', (e) => { if (e.altKey && e.key === 'F5') { e.preventDefault(); presenter(cur); } });
 }
-window.__impresiona = { get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, F3, F4, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto, OB, selected: () => [...selected] };
+window.__impresiona = { DS, get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, F3, F4, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto, OB, selected: () => [...selected] };

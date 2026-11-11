@@ -54,7 +54,7 @@ async function runQpdf(args, input) {
   return { rc, out, errors };
 }
 
-handle('qpdf', async (_e, opts) => {
+async function qpdf(opts) {
   const bytes = Buffer.from(opts.bytes);
   if (opts.op === 'decrypt') {
     const pw = opts.password ? [`--password=${opts.password}`] : [];
@@ -80,7 +80,8 @@ handle('qpdf', async (_e, opts) => {
     return { bytes: r.out };
   }
   throw new Error('Operación desconocida');
-});
+}
+handle('qpdf', (_e, opts) => qpdf(opts));
 
 // --- Word (.docx) ---
 handle('make-docx', async (_e, { title, pages }) => {
@@ -294,4 +295,5 @@ function openPath(filePath, opts) {
 }
 
 module.exports = {
+  qpdf,
   rebuildMenu: (win) => { win.__menu = buildMenu(win); if (isMac) { if (win.isFocused()) Menu.setApplicationMenu(win.__menu); } else win.setMenu(win.__menu); }, openWindow, openPath, windows };

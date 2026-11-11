@@ -26,7 +26,7 @@ i18n.patchElectron({ Menu, dialog });
 const APPS = {
   escribiente: {
     name: 'Escribiente', color: '#5B48E8', bg: '#F3F1FB',
-    exts: ['docx', 'odt', 'doc', 'txt', 'html', 'htm', 'md'],
+    exts: ['docx', 'odt', 'doc', 'rtf', 'txt', 'html', 'htm', 'md'],
     saveExt: 'docx', saveName: 'Documento de texto',
   },
   calcula: {
@@ -330,10 +330,13 @@ function buildOfficeMenu(win, id) {
       { type: 'separator' },
       { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
       { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('saveAs') },
-      { label: 'Exportar a PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('exportPdf') },
+      { label: 'Exportar como PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('exportPdf') },
+      { label: 'Exportar directamente como PDF', click: () => send('exportPdfDirect') },
+      { type: 'separator' },
+      { label: 'Vista previa de impresión', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('printPreview') },
       { label: 'Imprimir…', accelerator: 'CmdOrCtrl+P', click: () => send('print') },
       { type: 'separator' },
-      { label: 'Propiedades…', click: () => send('properties') },
+      { label: 'Propiedades…', click: () => send('docProperties') },
       { label: 'Opciones…', click: () => send('options') },
       { type: 'separator' },
       { label: 'Mostrar Mi Oficina MX', click: () => showLauncher() },
@@ -520,7 +523,58 @@ ipcMain.handle('of:save', async (e, { bytes, text, path: target, ask, suggestedN
   return { path: out, name: path.basename(out) };
 });
 
-ipcMain.handle('of:export-pdf', async (e, { suggestedName, landscape = false, pageSize = 'Letter', open = false } = {}) => {
+// PDF con las opciones de exportación (como el diálogo «Exportar como PDF» de LibreOffice)
+async function makePdf(sender, { landscape = false, pageSize = 'Letter', pageRanges, tagged, outline } = {}) {
+  const o = { printBackground: true, landscape, pageSize, preferCSSPageSize: true, margins: { marginType: 'none' } };
+  if (pageRanges) o.pageRanges = String(pageRanges);
+  if (tagged || outline) o.generateTaggedPDF = true;
+  if (outline) o.generateDocumentOutline = true;
+  return sender.printToPDF(o);
+}
+async function finishPdf(data, opts = {}) {
+  const { meta, watermark, initialView, layout, displayTitle, fitWindow, password } = opts;
+  if (!meta && !watermark && !initialView && !layout && !displayTitle && !fitWindow && !password?.user && !password?.owner) return data;
+  const { PDFDocument, PDFName, StandardFonts, rgb, degrees } = require('pdf-lib');
+  const doc = await PDFDocument.load(data, { updateMetadata: false });
+  if (meta) {
+    if (meta.title) doc.setTitle(meta.title, { showInWindowTitleBar: !!displayTitle });
+    if (meta.author) doc.setAuthor(meta.author);
+    if (meta.subject) doc.setSubject(meta.subject);
+    if (meta.keywords) doc.setKeywords(String(meta.keywords).split(/[,;]\s*/).filter(Boolean));
+    doc.setCreator(meta.creator || 'Mi Oficina MX'); doc.setProducer('Mi Oficina MX (pdf-lib)');
+    doc.setCreationDate(new Date()); doc.setModificationDate(new Date());
+  }
+  if (watermark?.text) {
+    const font = await doc.embedFont(StandardFonts.HelveticaBold);
+    const hex = (watermark.color || '#c0c0c0').replace('#', '');
+    const col = rgb(parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255);
+    const txt = String(watermark.text).replace(/[^\x20-\x7E -ÿ]/g, '?');
+    for (const pg of doc.getPages()) {
+      const { width, height } = pg.getSize();
+      const ang = Math.atan2(height, width);
+      const diag = Math.hypot(width, height);
+      const size = Math.min(watermark.size || 200, (diag * 0.8) / Math.max(1, font.widthOfTextAtSize(txt, 1)));
+      const tw = font.widthOfTextAtSize(txt, size);
+      const x = width / 2 - (Math.cos(ang) * tw) / 2 + (Math.sin(ang) * size * 0.35);
+      const y = height / 2 - (Math.sin(ang) * tw) / 2 - (Math.cos(ang) * size * 0.35);
+      pg.drawText(txt, { x, y, size, font, color: col, opacity: watermark.opacity ?? 0.35, rotate: degrees((ang * 180) / Math.PI) });
+    }
+  }
+  const cat = doc.catalog;
+  if (initialView) cat.set(PDFName.of('PageMode'), PDFName.of({ outline: 'UseOutlines', thumbs: 'UseThumbs', full: 'FullScreen' }[initialView] || 'UseNone'));
+  if (layout) cat.set(PDFName.of('PageLayout'), PDFName.of({ single: 'SinglePage', continuous: 'OneColumn', facing: 'TwoColumnRight', book: 'TwoColumnLeft' }[layout] || 'OneColumn'));
+  if (fitWindow || displayTitle) {
+    const vp = doc.context.obj({});
+    if (fitWindow) vp.set(PDFName.of('FitWindow'), doc.context.obj(true));
+    if (displayTitle) vp.set(PDFName.of('DisplayDocTitle'), doc.context.obj(true));
+    cat.set(PDFName.of('ViewerPreferences'), vp);
+  }
+  let out = await doc.save();
+  if (password?.user || password?.owner) out = (await papel.qpdf({ op: 'encrypt', bytes: out, user: password.user || '', owner: password.owner || password.user, print: password.print !== false, copy: password.copy !== false, modify: !!password.modify })).bytes;
+  return out;
+}
+
+ipcMain.handle('of:export-pdf', async (e, { suggestedName, open = false, ...opts } = {}) => {
   const w = winOf(e);
   let out;
   if (TEST_DIR) out = path.join(TEST_DIR, suggestedName || 'salida.pdf');
@@ -532,17 +586,23 @@ ipcMain.handle('of:export-pdf', async (e, { suggestedName, landscape = false, pa
     if (r.canceled || !r.filePath) return null;
     out = r.filePath;
   }
-  const data = await e.sender.printToPDF({
-    printBackground: true, landscape, pageSize, preferCSSPageSize: true,
-    margins: { marginType: 'none' },
-  });
+  const data = await finishPdf(await makePdf(e.sender, opts), opts);
   await fs.writeFile(out, data);
   if (open) openApp('papelpdf', out);
   return { path: out, name: path.basename(out) };
 });
+// páginas en PDF para la vista previa de impresión
+ipcMain.handle('of:pdf-bytes', async (e, opts = {}) => new Uint8Array(await makePdf(e.sender, opts)));
+ipcMain.handle('of:printers', async (e) => {
+  try { return (await e.sender.getPrintersAsync()).map((p) => ({ name: p.name, displayName: p.displayName || p.name, isDefault: !!p.isDefault })); } catch { return []; }
+});
 
-ipcMain.handle('of:print', (e) => new Promise((resolve) => {
-  e.sender.print({ printBackground: true }, (ok, reason) => resolve({ ok, reason }));
+ipcMain.handle('of:print', (e, opts = {}) => new Promise((resolve) => {
+  // en pruebas no se imprime: se guardan las opciones que se habrían enviado a la impresora
+  if (TEST_DIR) { fs.writeFile(path.join(TEST_DIR, 'impresion.json'), JSON.stringify(opts)).then(() => resolve({ ok: true, test: true })); return; }
+  const o = { printBackground: true, ...opts };
+  if (!o.deviceName) delete o.deviceName;
+  e.sender.print(o, (ok, reason) => resolve({ ok, reason }));
 }));
 
 ipcMain.handle('of:recents', async (e) => getRecents(winOf(e).__app));
