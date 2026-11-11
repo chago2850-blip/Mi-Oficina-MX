@@ -1,0 +1,28 @@
+# Fase 6 (Calcula Datos como LibreOffice Calc, parte 1)
+D = {
+'Números': 'Numbers', 'Protección': 'Protection', 'Valor lógico': 'Boolean value', 'Definido por el usuario': 'User-defined', 'Hora': 'Time',
+'Decimales': 'Decimal places', 'Ceros a la izquierda': 'Leading zeros', 'Negativos en rojo': 'Negative numbers red',
+'Tipo de letra': 'Font', 'Efectos': 'Font effects', 'Alineación del texto': 'Text alignment', 'Orientación del texto': 'Text orientation', 'Grados': 'Degrees', 'Apilado verticalmente': 'Vertically stacked', 'Rellenado': 'Filled',
+'Ajustar texto automáticamente': 'Wrap text automatically', 'Reducir para ajustar al tamaño de la celda': 'Shrink to fit cell size',
+'Contorno y todas las líneas interiores': 'Outer border and all inner lines', 'Solo líneas interiores': 'Inner lines only', 'Solo inferior': 'Bottom only', 'Personalizado (lados marcados)': 'Custom (checked sides)', 'Lados (para «Personalizado»)': 'Sides (for “Custom”)',
+'Izquierdo': 'Left', 'Derecho': 'Right', 'Fino': 'Thin', 'Medio': 'Medium', 'Grueso': 'Thick', 'Muy fino': 'Hairline',
+'Sin relleno': 'No fill', 'Protegida (bloqueada)': 'Protected (locked)', 'Ocultar fórmula': 'Hide formula',
+'La protección solo se aplica cuando la hoja está protegida (Revisar → Proteger hoja).': 'Protection only applies when the sheet is protected (Review → Protect sheet).',
+'Pegado especial': 'Paste special', 'Pegado especial…': 'Paste special…', 'Pegar solo valores': 'Paste values only', 'Transponer': 'Transpose', 'Todo': 'All', 'Solo valores': 'Values only', 'Solo fórmulas': 'Formulas only', 'Solo formatos': 'Formats only', 'Valores y formatos': 'Values and formats',
+'Operación': 'Operation', 'Sumar': 'Add', 'Restar': 'Subtract', 'Multiplicar': 'Multiply', 'Dividir': 'Divide', 'Omitir celdas vacías': 'Skip empty cells',
+'Primero copia celdas de esta hoja de cálculo (Ctrl+C).': 'First copy cells from this spreadsheet (Ctrl+C).',
+'Texto en columnas': 'Text to columns', 'Texto en columnas…': 'Text to columns…', 'Separado por': 'Separated by', 'Tabulación': 'Tab', 'Coma': 'Comma', 'Espacio': 'Space', 'Otro separador': 'Other separator', 'Unir delimitadores': 'Merge delimiters', 'Las comillas delimitan texto': 'Quotes delimit text', 'Selecciona una columna con texto.': 'Select a column with text.',
+'Insertar celdas': 'Insert cells', 'Insertar celdas…': 'Insert cells…', 'Eliminar celdas': 'Delete cells', 'Eliminar celdas…': 'Delete cells…', 'Selección': 'Selection',
+'Desplazar celdas hacia abajo': 'Shift cells down', 'Desplazar celdas a la derecha': 'Shift cells right', 'Desplazar celdas hacia arriba': 'Shift cells up', 'Desplazar celdas a la izquierda': 'Shift cells left',
+'Insertar filas completas': 'Entire rows', 'Insertar columnas completas': 'Entire columns', 'Eliminar filas completas': 'Delete entire rows', 'Eliminar columnas completas': 'Delete entire columns',
+'Mostrar fórmulas': 'Show formulas', 'Mostrar fórmulas (Ctrl+`)': 'Show formulas (Ctrl+`)', 'Auditoría de fórmulas': 'Formula auditing', 'Rastrear precedentes': 'Trace precedents', 'Rastrear dependientes': 'Trace dependents', 'Quitar flechas': 'Remove arrows',
+'Esta celda no tiene precedentes.': 'This cell has no precedents.', 'Ninguna celda depende de esta.': 'No cells depend on this one.',
+'Color de pestaña': 'Tab color', 'Color de pestaña…': 'Tab color…', 'Sin color': 'No color',
+'Hipervínculo': 'Hyperlink', 'Hipervínculo (Ctrl+K)': 'Hyperlink (Ctrl+K)', 'Dirección (web, correo o celda como #Hoja1!A1)': 'Address (web, email or cell like #Sheet1!A1)', 'Texto que se muestra': 'Text to display', 'Quitar vínculo': 'Remove link', 'Vínculos': 'Links',
+'Subtotales': 'Subtotals', 'Subtotales…': 'Subtotals…', 'Agrupar por': 'Group by', 'Usar función': 'Use function', 'Calcular subtotales para (columnas, p. ej. C,D)': 'Calculate subtotals for (columns, e.g. C,D)', 'Ordenar primero por el grupo': 'Sort by group first',
+'Cuenta (números)': 'Count (numbers)', 'Producto': 'Product', 'Total general': 'Grand total', 'Total': 'Total',
+'Filtro estándar': 'Standard filter', 'Filtro estándar…': 'Standard filter…', 'Campo': 'Field', 'Campo 2': 'Field 2', 'Condición': 'Condition', 'Condición 2': 'Condition 2', 'Valor 2': 'Value 2', 'Y / O': 'And / Or', 'Y': 'And', 'O': 'Or',
+'(sin segunda condición)': '(no second condition)', 'Contiene': 'Contains', 'No contiene': 'Does not contain', 'Comienza por': 'Begins with', 'Termina en': 'Ends with', 'Distinguir mayúsculas y minúsculas': 'Case sensitive', 'Filtrar': 'Filter', 'Quitar filtro': 'Remove filter',
+'Alineación…': 'Alignment…',
+}
+RULES = []

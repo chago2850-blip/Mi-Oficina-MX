@@ -46,15 +46,21 @@ export async function readXlsx(wb, bytes) {
         const fill = cell.fill;
         if (fill && fill.type === 'pattern' && fill.pattern === 'solid') { const bg = colorOf(fill.fgColor); if (bg) st.bg = bg; }
         const al = cell.alignment || {};
-        if (al.horizontal && ['left', 'center', 'right'].includes(al.horizontal)) st.align = al.horizontal;
+        if (al.horizontal && ['left', 'center', 'right', 'justify', 'fill'].includes(al.horizontal)) st.align = al.horizontal;
+        if (al.indent) st.indent = al.indent;
+        if (al.textRotation === 'vertical' || al.textRotation === 255) st.rot = 'v'; else if (al.textRotation) st.rot = al.textRotation > 90 ? 90 - al.textRotation : al.textRotation;
+        if (al.shrinkToFit) st.shrink = true;
         if (al.vertical && ['top', 'middle', 'bottom'].includes(al.vertical)) st.valign = al.vertical;
         if (al.wrapText) st.wrap = true;
         if (fmt) st.fmt = fmt;
         const bd = cell.border || {};
         const b = {};
-        for (const side of ['top', 'bottom', 'left', 'right']) if (bd[side]?.style) b[side[0]] = colorOf(bd[side].color) || '#000000';
+        const BS = { thin: '', medium: ' medium', thick: ' thick', dashed: ' dashed', mediumDashed: ' dashed', dotted: ' dotted', hair: ' hair', double: ' double', dashDot: ' dashed', mediumDashDot: ' dashed', dashDotDot: ' dotted', slantDashDot: ' dashed', mediumDashDotDot: ' dashed' };
+        for (const side of ['top', 'bottom', 'left', 'right']) if (bd[side]?.style) b[side[0]] = `${colorOf(bd[side].color) || '#000000'}${BS[bd[side].style] ?? ''}`;
         if (Object.keys(b).length) st.border = b;
         if (cell.protection && cell.protection.locked === false) st.unlocked = true;
+        if (cell.protection?.hidden) st.hidef = true;
+        if (cell.hyperlink || cell.value?.hyperlink) { s.x3 ||= {}; s.x3.links = { ...(s.x3.links || {}), [`${r},${c}`]: cell.hyperlink || cell.value.hyperlink }; }
         if (Object.keys(st).length) s.styles.set(`${r},${c}`, Object.freeze(st));
         if (cell.note) { const t = typeof cell.note === 'string' ? cell.note : (cell.note.texts || []).map((x) => x.text).join(''); if (t) s.notes.set(`${r},${c}`, t); }
       });
@@ -71,6 +77,7 @@ export async function readXlsx(wb, bytes) {
     // inmovilizar
     const v = (ws.views || [])[0];
     if (v && v.state === 'frozen') s.freeze = { rows: v.ySplit || 0, cols: v.xSplit || 0 };
+    const tc = ws.properties?.tabColor?.argb; if (tc) { s.x3 ||= {}; s.x3.tabColor = `#${tc.slice(-6)}`; }
     const u = wb.usedRange(s); s.nRows = Math.max(1000, u.r2 + 200); s.nCols = Math.max(52, u.c2 + 20);
     if (meta?.sheets?.[ws.name]) { const ms = meta.sheets[ws.name]; s.charts = ms.charts || []; if (ms.pivot) s.pivot = ms.pivot; if (ms.cf) s.cf = ms.cf; if (ms.x3) s.x3 = { ...s.x3, ...ms.x3 }; }
     // esquema (filas y columnas agrupadas) de Excel
@@ -118,7 +125,7 @@ export async function writeXlsx(wb, props = {}) {
   x.created = new Date();
   const meta = { app: 'Calcula Datos', v: 1, sheets: {} };
   for (const s of wb.sheets) {
-    const ws = x.addWorksheet(s.name, { views: s.freeze.rows || s.freeze.cols ? [{ state: 'frozen', xSplit: s.freeze.cols, ySplit: s.freeze.rows }] : [] });
+    const ws = x.addWorksheet(s.name, { views: s.freeze.rows || s.freeze.cols ? [{ state: 'frozen', xSplit: s.freeze.cols, ySplit: s.freeze.rows }] : [], ...(s.x3?.tabColor ? { properties: { tabColor: { argb: hexToArgb(s.x3.tabColor) } } } : {}) });
     const dims = wb.hf.getSheetDimensions(s.id);
     const used = wb.usedRange(s);
     for (let r = 0; r <= Math.max(dims.height - 1, used.r2); r++) {
@@ -128,11 +135,13 @@ export async function writeXlsx(wb, props = {}) {
         if (raw == null && !st) continue;
         const cell = ws.getCell(r + 1, c + 1);
         const note = s.notes.get(`${r},${c}`); if (note) cell.note = note;
-        if (st?.unlocked) cell.protection = { locked: false };
+        if (st?.unlocked || st?.hidef) cell.protection = { locked: !st.unlocked, hidden: !!st.hidef };
         if (typeof raw === 'string' && raw.startsWith('=')) {
           const res = wb.value(r, c, s);
           cell.value = { formula: raw.slice(1), result: wb.isError(res) ? { error: errorEnglish(res) } : (res ?? undefined) };
         } else if (raw != null) cell.value = raw;
+        const link = s.x3?.links?.[`${r},${c}`];
+        if (link && !(typeof raw === 'string' && raw.startsWith('='))) cell.value = { text: String(wb.display(r, c, s).text ?? raw ?? link), hyperlink: link };
         if (st) {
           const font = {};
           if (st.b) font.bold = true; if (st.i) font.italic = true; if (st.u) font.underline = true; if (st.s) font.strike = true;
@@ -141,11 +150,12 @@ export async function writeXlsx(wb, props = {}) {
           if (st.bg) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(st.bg) } };
           const al = {};
           if (st.align) al.horizontal = st.align; if (st.valign) al.vertical = st.valign; if (st.wrap) al.wrapText = true;
+          if (st.indent) al.indent = st.indent; if (st.shrink) al.shrinkToFit = true; if (st.rot) al.textRotation = st.rot === 'v' ? 'vertical' : Number(st.rot) < 0 ? 90 - Number(st.rot) : Number(st.rot);
           if (Object.keys(al).length) cell.alignment = al;
           if (st.fmt) cell.numFmt = st.fmt;
           if (st.border) {
             const b = {};
-            for (const [k, side] of [['t', 'top'], ['b', 'bottom'], ['l', 'left'], ['r', 'right']]) if (st.border[k]) b[side] = { style: 'thin', color: { argb: hexToArgb(st.border[k]) } };
+            for (const [k, side] of [['t', 'top'], ['b', 'bottom'], ['l', 'left'], ['r', 'right']]) if (st.border[k]) { const [col, sty = 'thin'] = String(st.border[k]).split(' '); b[side] = { style: sty, color: { argb: hexToArgb(col) } }; }
             cell.border = b;
           }
         }
@@ -164,7 +174,7 @@ export async function writeXlsx(wb, props = {}) {
     if (s.protected) await ws.protect(s.protected.password || '', { selectLockedCells: true, selectUnlockedCells: true });
     for (const g of s.x3?.rowGroups || []) for (let r = g.a; r <= g.b; r++) ws.getRow(r + 1).outlineLevel = 1;
     for (const g of s.x3?.colGroups || []) for (let c = g.a; c <= g.b; c++) ws.getColumn(c + 1).outlineLevel = 1;
-    const x3 = s.x3 && (s.x3.sparklines.length || s.x3.slicers.length || s.x3.rowGroups.length || s.x3.colGroups.length || s.x3.solver) ? s.x3 : undefined;
+    const x3 = s.x3 && (s.x3.sparklines.length || s.x3.slicers.length || s.x3.rowGroups.length || s.x3.colGroups.length || s.x3.solver || s.x3.stdFilter) ? s.x3 : undefined;
     if (s.charts.length || s.pivot || x3 || s.cf.some((r) => r.type === 'dup' || r.type === 'text')) meta.sheets[s.name] = { charts: s.charts, pivot: s.pivot || undefined, cf: s.cf, x3 };
   }
   for (const n of wb.names || []) { try { x.definedNames.add(n.expr.replace(/^=/, ''), n.name); } catch { /* */ } }

@@ -64,6 +64,8 @@ const P = {
   merge: 'M3 5h18v14H3z M8 12H3 M21 12h-5 M8 9l3 3-3 3 M16 9l-3 3 3 3',
   wrap: 'M4 6h16 M4 12h13a3 3 0 010 6h-4 M15 16l-2 2 2 2 M4 18h5',
   borders: 'M3 3h18v18H3z M3 12h18 M12 3v18',
+  tracePre: 'M4 6h5v4H4z M15 14h5v4h-5z M9 8l7 7 M16 11v4h-4',
+  traceDep: 'M4 6h5v4H4z M15 14h5v4h-5z M9 8l7 7 M5 12v-2 M13 15h3v-3',
   splitCell: 'M3 5h18v14H3z M12 5v14 M5 12h4 M7 10l-2 2 2 2 M19 12h-4 M17 10l2 2-2 2',
   distCols: 'M3 5h18v14H3z M9 5v14 M15 5v14 M5 12h2 M17 12h2',
   distRows: 'M3 3h18v18H3z M3 9h18 M3 15h18 M12 5v2 M12 17v2',

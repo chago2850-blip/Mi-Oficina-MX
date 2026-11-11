@@ -172,7 +172,15 @@ export class Grid {
       const st = s.style(r, c); if (!st?.border) continue;
       const rc = this.cellRect(r, c); const b = st.border;
       ctx.lineWidth = 1;
-      const line = (x1, y1, x2, y2, col) => { ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+      // cada lado: "#color" o "#color estilo" (thin, medium, thick, dashed, dotted, double, hair)
+      const line = (x1, y1, x2, y2, spec) => {
+        const [col, sty = 'thin'] = String(spec).split(' ');
+        ctx.strokeStyle = col; ctx.lineWidth = sty === 'thick' ? 3 : sty === 'medium' ? 2 : 1;
+        ctx.setLineDash(sty === 'dashed' ? [4, 2] : sty === 'dotted' || sty === 'hair' ? [1, 2] : []);
+        const draw = (o) => { ctx.beginPath(); if (y1 === y2) { ctx.moveTo(x1, y1 + o); ctx.lineTo(x2, y2 + o); } else { ctx.moveTo(x1 + o, y1); ctx.lineTo(x2 + o, y2); } ctx.stroke(); };
+        if (sty === 'double') { draw(-1); draw(1); } else draw(0);
+        ctx.setLineDash([]); ctx.lineWidth = 1;
+      };
       const X = Math.round(rc.x) + 0.5, Y = Math.round(rc.y) + 0.5, X2 = Math.round(rc.x + rc.w) + 0.5, Y2 = Math.round(rc.y + rc.h) + 0.5;
       if (b.t) line(X, Y, X2, Y, b.t); if (b.b) line(X, Y2, X2, Y2, b.b); if (b.l) line(X, Y, X, Y2, b.l); if (b.r) line(X2, Y, X2, Y2, b.r);
     }
@@ -209,9 +217,17 @@ export class Grid {
   drawText(d, st, rect, r, c, cMax) {
     const ctx = this.ctx, s = this.s;
     ctx.font = this.font(st);
-    ctx.fillStyle = d.error ? '#C62828' : (d.color || st?.color || '#111');
-    const pad = 4;
-    const align = st?.align || d.align || 'left';
+    const link = this.linkAt?.(r, c);
+    ctx.fillStyle = d.error ? '#C62828' : (d.color || st?.color || (link ? '#1565C0' : '#111'));
+    if (link && !st?.u) st = { ...(st || {}), u: true };
+    // texto girado (grados) o apilado en vertical (rot = 'v')
+    if (st?.rot) return this.drawRotated(d, st, rect);
+    // reducir para ajustar al tamaño de la celda
+    if (st?.shrink && !st.wrap) { const tw0 = ctx.measureText(d.text).width; if (tw0 > rect.w - 8) { const k = Math.max(0.3, (rect.w - 8) / tw0); st = { ...st, size: (st.size || 11) * k }; ctx.font = this.font(st); } }
+    const pad = 4 + (st?.indent ? st.indent * 9 : 0);
+    let align = st?.align || d.align || 'left';
+    if (align === 'justify') align = 'left';
+    if (align === 'fill') { const one = ctx.measureText(d.text).width || 1; d = { ...d, text: d.text.repeat(Math.max(1, Math.floor((rect.w - 8) / one))) }; align = 'left'; }
     const valign = st?.valign || 'bottom';
     let clipX = rect.x, clipW = rect.w;
     const lines = st?.wrap ? this.wrapLines(d.text, rect.w - pad * 2) : [d.text];
@@ -237,6 +253,24 @@ export class Grid {
         ctx.fillRect(x, st?.u ? y + lh * 0.38 : y, w, 1);
       }
     });
+    ctx.restore();
+  }
+  drawRotated(d, st, rect) {
+    const ctx = this.ctx; const lh = ((st.size || 11) * 4) / 3 * 1.2;
+    ctx.save(); ctx.beginPath(); ctx.rect(rect.x + 1, rect.y, rect.w - 1, rect.h); ctx.clip();
+    const align = st.align || d.align || 'left'; const valign = st.valign || 'bottom';
+    if (st.rot === 'v') {
+      const chars = [...String(d.text)]; const total = chars.length * lh;
+      const x = align === 'center' ? rect.x + rect.w / 2 : align === 'right' ? rect.x + rect.w - 4 - lh / 2 : rect.x + 4 + lh / 2;
+      let y = valign === 'top' ? rect.y + 2 + lh / 2 : valign === 'middle' ? rect.y + rect.h / 2 - total / 2 + lh / 2 : rect.y + rect.h - total + lh / 2 - 2;
+      ctx.textAlign = 'center'; for (const ch of chars) { ctx.fillText(ch, x, y); y += lh; } ctx.textAlign = 'left';
+    } else {
+      const a = (Number(st.rot) * Math.PI) / 180; const w = ctx.measureText(d.text).width;
+      const bw = Math.abs(w * Math.cos(a)) + Math.abs(lh * Math.sin(a)); const bh = Math.abs(w * Math.sin(a)) + Math.abs(lh * Math.cos(a));
+      const cx = align === 'center' ? rect.x + rect.w / 2 : align === 'right' ? rect.x + rect.w - 4 - bw / 2 : rect.x + 4 + bw / 2;
+      const cy = valign === 'top' ? rect.y + 2 + bh / 2 : valign === 'middle' ? rect.y + rect.h / 2 : rect.y + rect.h - 2 - bh / 2;
+      ctx.translate(cx, cy); ctx.rotate(-a); ctx.textAlign = 'center'; ctx.fillText(d.text, 0, 0); ctx.textAlign = 'left';
+    }
     ctx.restore();
   }
   wrapLines(text, maxW) {

@@ -11,6 +11,7 @@ import * as F3 from './fase3.js';
 import * as Q from './query.js';
 import { readOds, writeOds } from './ods.js';
 import { injectVba } from './xlsx.js';
+import * as CE from './celdas.js';
 
 const wb = new Workbook();
 let shell, grid, nameBox, fxInput, tabsBar, statusInfo, zoom;
@@ -77,7 +78,7 @@ function refresh() {
   if (!grid) return;
   const g = sel(), { r, c } = grid.sel;
   nameBox.value = document.activeElement === nameBox ? nameBox.value : (g.r1 === g.r2 && g.c1 === g.c2 ? addr(r, c) : (g.r1 === 0 && g.r2 >= wb.sheet.nRows - 1 ? `${colName(g.c1)}:${colName(g.c2)}` : g.c1 === 0 && g.c2 >= wb.sheet.nCols - 1 ? `${g.r1 + 1}:${g.r2 + 1}` : rangeStr(g)));
-  if (!grid.editing) fxInput.value = wb.editText(r, c);
+  if (!grid.editing) fxInput.value = wb.sheet.protected && wb.sheet.style(r, c)?.hidef ? '' : wb.editText(r, c);
   // lector de pantalla: celda activa y su contenido
   if (document.activeElement === grid.canvas) { const key = `${wb.active}:${r}:${c}`; const txt = wb.display(r, c); if (key !== refresh.last || txt !== refresh.lastTxt) { refresh.last = key; refresh.lastTxt = txt; announce(`${addr(r, c)}${txt !== '' ? `, ${txt}` : ''}${wb.editText(r, c).startsWith('=') ? `, ${t('fórmula')} ${wb.editText(r, c)}` : ''}`); } }
   // estado de la cinta
@@ -102,12 +103,12 @@ function refresh() {
 
 // ------------------------------------------------------------------ hojas
 function renderTabs() {
-  const key = wb.sheets.map((s) => s.name).join('|') + wb.active;
+  const key = wb.sheets.map((s) => `${s.name}${s.x3?.tabColor || ''}`).join('|') + wb.active;
   if (tabsBar.dataset.key === key) return;
   tabsBar.dataset.key = key;
   tabsBar.replaceChildren(h('button', { class: 'tabadd', title: 'Hoja nueva (Mayús+F11)', html: icon('plus', 16), onclick: () => newSheet() }));
   wb.sheets.forEach((s, i) => {
-    const t = h('button', { class: `stab${i === wb.active ? ' on' : ''}`, onclick: () => switchSheet(i), ondblclick: () => renameSheet(i), oncontextmenu: (e) => { e.preventDefault(); switchSheet(i); dropdown(t, [{ label: 'Insertar hoja', icon: 'sheetAdd', run: newSheet }, { label: 'Cambiar nombre', icon: 'textbox', run: () => renameSheet(i) }, { label: 'Duplicar', icon: 'copy', run: () => duplicateSheet(i) }, '-', { label: 'Eliminar', icon: 'trash', run: () => deleteSheet(i) }]); } }, s.name);
+    const t = h('button', { class: `stab${i === wb.active ? ' on' : ''}`, style: s.x3?.tabColor ? `--tabc:${s.x3.tabColor}` : null, onclick: () => switchSheet(i), ondblclick: () => renameSheet(i), oncontextmenu: (e) => { e.preventDefault(); switchSheet(i); dropdown(t, [{ label: 'Insertar hoja', icon: 'sheetAdd', run: newSheet }, { label: 'Cambiar nombre', icon: 'textbox', run: () => renameSheet(i) }, { label: 'Duplicar', icon: 'copy', run: () => duplicateSheet(i) }, { label: 'Color de pestaña…', icon: 'fill', run: () => setTimeout(() => CE.tabColorPicker(t, i), 0) }, '-', { label: 'Eliminar', icon: 'trash', run: () => deleteSheet(i) }]); } }, s.name);
     tabsBar.append(t);
   });
 }
@@ -294,7 +295,8 @@ async function insertFunction() {
   if (res && chosen) { grid.select(grid.sel.r, grid.sel.c); grid.startEdit(`=${chosen.es}()`); grid.editor.setSelectionRange(grid.editor.value.length - 1, grid.editor.value.length - 1); }
 }
 
-async function formatCells() {
+async function formatCells(tab = 0) { return CE.formatCellsDialog(tab); }
+async function formatCellsOld() {
   const st = curStyle();
   const fmtSel = h('select', { name: 'fmt' }, ...FORMATS.map(([k, n]) => h('option', { value: k, selected: k === (st.fmt || 'General') ? true : null }, n)), h('option', { value: 'custom', selected: !FORMATS.some((f) => f[0] === (st.fmt || 'General')) ? true : null }, 'Personalizado…'));
   const custom = h('input', { name: 'custom', value: st.fmt || 'General' });
@@ -633,6 +635,21 @@ async function onCommand(cmd, arg) {
       return styleSel({ fmt: changeDecimals(curStyle().fmt, cmd === 'decInc' ? 1 : -1, typeof sample === 'number' ? sample : null) });
     }
     case 'formatCells': return formatCells();
+    case 'pasteSpecial': return CE.pasteSpecial();
+    case 'pasteValues': return CE.doPasteSpecial({ what: 'values' });
+    case 'pasteTranspose': return CE.doPasteSpecial({ what: 'all', transpose: true });
+    case 'textToColumns': return CE.textToColumns();
+    case 'insertCells': return CE.insertCellsDialog();
+    case 'deleteCells': return CE.deleteCellsDialog();
+    case 'showFormulas': return CE.toggleFormulas();
+    case 'hyperlink': return CE.linkDialog();
+    case 'tracePre': return CE.trace('pre');
+    case 'traceDep': return CE.trace('dep');
+    case 'clearArrows': return CE.clearArrows();
+    case 'subtotals': return CE.subtotalsDialog();
+    case 'stdFilter': return CE.standardFilter();
+    case 'borderStyle': return formatCells(3);
+    case 'alignDialog': return formatCells(2);
     case 'clearFormat': return clearFormats();
     case 'clearAll': return clearAll();
     case 'clearContent': return clearContents();
@@ -741,13 +758,13 @@ const freezeMenu = () => [
 const sumMenu = () => [['SUM', 'Suma'], ['AVERAGE', 'Promedio'], ['COUNT', 'Contar números'], ['MAX', 'Máximo'], ['MIN', 'Mínimo']].map(([f, l]) => ({ label: l, run: () => autoSum(f) })).concat(['-', { label: 'Más funciones…', run: insertFunction }]);
 const chartMenu = () => CHART_TYPES.map(([k, l]) => ({ label: l, icon: { pie: 'chartPie', line: 'chartLine', area: 'chartLine' }[k] || 'chart', run: () => insertChart(k) }));
 const clearMenu = () => [{ label: 'Borrar todo', icon: 'trash', run: clearAll }, { label: 'Borrar formatos', icon: 'clear', run: clearFormats }, { label: 'Borrar contenido', icon: 'close', run: clearContents }];
-const insMenu = () => [{ label: 'Insertar filas', icon: 'rowAdd', run: () => insertRows(true) }, { label: 'Insertar columnas', icon: 'colAdd', run: () => insertCols(true) }, { label: 'Insertar hoja', icon: 'sheetAdd', run: newSheet }];
-const delMenu = () => [{ label: 'Eliminar filas', icon: 'rowDel', run: deleteRows }, { label: 'Eliminar columnas', icon: 'colDel', run: deleteCols }, { label: 'Eliminar hoja', icon: 'trash', run: () => deleteSheet(wb.active) }];
+const insMenu = () => [{ label: 'Insertar celdas…', icon: 'rowAdd', kbd: 'Ctrl++', run: () => CE.insertCellsDialog() }, { label: 'Insertar filas', icon: 'rowAdd', run: () => insertRows(true) }, { label: 'Insertar columnas', icon: 'colAdd', run: () => insertCols(true) }, { label: 'Insertar hoja', icon: 'sheetAdd', run: newSheet }];
+const delMenu = () => [{ label: 'Eliminar celdas…', icon: 'rowDel', kbd: 'Ctrl+-', run: () => CE.deleteCellsDialog() }, { label: 'Eliminar filas', icon: 'rowDel', run: deleteRows }, { label: 'Eliminar columnas', icon: 'colDel', run: deleteCols }, { label: 'Eliminar hoja', icon: 'trash', run: () => deleteSheet(wb.active) }];
 const fmtMenu = () => [{ label: 'Autoajustar ancho de columna', icon: 'columns', run: () => grid.autofit(grid.sel.c) }, { label: 'Ancho de columna…', icon: 'columns', run: async () => { const v = await form('Ancho de columna', [{ name: 'w', label: 'Ancho (px)', type: 'number', value: wb.sheet.cw(grid.sel.c), min: 8, max: 800 }]); if (v) { const g = sel(); act('Ancho', () => { for (let c = g.c1; c <= Math.min(g.c2, g.c1 + 200); c++) wb.sheet.colW.set(c, v.w); }, { hf: false }); } } }, { label: 'Alto de fila…', icon: 'lineSpacing', run: async () => { const v = await form('Alto de fila', [{ name: 'h', label: 'Alto (px)', type: 'number', value: wb.sheet.rh(grid.sel.r), min: 10, max: 400 }]); if (v) { const g = clampToUsed(sel()); act('Alto', () => { for (let r = g.r1; r <= g.r2; r++) wb.sheet.rowH.set(r, v.h); }, { hf: false }); } } }, '-', { label: 'Cambiar nombre de hoja…', icon: 'textbox', run: () => renameSheet(wb.active) }, { label: 'Formato de celdas…', icon: 'brush', kbd: 'Ctrl+1', run: formatCells }];
 
 const TABS = [
   { id: 'home', label: 'Inicio', groups: [
-    { label: 'Portapapeles', items: [{ cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg' }, { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut' }, { cmd: 'copy', label: 'Copiar', icon: 'copy' }, { cmd: 'clearFormat', label: 'Borrar formato', icon: 'clear' }] }] },
+    { label: 'Portapapeles', items: [{ cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg', split: () => [{ label: 'Pegar', run: () => onCommand('paste') }, { label: 'Pegar solo valores', run: () => onCommand('pasteValues') }, { label: 'Transponer', run: () => onCommand('pasteTranspose') }, '-', { label: 'Pegado especial…', kbd: 'Ctrl+Mayús+V', run: () => onCommand('pasteSpecial') }] }, { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut' }, { cmd: 'copy', label: 'Copiar', icon: 'copy' }, { cmd: 'clearFormat', label: 'Borrar formato', icon: 'clear' }] }] },
     { label: 'Fuente', items: [{ stack: [
       { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS, width: '130px' } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '56px' } }, { cmd: 'grow', label: 'Aumentar', icon: 'grow' }, { cmd: 'shrink', label: 'Reducir', icon: 'shrink' }] },
       { row: [{ cmd: 'bold', label: 'Negrita', icon: 'bold', kbd: 'Ctrl+B' }, { cmd: 'italic', label: 'Cursiva', icon: 'italic', kbd: 'Ctrl+I' }, { cmd: 'underline', label: 'Subrayado', icon: 'underline', kbd: 'Ctrl+U' }, { cmd: 'strike', label: 'Tachado', icon: 'strike' }, { cmd: 'borders', label: 'Bordes', icon: 'borders', menu: borderMenu }, { cmd: 'fill', label: 'Color de relleno', icon: 'fill', color: true, colorValue: '#FFF59D' }, { cmd: 'color', label: 'Color de fuente', icon: 'textColor', color: true, colorValue: '#C62828', colorOpts: { allowNone: false } }] },
@@ -755,7 +772,7 @@ const TABS = [
     { label: 'Alineación', items: [{ stack: [
       { row: [{ cmd: 'vTop', label: 'Arriba', icon: 'alignObj' }, { cmd: 'vMiddle', label: 'Centro vertical', icon: 'alignCenter' }, { cmd: 'vBottom', label: 'Abajo', icon: 'footer' }, { cmd: 'wrap', label: 'Ajustar texto', icon: 'wrap', showLabel: true }] },
       { row: [{ cmd: 'alignLeft', label: 'Izquierda', icon: 'alignLeft' }, { cmd: 'alignCenter', label: 'Centrar', icon: 'alignCenter' }, { cmd: 'alignRight', label: 'Derecha', icon: 'alignRight' }, { cmd: 'merge', label: 'Combinar y centrar', icon: 'merge', showLabel: true }] },
-    ] }] },
+    ] }, { cmd: 'alignDialog', label: 'Alineación…', icon: 'dialogLauncher' }] },
     { label: 'Número', items: [{ stack: [
       { row: [{ cmd: 'numFmt', label: 'Formato de número', select: { options: [...FORMATS.map(([k, n]) => [k, n]), ['custom', 'Más formatos…']], width: '170px' } }] },
       { row: [{ cmd: 'currency', label: 'Moneda', icon: 'currency' }, { cmd: 'percent', label: 'Porcentaje', icon: 'percent' }, { cmd: 'thousands', label: 'Separador de miles', icon: 'hr' }, { cmd: 'decInc', label: 'Aumentar decimales', icon: 'decInc' }, { cmd: 'decDec', label: 'Disminuir decimales', icon: 'decDec' }] },
@@ -770,6 +787,7 @@ const TABS = [
     { label: 'Minigráficos', items: [{ stack: [{ cmd: 'sparkline', label: 'Línea', icon: 'chartLine', showLabel: true }, { cmd: 'sparklineCol', label: 'Columna', icon: 'chart', showLabel: true }, { cmd: 'sparklineWin', label: 'Ganancia o pérdida', icon: 'decDec', showLabel: true }] }] },
     { label: 'Filtros', items: [{ cmd: 'slicer', label: 'Segmentación de datos', icon: 'filter', size: 'lg' }] },
     { label: 'Funciones', items: [{ cmd: 'insertFunction', label: 'Función', icon: 'func', size: 'lg' }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
+    { label: 'Vínculos', items: [{ cmd: 'hyperlink', label: 'Hipervínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
     { label: 'Hojas', items: [{ cmd: 'newSheet', label: 'Hoja nueva', icon: 'sheetAdd', size: 'lg' }] },
   ] },
   { id: 'page', label: 'Disposición de página', groups: [
@@ -778,11 +796,12 @@ const TABS = [
   { id: 'formulas', label: 'Fórmulas', groups: [
     { label: 'Biblioteca de funciones', items: [{ cmd: 'insertFunction', label: 'Insertar función', icon: 'func', size: 'lg' }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
     { label: 'Nombres definidos', items: [{ cmd: 'defineName', label: 'Definir nombre', icon: 'textbox', size: 'lg' }, { cmd: 'nameManager', label: 'Administrador de nombres', icon: 'layout', size: 'lg' }] },
+    { label: 'Auditoría de fórmulas', items: [{ stack: [{ cmd: 'tracePre', label: 'Rastrear precedentes', icon: 'tracePre', showLabel: true }, { cmd: 'traceDep', label: 'Rastrear dependientes', icon: 'traceDep', showLabel: true }, { cmd: 'clearArrows', label: 'Quitar flechas', icon: 'close', showLabel: true }] }, { cmd: 'showFormulas', label: 'Mostrar fórmulas', icon: 'func', size: 'lg', kbd: 'Ctrl+`' }] },
   ] },
   { id: 'data', label: 'Datos', groups: [
     { label: 'Obtener y transformar', items: [{ cmd: 'getData', label: 'Obtener datos', icon: 'open', size: 'lg', menu: () => [{ label: 'Desde texto/CSV…', run: () => onCommand('getDataCsv') }, { label: 'Desde un libro de Excel…', run: () => onCommand('getDataXlsx') }, { label: 'Desde JSON…', run: () => onCommand('getDataJson') }, '-', { label: 'Desde tabla o rango', run: () => onCommand('getDataRange') }] }, { cmd: 'refreshAll', label: 'Actualizar todo', icon: 'recover', size: 'lg' }, { cmd: 'queries', label: 'Consultas y conexiones', icon: 'layout', size: 'lg' }] },
-    { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }] },
-    { label: 'Herramientas de datos', items: [{ cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
+    { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }, { cmd: 'stdFilter', label: 'Filtro estándar…', icon: 'filter', size: 'lg' }] },
+    { label: 'Herramientas de datos', items: [{ cmd: 'textToColumns', label: 'Texto en columnas…', icon: 'columns', size: 'lg' }, { cmd: 'subtotals', label: 'Subtotales…', icon: 'sum', size: 'lg' }, { cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
     { label: 'Previsión', items: [{ cmd: 'whatIf', label: 'Análisis de hipótesis', icon: 'func', size: 'lg', menu: () => [{ label: 'Buscar objetivo…', run: () => onCommand('goalSeek') }, { label: 'Solver…', run: () => onCommand('solver') }] }] },
     { label: 'Esquema', items: [{ stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }] }, { stack: [{ cmd: 'hideDetail', label: 'Ocultar detalle', icon: 'minus', showLabel: true }, { cmd: 'showDetail', label: 'Mostrar detalle', icon: 'plus', showLabel: true }] }] },
     { label: 'Exportar', items: [{ cmd: 'exportCsv', label: 'Guardar CSV', icon: 'words', size: 'lg' }, { cmd: 'exportOds', label: 'Guardar ODS', icon: 'sheet', size: 'lg' }] },
@@ -803,6 +822,7 @@ buildWorkspace(shell.workspace);
 F.initFeatures({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g) });
 F3.init({ wb, grid, shell, act, refresh, applyFilter, mountCharts, refreshCharts });
 Q.init({ wb, grid, shell, act, refresh, switchSheet, refreshCharts });
+CE.init({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g), curStyle: () => curStyle(), FONTS, renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 { const pc = grid.positionCharts.bind(grid); grid.positionCharts = () => { pc(); F3.positionSlicers(); }; }
 statusInfo = h('span', { class: 'selstats' });
 zoom = shell.zoomControl({ value: 100, min: 50, max: 250, onChange: (v) => { grid.zoom = v / 100; grid.updateSpacer(); grid.syncScroll(); grid.draw(); } });
@@ -810,6 +830,11 @@ shell.status.append(h('span', {}, 'Listo'), h('div', { class: 'grow' }), statusI
 addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key === '1') { e.preventDefault(); formatCells(); }
+  if (mod && e.shiftKey && (e.key === 'V' || e.key === 'v') && document.activeElement === grid.canvas) { e.preventDefault(); CE.pasteSpecial(); }
+  if (mod && !e.shiftKey && (e.key === 'k' || e.key === 'K') && document.activeElement === grid.canvas) { e.preventDefault(); CE.linkDialog(); }
+  if (mod && (e.key === '`' || e.code === 'Backquote')) { e.preventDefault(); CE.toggleFormulas(); }
+  if (mod && (e.key === '+' || (e.shiftKey && e.key === '=')) && document.activeElement === grid.canvas) { e.preventDefault(); CE.insertCellsDialog(); }
+  if (mod && e.key === '-' && document.activeElement === grid.canvas) { e.preventDefault(); CE.deleteCellsDialog(); }
   if (mod && e.shiftKey && (e.key === 'L' || e.key === 'l')) { e.preventDefault(); toggleFilter(); }
   if (e.shiftKey && e.key === 'F3') { e.preventDefault(); insertFunction(); }
   if (e.shiftKey && e.key === 'F11') { e.preventDefault(); newSheet(); }
@@ -822,4 +847,4 @@ shell.start();
 // Al cambiar el idioma, las fórmulas y errores se vuelven a mostrar en el idioma nuevo
 onLang(() => { grid.invalidate(); grid.draw(); refresh(); });
 
-window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q };
+window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q, CE };

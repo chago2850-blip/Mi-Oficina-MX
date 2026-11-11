@@ -134,6 +134,7 @@ export class Workbook {
   }
   isError(v) { return v && typeof v === 'object' && 'type' in v && 'value' in v; }
   display(r, c, s = this.sheet) {
+    if (this.showFormulas) { const raw = this.raw(r, c, s); if (typeof raw === 'string' && raw.startsWith('=')) return { text: toSpanish(raw), align: 'left' }; }
     const v = this.value(r, c, s);
     const st = s.style(r, c);
     if (this.isError(v)) return { text: errorText(v), align: 'center', error: true };
