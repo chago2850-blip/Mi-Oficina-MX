@@ -309,9 +309,15 @@ function selectNode(n) { C.editor.focus({ preventScroll: true }); const r = docu
 let sideMode = 'comments';
 export function openSide(mode) { sideMode = mode || sideMode; sidePanel.hidden = false; renderSide(); layoutPanels(); }
 export function toggleSide(mode) { if (!sidePanel.hidden && sideMode === mode) { sidePanel.hidden = true; layoutPanels(); return; } openSide(mode); }
+export function refreshStylesPane() { if (sidePanel && !sidePanel.hidden && sideMode === 'styles') renderSideSoon(); }
 const renderSideSoon = () => { clearTimeout(renderSideSoon.t); renderSideSoon.t = setTimeout(renderSide, 300); };
 export function renderSide() {
   if (!sidePanel || sidePanel.hidden) return;
+  if (sideMode === 'styles' && C.renderStylesPane) {
+    const head = h('div', { class: 'sp-tabs' }, h('button', { class: 'on' }, t('Estilos')), h('button', { class: 'rb sm', title: 'Cerrar', html: icon('close', 16), onclick: () => { sidePanel.hidden = true; layoutPanels(); } }));
+    sidePanel.replaceChildren(head, C.renderStylesPane());
+    return;
+  }
   const tabs = h('div', { class: 'sp-tabs' },
     h('button', { class: sideMode === 'comments' ? 'on' : '', onclick: () => openSide('comments') }, `Comentarios (${C.state.comments.length})`),
     h('button', { class: sideMode === 'changes' ? 'on' : '', onclick: () => openSide('changes') }, `Cambios (${revisions().length})`),

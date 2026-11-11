@@ -5,3 +5,4 @@ apps/*/bundle.js
 test/out/
 .DS_Store
 build/dict/*.bdic
+test/tmp/

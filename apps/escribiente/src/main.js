@@ -7,6 +7,7 @@ import { readCoreProps } from '../../shared/coreprops.js';
 import * as F from './features.js';
 import * as F3 from './fase3.js';
 import * as FX from './formato.js';
+import * as ES from './estilos.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
 const CM = 37.7953; // px por cm
@@ -59,7 +60,7 @@ function buildWorkspace(ws) {
   scroller.append(ruler, pagesEl);
   ws.append(scroller, h('div', { id: 'printRoot' }));
 
-  editor.addEventListener('input', () => { shell.markDirty(); schedulePaginate(); updateCounts(); });
+  editor.addEventListener('input', (e) => { if (e.inputType === 'insertParagraph') ES.onNewParagraph(); shell.markDirty(); schedulePaginate(); updateCounts(); });
   editor.addEventListener('keydown', onEditorKey);
   editor.addEventListener('paste', onPaste);
   editor.addEventListener('click', (e) => {
@@ -75,7 +76,7 @@ function buildWorkspace(ws) {
       placeCaretAtEnd();
     }
   });
-  document.addEventListener('selectionchange', () => { if (editor.contains(document.getSelection().anchorNode)) { saveSelection(); reflectState(); } });
+  document.addEventListener('selectionchange', () => { if (editor.contains(document.getSelection().anchorNode)) { saveSelection(); reflectState(); F.refreshStylesPane(); } });
   scroller.addEventListener('scroll', () => { updateStatusPage(); positionImgBox(); });
   new ResizeObserver(() => schedulePaginate()).observe(editor);
   imgBox.addEventListener('mousedown', startImgResize);
@@ -114,17 +115,49 @@ function selectedBlocks() {
   if (!out.length) { const b = currentBlock(); if (b) out.push(b); }
   return out;
 }
-const exec = (cmd, val = null) => { restoreSelection(); document.execCommand(cmd, false, val); saveSelection(); shell.markDirty(); schedulePaginate(); reflectState(); };
+const exec = (cmd, val = null) => { restoreSelection(); if (/List$/.test(cmd)) listCmd(cmd); else { document.execCommand(cmd, false, val); if (/dent$/.test(cmd)) fixLists(); } saveSelection(); shell.markDirty(); schedulePaginate(); reflectState(); };
+// listas: Chromium mueve el cursor al principio; se deja donde estaba
+function listCmd(cmd) {
+  const s = getSelection(); const r0 = s.rangeCount ? s.getRangeAt(0) : null;
+  // posición como número de caracteres desde el principio del párrafo (Chromium rehace los nodos de texto)
+  const blk = r0 && (r0.startContainer.nodeType === 3 ? r0.startContainer.parentElement : r0.startContainer).closest('p,h1,h2,h3,h4,h5,h6,li,blockquote,div');
+  let off = -1;
+  if (blk && r0.collapsed && editor.contains(blk)) { const pr = document.createRange(); pr.selectNodeContents(blk); pr.setEnd(r0.startContainer, r0.startOffset); off = pr.toString().length; }
+  document.execCommand(cmd); fixLists();
+  if (off < 0) return;
+  const s2 = getSelection(); const n = s2.anchorNode; const li = n && (n.nodeType === 3 ? n.parentElement : n).closest('li,p,h1,h2,h3,h4,h5,h6,blockquote,div');
+  if (!li || !editor.contains(li)) return;
+  const tw = document.createTreeWalker(li, NodeFilter.SHOW_TEXT, { acceptNode: (x) => (x.parentElement.closest('ol,ul') !== li.closest('ol,ul') && li.tagName === 'LI' ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+  let left = off; let tn;
+  while ((tn = tw.nextNode())) { if (left <= tn.length) { const r = document.createRange(); r.setStart(tn, left); r.collapse(true); s2.removeAllRanges(); s2.addRange(r); return; } left -= tn.length; }
+}
+// Chromium deja la lista dentro del párrafo (<p><ol>…</ol></p>): se saca la lista y se conserva el texto de alrededor
+function fixLists() {
+  const sel = getSelection(); const r0 = sel.rangeCount ? sel.getRangeAt(0) : null;
+  const keep = r0 && { sc: r0.startContainer, so: r0.startOffset, ec: r0.endContainer, eo: r0.endOffset }; // nodos, no un rango vivo (se movería al mover la lista)
+  for (const l of [...editor.querySelectorAll('p > ol, p > ul, h1 > ol, h1 > ul, h2 > ol, h2 > ul, h3 > ol, h3 > ul, h4 > ol, h4 > ul, h5 > ol, h5 > ul, h6 > ol, h6 > ul, blockquote > ol, blockquote > ul')]) {
+    const p = l.parentElement; if (!p || p === editor) continue;
+    const after = p.cloneNode(false); let n = l.nextSibling; while (n) { const nx = n.nextSibling; after.append(n); n = nx; }
+    p.after(l); l.after(after);
+    const empty = (x) => !x.textContent.trim() && !x.querySelector('img,span.eq,sup');
+    if (empty(after)) after.remove(); if (empty(p)) p.remove();
+  }
+  // elementos de lista dentro de otro elemento (al quitar sangría): pasan detrás
+  for (const li of [...editor.querySelectorAll('li > li')]) { const par = li.parentElement; let n = li; const move = []; while (n) { move.push(n); n = n.nextSibling; } par.after(...move); }
+  if (keep && editor.contains(keep.sc) && editor.contains(keep.ec)) { try { const r = document.createRange(); r.setStart(keep.sc, keep.so); r.setEnd(keep.ec, keep.eo); sel.removeAllRanges(); sel.addRange(r); } catch { /* */ } }
+}
 
 // Aplica un estilo de texto (tamaño, fuente) a la selección mediante <span style>
 // Aplica varias propiedades CSS a la selección (cadena vacía = quitar la propiedad)
-function applySpanStyles(styles, { hidden } = {}) {
+function applySpanStyles(styles, { hidden, attrs } = {}) {
   restoreSelection();
   const s = document.getSelection();
   if (!s.rangeCount) return;
   const setOn = (span) => {
     for (const [k, v] of Object.entries(styles)) { if (v === '' || v == null) span.style[k] = ''; else span.style[k] = v; }
     if (hidden != null) span.classList.toggle('hidden-text', !!hidden);
+    for (const [k, v] of Object.entries(attrs || {})) { if (v == null) span.removeAttribute(k); else span.setAttribute(k, v); span.querySelectorAll(`[${k}]`).forEach((d) => d.removeAttribute(k)); }
+    if (!span.getAttribute('style')) span.removeAttribute('style');
     // los descendientes con el mismo estilo directo dejan de pisarlo
     span.querySelectorAll('span').forEach((d) => { for (const k of Object.keys(styles)) d.style[k] = ''; if (hidden != null) d.classList.remove('hidden-text'); if (!d.getAttribute('style')) d.removeAttribute('style'); });
   };
@@ -236,6 +269,7 @@ function onEditorKey(e) {
     else if (k === 'd' && !e.shiftKey) { e.preventDefault(); saveSelection(); FX.fontDialog(); }
     else if (k === 'f10') { e.preventDefault(); onCommand('marks'); }
   }
+  if (mod && e.key === 'F11') { e.preventDefault(); onCommand('stylesPane'); }
   if (e.shiftKey && !mod && e.key === 'F3') { e.preventDefault(); saveSelection(); const sel = document.getSelection().toString(); FX.changeCase(sel === sel.toLocaleUpperCase('es') ? 'lower' : sel === sel.toLocaleLowerCase('es') ? 'title' : 'upper'); }
   if (mod && e.altKey && /^[1-3]$/.test(e.key)) { e.preventDefault(); setBlockStyle(`h${e.key}`); }
   if (mod && e.altKey && e.key === '0') { e.preventDefault(); setBlockStyle('p'); }
@@ -477,7 +511,8 @@ function reflectState() {
     else if (b.classList.contains('title')) kind = 'title';
     else if (b.classList.contains('subtitle')) kind = 'subtitle';
   }
-  $$('.stylegal .gi').forEach((g) => g.classList.toggle('on', g.dataset.style === kind));
+  const sid = b?.dataset?.style && state.styles?.[b.dataset.style] ? b.dataset.style : null;
+  $$('.stylegal .gi').forEach((g) => g.classList.toggle('on', sid ? g.dataset.sid === sid : (g.dataset.style === kind && !g.dataset.sid)));
   const inTable = !!(b && b.closest('table'));
   r.setContextual('table', inTable);
   r.setContextual('picture', !!selImg);
@@ -799,15 +834,16 @@ function buildPrint() {
 
 // ------------------------------------------------------------------ adaptador del archivo
 function snapshotSettings() {
-  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor, defTab: state.defTab || null };
+  return { page: { ...state.page }, header: state.header, footer: state.footer, pageNumbers: state.pageNumbers, comments: state.comments, footnotes: state.footnotes, endnotes: state.endnotes, sources: state.sources, track: state.track, watermark: state.watermark, pageColor: state.pageColor, defTab: state.defTab || null, styles: state.styles || {}, chapnum: state.chapnum || null };
 }
 function setContent(html, settings) {
   editor.innerHTML = html || '<p><br></p>';
   if (settings) {
     if (settings.page) Object.assign(state.page, settings.page);
-    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor', 'defTab'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
+    ['header', 'footer', 'pageNumbers', 'comments', 'footnotes', 'endnotes', 'sources', 'track', 'watermark', 'pageColor', 'defTab', 'styles', 'chapnum'].forEach((k) => { if (settings[k] !== undefined) state[k] = settings[k]; });
     editor.classList.toggle('tracking', !!state.track);
   }
+  ES.render();
   selectImage(null);
   editor.querySelectorAll('img').forEach((img) => img.addEventListener('load', schedulePaginate, { once: true }));
   schedulePaginate(); updateCounts();
@@ -832,7 +868,7 @@ const adapter = {
   async newDoc(tplId) {
     const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0];
     state.page = { size: 'carta', w: 816, h: 1056, mt: 2.5 * CM, mb: 2.5 * CM, ml: 3 * CM, mr: 3 * CM, landscape: false, gap: 24 };
-    state.header = ''; state.footer = ''; state.defTab = null; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
+    state.header = ''; state.footer = ''; state.defTab = null; state.styles = {}; state.chapnum = null; state.pageNumbers = tplId === 'reporte' ? 'footer-center' : 'none';
     Object.assign(state, { comments: [], footnotes: {}, endnotes: {}, sources: [], track: false, watermark: null, pageColor: null, merge: null });
     editor.classList.remove('tracking');
     setContent(localizeHtml(t.html()));
@@ -841,17 +877,18 @@ const adapter = {
     if (first && t.blank) { const r = document.createRange(); r.setStart(first, 0); r.collapse(true); document.getSelection().removeAllRanges(); document.getSelection().addRange(r); }
   },
   async load(f) {
+    state.styles = {}; state.chapnum = null; // estilos del documento anterior
     const text = () => new TextDecoder('utf-8').decode(f.bytes);
     if (f.ext === 'docx') {
       const r = await docxToHtml(f.bytes);
-      state.header = r.header || ''; state.footer = r.footer || ''; state.pageNumbers = 'none'; state.defTab = r.defTab || null;
+      state.header = r.header || ''; state.footer = r.footer || ''; state.pageNumbers = 'none'; state.defTab = r.defTab || null; state.styles = r.styles || {}; state.chapnum = r.chapnum || null;
       Object.assign(state, { comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { warnings: r.warnings, props: await readCoreProps(f.bytes) };
     }
     if (f.ext === 'odt') {
       const r = await odtToHtml(f.bytes);
-      Object.assign(state, { defTab: r.defTab || null, header: r.header || '', footer: r.footer || '', pageNumbers: 'none', comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
+      Object.assign(state, { styles: r.styles || {}, chapnum: r.chapnum || null, defTab: r.defTab || null, header: r.header || '', footer: r.footer || '', pageNumbers: 'none', comments: r.comments || [], footnotes: r.footnotes || {}, endnotes: r.endnotes || {}, sources: r.sources || [], track: false, watermark: null, pageColor: null, merge: null });
       setContent(r.html, r.page ? { page: { ...state.page, ...r.page, size: matchSize(r.page) } } : null);
       return { props: r.props };
     }
@@ -931,6 +968,9 @@ async function onCommand(cmd, arg) {
     case 'paraDialog': return FX.paragraphDialog();
     case 'paraBorders': return FX.paragraphDialog('borders');
     case 'tabs': return F.tabsDialog();
+    case 'stylesPane': return F.toggleSide('styles');
+    case 'newStyle': return ES.newFromSelection();
+    case 'chapters': return;
     case 'changeCase': return;
     case 'marks': { const on = FX.toggleMarks(); shell.ribbon.setOn('marks', on); return; }
     case 'fontName': return applyFontFamily(arg);
@@ -1023,19 +1063,29 @@ async function onCommand(cmd, arg) {
 }
 
 // ------------------------------------------------------------------ cinta
-function styleGallery() {
-  const g = h('div', { class: 'gallery stylegal' });
+const GAL_ID = { p: 'Normal', title: 'Title', subtitle: 'Subtitle', h1: 'Heading1', h2: 'Heading2', h3: 'Heading3', h4: 'Heading4', blockquote: 'Quote' };
+let galleryEl = null;
+function fillGallery() {
+  const g = galleryEl; if (!g) return;
   const prev = {
     p: 'font-size:13px', title: 'font-size:19px;font-weight:300', subtitle: 'font-size:13px;color:#6B6F80', h1: 'font-size:15px;font-weight:600;color:#2F2496',
     h2: 'font-size:14px;font-weight:600;color:#3D30B5', h3: 'font-size:13px;font-weight:600;color:#3D30B5', h4: 'font-size:12.5px;font-weight:600;font-style:italic;color:#3D30B5', blockquote: 'font-size:12.5px;font-style:italic;color:#555',
   };
-  BLOCK_STYLES.forEach(([k, name]) => {
-    const b = h('button', { class: 'gi', 'data-style': k, title: name, html: `<b style="${prev[k]}">AaBbCc</b><small>${name}</small>` });
+  const items = BLOCK_STYLES.map(([k, name]) => ({ k, name, sid: null, css: prev[k] }));
+  // estilos propios del documento después de los predeterminados
+  for (const st of Object.values(state.styles || {})) if (st.kind === 'p' && !Object.values(GAL_ID).includes(st.id)) { const c = ES.effectiveCss(st.id); items.push({ k: 'p', name: st.name, sid: st.id, css: ['font-family', 'font-weight', 'font-style', 'color'].filter((x) => c[x]).map((x) => `${x}:${c[x]}`).join(';') + ';font-size:13px' }); }
+  g.replaceChildren(...items.map((it) => {
+    const b = h('button', { class: 'gi', 'data-style': it.k, ...(it.sid ? { 'data-sid': it.sid } : {}), title: it.name, html: `<b style="${it.css}">AaBbCc</b><small>${esc(it.name)}</small>` });
     b.addEventListener('mousedown', (e) => e.preventDefault());
-    b.addEventListener('click', () => setBlockStyle(k));
-    g.append(b);
-  });
-  return g;
+    b.addEventListener('click', () => ES.applyPara(it.sid || GAL_ID[it.k]));
+    b.addEventListener('contextmenu', (e) => { e.preventDefault(); dropdown(b, [{ label: 'Aplicar', run: () => ES.applyPara(it.sid || GAL_ID[it.k]) }, { label: 'Modificar…', run: () => ES.modifyStyle(it.sid || GAL_ID[it.k]) }, { label: 'Actualizar con la selección', run: () => ES.updateFromSelection(it.sid || GAL_ID[it.k]) }]); });
+    return b;
+  }));
+}
+function styleGallery() {
+  galleryEl = h('div', { class: 'gallery stylegal' });
+  fillGallery();
+  return galleryEl;
 }
 const lineMenu = () => ['1.0', '1.15', '1.5', '2.0', '2.5', '3.0'].map((v) => ({ label: v, run: () => setLineHeight(v) }));
 const marginMenu = () => MARGIN_PRESETS.map(([l, m]) => ({ label: l, run: () => setPage({ mt: m.mt * CM, mb: m.mb * CM, ml: m.ml * CM, mr: m.mr * CM }) })).concat(['-', { label: 'Márgenes personalizados…', run: pageSetup }]);
@@ -1064,11 +1114,11 @@ const TABS = [
       ] },
       { label: 'Párrafo', items: [
         { stack: [
-          { row: [{ cmd: 'insertUnorderedList', label: 'Viñetas', icon: 'bullets' }, { cmd: 'insertOrderedList', label: 'Numeración', icon: 'numbers' }, { cmd: 'outdent', label: 'Disminuir sangría', icon: 'outdent' }, { cmd: 'indent', label: 'Aumentar sangría', icon: 'indent' }] },
+          { row: [{ cmd: 'insertUnorderedList', label: 'Viñetas', icon: 'bullets', split: () => ES.bulletMenu() }, { cmd: 'insertOrderedList', label: 'Numeración', icon: 'numbers', split: () => ES.numberingMenu() }, { cmd: 'outdent', label: 'Disminuir sangría', icon: 'outdent' }, { cmd: 'indent', label: 'Aumentar sangría', icon: 'indent' }] },
           { row: [{ cmd: 'justifyLeft', label: 'Alinear a la izquierda', icon: 'alignLeft', kbd: 'Ctrl+L' }, { cmd: 'justifyCenter', label: 'Centrar', icon: 'alignCenter', kbd: 'Ctrl+E' }, { cmd: 'justifyRight', label: 'Alinear a la derecha', icon: 'alignRight', kbd: 'Ctrl+R' }, { cmd: 'justifyFull', label: 'Justificar', icon: 'justify', kbd: 'Ctrl+J' }, { cmd: 'lineSpacing', label: 'Interlineado', icon: 'lineSpacing', menu: lineMenu }, { cmd: 'paraBorders', label: 'Bordes y sombreado', icon: 'paraBorder' }, { cmd: 'marks', label: 'Marcas de formato (Ctrl+F10)', icon: 'pilcrow' }, { cmd: 'tabs', label: 'Tabulaciones…', icon: 'tabs' }, { cmd: 'paraDialog', label: 'Párrafo…', icon: 'dialogLauncher' }] },
         ] },
       ] },
-      { label: 'Estilos', items: [{ render: styleGallery }] },
+      { label: 'Estilos', items: [{ render: styleGallery }, { stack: [{ cmd: 'stylesPane', label: 'Panel de estilos (Ctrl+F11)', icon: 'styles' }, { cmd: 'newStyle', label: 'Nuevo estilo a partir de la selección…', icon: 'plus' }, { cmd: 'chapters', label: 'Numeración de capítulos', icon: 'chapters', menu: () => ES.chapterMenu() }] }] },
       { label: 'Edición', items: [{ stack: [{ cmd: 'find', label: 'Buscar', icon: 'find', showLabel: true, kbd: 'Ctrl+F' }, { cmd: 'replace', label: 'Reemplazar', icon: 'replace', showLabel: true, kbd: 'Ctrl+H' }, { cmd: 'selectAll', label: 'Seleccionar', icon: 'check', showLabel: true }] }] },
     ],
   },
@@ -1174,9 +1224,11 @@ shell.ribbon.onBeforeSelect = saveSelection;
 shell.ribbon.onRender = () => setTimeout(reflectState, 0);
 buildWorkspace(shell.workspace);
 F.initFeatures({
+  renderStylesPane: () => ES.renderPane(),
   editor, state, shell, scroller, ruler, pagesEl, schedulePaginate, paginate, insertHTMLAtCursor, restoreSelection, saveSelection, selectedBlocks, currentBlock, applySpanStyle,
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
+ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
 FX.init({ editor, selectedBlocks, restoreSelection, saveSelection, markDirty: () => shell.markDirty(), schedulePaginate, reflectState, FONTS, applySpanStyles, exec });
 F3.init({ editor, state, shell, insertHTMLAtCursor, restoreSelection, saveSelection, schedulePaginate, paginate, setContent: (html, s) => setContent(html, s), zoomWidth: () => onCommand('zoomWidth'), setZoom: (v) => zoom.set(v) });
 adapter.onPrefs = (p) => { editor.spellcheck = p.spellcheck !== false; };
@@ -1195,4 +1247,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, saveSelection, insertCite: (s) => F3.insertCitation(s) };
+window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, saveSelection, insertCite: (s) => F3.insertCitation(s) };

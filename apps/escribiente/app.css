@@ -224,3 +224,23 @@ body[data-theme="dark"] .sb-track.on { background: #4A2026; color: #FFC9CF; }
 .tb-right { display: flex; flex-direction: column; gap: 10px; }
 .tb-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .tb-def { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+/* panel de estilos */
+.st-pane { display: flex; flex-direction: column; gap: 8px; padding: 8px; height: calc(100% - 44px); box-sizing: border-box; }
+.st-kinds { display: flex; gap: 4px; }
+.st-kinds button { flex: 1; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px; cursor: pointer; font: inherit; font-size: 12.5px; color: var(--ink-2); }
+.st-kinds button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.st-filter { width: 100%; box-sizing: border-box; }
+.st-list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 4px; background: #fff; }
+.st-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 8px; border-radius: 5px; cursor: pointer; color: #222; }
+.st-item:hover { background: #F2F1FB; }
+.st-item.on { background: #E6E3FC; outline: 1px solid var(--accent); }
+.st-item.used .st-prev::after { content: " ●"; color: var(--accent); font-size: 8px; vertical-align: middle; }
+.st-prev { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-prev.st-h1, .st-prev.st-h2, .st-prev.st-h3 { font-weight: 600; color: #2F2496; }
+.st-prev.st-title { font-weight: 300; }
+.st-prev.st-blockquote { font-style: italic; color: #555; }
+.st-more { border: 0; background: none; cursor: pointer; color: #888; font-size: 16px; line-height: 1; padding: 0 4px; border-radius: 4px; }
+.st-more:hover { background: #E2E0F2; color: #222; }
+.st-actions { display: flex; flex-direction: column; gap: 4px; }
+.st-actions .btn { width: 100%; font-size: 12.5px; }

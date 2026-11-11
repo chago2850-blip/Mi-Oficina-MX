@@ -2,6 +2,7 @@
 import JSZip from 'jszip';
 import { t } from '../../shared/i18n.js';
 import { collectMeta, applyMeta, META_ODT } from './meta.js';
+import { LIST_PRESETS, CHAPTER_PRESETS, BUILTIN, BUILTIN_CHAR } from './estilos.js';
 
 const NS = {
   office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', style: 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
@@ -75,14 +76,30 @@ export async function htmlToOdt(editorEl, settings) {
   };
   const textStyle = (f) => {
     const props = textProps(f);
-    if (!props.length) return null;
-    const key = `T|${props.join(' ')}`;
-    if (!autoStyles.has(key)) { const name = `T${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="text"><style:text-properties ${props.join(' ')}/></style:style>`); }
+    if (!props.length && !f.cstyle) return null;
+    if (!props.length) return odfName(f.cstyle);
+    const key = `T|${f.cstyle || ''}|${props.join(' ')}`;
+    if (!autoStyles.has(key)) { const name = `T${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="text"${f.cstyle ? ` style:parent-style-name="${odfName(f.cstyle)}"` : ''}><style:text-properties ${props.join(' ')}/></style:style>`); }
     return autoStyles.get(key);
   };
   const cm = (px) => px2cm(px);
   const borderOdf = (style, width, color) => (style && style !== 'none' && parseFloat(width) > 0 ? `${(lenToPx(width) * 0.75).toFixed(2)}pt ${{ double: 'double', dotted: 'dotted', dashed: 'dashed' }[style] || 'solid'} ${rgb(color) || '#000000'}` : null);
+  // cambios del documento a los estilos predeterminados (Normal, Título 1…): se aplican en cada párrafo
+  const overrideOf = (el) => {
+    if (el.dataset?.style) return null;
+    const id = /^H[1-6]$/.test(el.tagName) ? `Heading${el.tagName[1]}` : el.tagName === 'BLOCKQUOTE' ? 'Quote' : el.classList?.contains('title') ? 'Title' : el.classList?.contains('subtitle') ? 'Subtitle' : el.tagName === 'P' ? 'Normal' : null;
+    return id && settings.styles?.[id]?.css ? settings.styles[id].css : null;
+  };
   const paraStyle = (el, parent) => {
+    const ov = overrideOf(el);
+    if (ov) { const tmp = el.cloneNode(false); tmp.style.cssText = `${Object.entries(ov).map(([k, v]) => `${k}:${v}`).join(';')};${el.getAttribute('style') || ''}`; el = tmp; }
+    const { props, tabs, tprops } = paraStyleProps(el);
+    if (!props.length && !tabs && !tprops.length) return parent;
+    const key = `P|${parent}|${props.join(' ')}|${tabs}|${tprops.join(' ')}`;
+    if (!autoStyles.has(key)) { const name = `P${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="paragraph" style:parent-style-name="${parent}"><style:paragraph-properties ${props.join(' ')}>${tabs ? `<style:tab-stops>${tabs}</style:tab-stops>` : ''}</style:paragraph-properties>${tprops.length ? `<style:text-properties ${tprops.join(' ')}/>` : ''}</style:style>`); }
+    return autoStyles.get(key);
+  };
+  const paraStyleProps = (el) => {
     const st = el.style || {}; const ds = el.dataset || {};
     const props = [];
     const al = st.textAlign; if (al && al !== 'left' && al !== 'start') props.push(`fo:text-align="${al === 'justify' ? 'justify' : al === 'center' ? 'center' : 'end'}"`);
@@ -109,10 +126,7 @@ export async function htmlToOdt(editorEl, settings) {
       .map((m) => `<style:tab-stop style:position="${px2cm(Number(m[2]) - ml)}"${m[1] === 'l' ? '' : m[1] === 'd' ? ' style:type="char" style:char=","' : ` style:type="${m[1] === 'c' ? 'center' : 'right'}"`}${m[3] ? ` style:leader-text="${x(m[3])}" style:leader-style="${m[3] === '_' ? 'solid' : m[3] === '-' ? 'dash' : 'dotted'}"` : ''}/>`).join('');
     // letra del propio párrafo
     const tprops = textProps(readFmt(st, {}, null));
-    if (!props.length && !tabs && !tprops.length) return parent;
-    const key = `P|${parent}|${props.join(' ')}|${tabs}|${tprops.join(' ')}`;
-    if (!autoStyles.has(key)) { const name = `P${autoStyles.size + 1}`; autoStyles.set(key, name); styleXml.push(`<style:style style:name="${name}" style:family="paragraph" style:parent-style-name="${parent}"><style:paragraph-properties ${props.join(' ')}>${tabs ? `<style:tab-stops>${tabs}</style:tab-stops>` : ''}</style:paragraph-properties>${tprops.length ? `<style:text-properties ${tprops.join(' ')}/>` : ''}</style:style>`); }
-    return autoStyles.get(key);
+    return { props, tabs, tprops };
   };
   const inline = async (node, f = {}) => {
     let out = '';
@@ -148,6 +162,7 @@ export async function htmlToOdt(editorEl, settings) {
       if (tag === 'B' || tag === 'STRONG') g.bold = true; if (tag === 'I' || tag === 'EM') g.italic = true; if (tag === 'U') g.underline = true;
       if (tag === 'S' || tag === 'STRIKE') g.strike = true; if (tag === 'SUP') g.sup = true; if (tag === 'SUB') g.sub = true;
       readFmt(n.style, g, n);
+      if (n.dataset?.cstyle) g.cstyle = n.dataset.cstyle;
       if (tag === 'A' && n.getAttribute('href')) { out += `<text:a xlink:type="simple" xlink:href="${x(n.getAttribute('href'))}">${await inline(n, g)}</text:a>`; continue; }
       if (n.classList?.contains('cm')) {
         const c = settings.comments?.find((cc) => cc.id === n.dataset.cid);
@@ -166,16 +181,29 @@ export async function htmlToOdt(editorEl, settings) {
     const w = img.width || img.naturalWidth || 300, hgt = img.height || Math.round(w * ((img.naturalHeight || 1) / (img.naturalWidth || 1)));
     return `<draw:frame draw:name="Imagen${pictures.length}" text:anchor-type="as-char" svg:width="${px2cm(w)}" svg:height="${px2cm(hgt)}"><draw:image xlink:href="${name}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>`;
   };
-  const list = async (el, depth = 0) => {
-    const style = el.tagName === 'OL' ? 'LNum' : 'LBul';
-    let out = `<text:list${depth === 0 ? ` text:style-name="${style}"` : ''}>`;
+  // estilos de lista: uno por cada tipo usado (biblioteca de listas o tipo de la lista)
+  const listStyles = new Map();
+  const listStyleFor = (top) => {
+    const lst = (top.style.listStyleType || '').replace(/["']/g, '').trim();
+    const key = top.dataset.ml && LIST_PRESETS[top.dataset.ml] ? top.dataset.ml : top.tagName === 'OL' ? `n:${lst || 'decimal'}` : `b:${lst && !/^(disc|circle|square)$/.test(lst) ? lst : { circle: '◦', square: '▪' }[lst] || '•'}`;
+    if (!listStyles.has(key)) listStyles.set(key, `L${listStyles.size + 1}`);
+    return { name: listStyles.get(key), kind: top.tagName };
+  };
+  const list = async (el, depth = 0, ctx = null) => {
+    const own = !ctx || el.tagName !== ctx.kind;
+    if (own) ctx = listStyleFor(el);
+    const start = el.tagName === 'OL' ? Number(el.getAttribute('start')) || 1 : 1;
+    let out = `<text:list${own ? ` text:style-name="${ctx.name}"` : ''}>`;
+    let first = true;
     for (const li of el.children) {
+      if (li.tagName === 'OL' || li.tagName === 'UL') { out += `<text:list-item>${await list(li, depth + 1, ctx)}</text:list-item>`; continue; }
       if (li.tagName !== 'LI') continue;
       const clone = li.cloneNode(true); clone.querySelectorAll('ul,ol').forEach((y) => y.remove());
       const ps = [...clone.children].filter((c) => /^(P|H[1-6])$/.test(c.tagName));
-      if (ps.length) { out += '<text:list-item>'; for (const pp of ps) out += `<text:p text:style-name="${paraStyle(pp, 'List_20_Paragraph')}">${await inline(pp)}</text:p>`; }
-      else out += `<text:list-item><text:p text:style-name="${paraStyle(li, 'List_20_Paragraph')}">${await inline(clone)}</text:p>`;
-      for (const sub of li.children) if (sub.tagName === 'UL' || sub.tagName === 'OL') out += await list(sub, depth + 1);
+      out += `<text:list-item${first && start !== 1 ? ` text:start-value="${start}"` : ''}>`; first = false;
+      if (ps.length) { for (const pp of ps) out += `<text:p text:style-name="${paraStyle(pp, 'List_20_Paragraph')}">${await inline(pp)}</text:p>`; }
+      else out += `<text:p text:style-name="${paraStyle(li, 'List_20_Paragraph')}">${await inline(clone)}</text:p>`;
+      for (const sub of li.children) if (sub.tagName === 'UL' || sub.tagName === 'OL') out += await list(sub, depth + 1, ctx);
       out += '</text:list-item>';
     }
     return `${out}</text:list>`;
@@ -228,7 +256,7 @@ export async function htmlToOdt(editorEl, settings) {
       return `${o}</table:table>`;
     }
     if (/^H[1-6]$/.test(tag)) { const lvl = Number(tag[1]); return `<text:h text:style-name="${paraStyle(el, `Heading_20_${lvl}`)}" text:outline-level="${lvl}">${await inline(el)}</text:h>`; }
-    const base = el.classList?.contains('title') ? 'Title' : el.classList?.contains('subtitle') ? 'Subtitle' : tag === 'BLOCKQUOTE' ? 'Quotations' : 'Standard';
+    const base = el.dataset?.style && settings.styles?.[el.dataset.style] ? odfName(el.dataset.style) : el.classList?.contains('title') ? 'Title' : el.classList?.contains('subtitle') ? 'Subtitle' : tag === 'BLOCKQUOTE' ? 'Quotations' : 'Standard';
     return `<text:p text:style-name="${paraStyle(el, base)}">${await inline(el)}</text:p>`;
   };
   let body = '';
@@ -240,6 +268,7 @@ export async function htmlToOdt(editorEl, settings) {
 <style:style style:name="Tbl" style:family="table"><style:table-properties style:width="${px2cm(pg.w - pg.ml - pg.mr)}" table:align="margins"/></style:style>
 <style:style style:name="Cell" style:family="table-cell"><style:table-cell-properties fo:border="0.5pt solid #9A9EAD" fo:padding="0.1cm"/></style:style>
 <style:style style:name="CellH" style:family="table-cell"><style:table-cell-properties fo:border="0.5pt solid #9A9EAD" fo:padding="0.1cm" fo:background-color="#EEECFB"/></style:style>
+${[...listStyles].map(([k, n]) => listStyleXml(k, n)).join('')}
 <text:list-style style:name="LBul">${[...Array(6)].map((_, i) => `<text:list-level-style-bullet text:level="${i + 1}" text:bullet-char="${['•', '◦', '▪'][i % 3]}"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" fo:text-indent="-0.635cm" fo:margin-left="${(0.635 * (i + 1) + 0.6).toFixed(2)}cm"/></style:list-level-properties></text:list-level-style-bullet>`).join('')}</text:list-style>
 <text:list-style style:name="LNum">${[...Array(6)].map((_, i) => `<text:list-level-style-number text:level="${i + 1}" style:num-suffix="." style:num-format="${['1', 'a', 'i'][i % 3]}"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" fo:text-indent="-0.635cm" fo:margin-left="${(0.635 * (i + 1) + 0.6).toFixed(2)}cm"/></style:list-level-properties></text:list-level-style-number>`).join('')}</text:list-style>
 ${styleXml.join('\n')}
@@ -260,6 +289,7 @@ ${heading(1, 16, '#2F2496')}${heading(2, 13, '#3D30B5')}${heading(3, 12, '#3D30B
 <style:style style:name="Footnote" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="9pt"/></style:style>
 <style:style style:name="Endnote" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-size="9pt"/></style:style>
 <text:notes-configuration text:note-class="endnote" style:num-format="i" text:start-value="0"/>
+${customStylesXml(settings, paraStyleProps, textProps, readFmt)}${outlineXml(settings.chapnum)}
 </office:styles>
 <office:automatic-styles><style:page-layout style:name="PL1"><style:page-layout-properties fo:page-width="${px2cm(pg.w)}" fo:page-height="${px2cm(pg.h)}" style:print-orientation="${pg.landscape ? 'landscape' : 'portrait'}" fo:margin-top="${px2cm(pg.mt)}" fo:margin-bottom="${px2cm(pg.mb)}" fo:margin-left="${px2cm(pg.ml)}" fo:margin-right="${px2cm(pg.mr)}"${settings.pageColor ? ` fo:background-color="${settings.pageColor}"` : ''}/></style:page-layout></office:automatic-styles>
 <office:master-styles><style:master-page style:name="Standard" style:page-layout-name="PL1">${settings.header ? `<style:header>${hfOdt(settings.header)}</style:header>` : ''}${settings.footer || (settings.pageNumbers && settings.pageNumbers !== 'none') ? `<style:footer>${hfOdt(settings.footer || '', settings.pageNumbers && settings.pageNumbers !== 'none' ? ` ${t('Página')} <text:page-number text:select-page="current"/>` : '')}</style:footer>` : ''}</style:master-page></office:master-styles></office:document-styles>`;
@@ -399,4 +429,38 @@ export async function odtToHtml(bytes) {
     if (mt) { const box = document.createElement('div'); box.innerHTML = html; ({ sources } = applyMeta(box, JSON.parse(mt), [], null)); html2 = box.innerHTML; }
   } catch { /* */ }
   return { html: html2 || '<p><br></p>', page, footnotes, endnotes, sources, props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
+}
+
+// ---------------------------------------------------------------- estilos, listas y capítulos para ODF
+const CHAR_OUT = { Emphasis: 'Emphasis', Strong: 'Strong_20_Emphasis', SourceText: 'Source_20_Text', Quotation: 'Quotation' };
+const odfName = (id) => CHAR_OUT[id] || String(id).replace(/[^A-Za-z0-9_.-]/g, '_');
+const NUMF = { decimal: '1', 'lower-alpha': 'a', 'upper-alpha': 'A', 'lower-roman': 'i', 'upper-roman': 'I' };
+function listStyleXml(key, name) {
+  const P = LIST_PRESETS[key];
+  const lvl = (i, inner) => `<style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" fo:text-indent="-0.635cm" fo:margin-left="${(0.635 * (i + 1) + 0.6).toFixed(2)}cm"/></style:list-level-properties>${inner || ''}`;
+  if ((P && P.bullet) || key.startsWith('b:')) {
+    const ch = P?.bullet || key.slice(2) || '•';
+    return `<text:list-style style:name="${name}">${[...Array(6)].map((_, i) => `<text:list-level-style-bullet text:level="${i + 1}" text:bullet-char="${x(i ? ['◦', '▪', '•'][(i - 1) % 3] : ch)}">${lvl(i)}</text:list-level-style-bullet>`).join('')}</text:list-style>`;
+  }
+  const fmts = P ? P.levels : [key.slice(2), 'lower-alpha', 'lower-roman'];
+  return `<text:list-style style:name="${name}">${[...Array(6)].map((_, i) => `<text:list-level-style-number text:level="${i + 1}" style:num-suffix="${P?.suffix || '.'}" style:num-format="${NUMF[fmts[Math.min(i, fmts.length - 1)]] || '1'}"${P?.legal && i ? ` text:display-levels="${i + 1}"` : ''}>${lvl(i)}</text:list-level-style-number>`).join('')}</text:list-style>`;
+}
+function outlineXml(key) {
+  const P = CHAPTER_PRESETS[key]; if (!P?.fmts) return '';
+  return `<text:outline-style style:name="Outline">${[0, 1, 2].map((i) => `<text:outline-level-style text:level="${i + 1}" style:num-format="${NUMF[P.fmts[i]] || '1'}"${P.own ? '' : ` text:display-levels="${i + 1}"`} style:num-suffix="${x(P.after.trimEnd())}"${i === 0 && P.prefix1 ? ` style:num-prefix="${x(t(P.prefix1))}"` : ''}><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="space"/></style:list-level-properties></text:outline-level-style>`).join('')}</text:outline-style>`;
+}
+function customStylesXml(settings, paraStyleProps, textProps, readFmt) {
+  const st = settings.styles || {};
+  let out = '';
+  const list = [...BUILTIN_CHAR.filter((b) => !st[b.id]).map((b) => ({ ...b, kind: 'c' })), ...Object.values(st).map((s) => { const b = BUILTIN_CHAR.find((c) => c.id === s.id); return b ? { ...s, name: b.name, css: { ...b.css, ...s.css } } : s; })];
+  for (const s of list) {
+    const css = Object.entries(s.css || {}).map(([k, v]) => `${k}:${v}`).join(';');
+    const el = document.createElement(s.kind === 'c' ? 'span' : 'p'); el.style.cssText = css;
+    if (s.kind === 'c') { const tp = textProps(readFmt(el.style, {}, el)); out += `<style:style style:name="${odfName(s.id)}" style:display-name="${x(s.name)}" style:family="text">${tp.length ? `<style:text-properties ${tp.join(' ')}/>` : ''}</style:style>`; continue; }
+    if (BUILTIN.some((b) => b.id === s.id)) continue; // los cambios a los predeterminados van en cada párrafo
+    const { props, tprops } = paraStyleProps(el);
+    const parent = s.parent && st[s.parent] ? odfName(s.parent) : { Heading1: 'Heading_20_1', Heading2: 'Heading_20_2', Heading3: 'Heading_20_3', Title: 'Title', Subtitle: 'Subtitle', Quote: 'Quotations' }[s.parent] || 'Standard';
+    out += `<style:style style:name="${odfName(s.id)}" style:display-name="${x(s.name)}" style:family="paragraph" style:parent-style-name="${parent}" style:next-style-name="${odfName(s.next && st[s.next] ? s.next : s.id)}" style:class="text"><style:paragraph-properties ${props.join(' ')}/>${tprops.length ? `<style:text-properties ${tprops.join(' ')}/>` : ''}</style:style>`;
+  }
+  return out;
 }

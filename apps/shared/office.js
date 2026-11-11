@@ -232,11 +232,13 @@ export class Ribbon {
       return s;
     }
     const size = it.size || 'sm';
-    const b = h('button', { class: `rb ${size}${it.color ? ' color' : ''}`, title: `${it.title || it.label || ''}${it.kbd ? ` (${it.kbd})` : ''}`, 'aria-label': it.label || it.title, 'data-cmd': it.cmd });
-    b.innerHTML = `${icon(it.icon, size === 'lg' ? 26 : 18)}${it.label && (size === 'lg' || it.showLabel) ? `<span class="txt">${esc(it.label)}</span>` : ''}${it.menu || it.color ? `<svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>` : ''}${it.color ? '<span class="bar"></span>' : ''}`;
+    const b = h('button', { class: `rb ${size}${it.color ? ' color' : ''}${it.split ? ' split' : ''}`, title: `${it.title || it.label || ''}${it.kbd ? ` (${it.kbd})` : ''}`, 'aria-label': it.label || it.title, 'data-cmd': it.cmd });
+    b.innerHTML = `${icon(it.icon, size === 'lg' ? 26 : 18)}${it.label && (size === 'lg' || it.showLabel) ? `<span class="txt">${esc(it.label)}</span>` : ''}${it.menu || it.color || it.split ? `<svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>` : ''}${it.color ? '<span class="bar"></span>' : ''}`;
     if (it.color) b.style.setProperty('--c', it.colorValue || '#E53935');
     b.addEventListener('mousedown', (e) => e.preventDefault()); // no robar la selección del editor
-    b.addEventListener('click', () => {
+    b.addEventListener('click', (e) => {
+      // botón dividido: la flecha abre el menú y el resto ejecuta la orden
+      if (it.split && e.target.closest?.('.caret')) { dropdown(b, typeof it.split === 'function' ? it.split() : it.split); return; }
       if (it.menu) dropdown(b, typeof it.menu === 'function' ? it.menu() : it.menu);
       else if (it.color) colorPicker(b, (c) => { it.colorValue = c; b.style.setProperty('--c', c); this.onCommand(it.cmd, c); }, it.colorOpts);
       else this.onCommand(it.cmd, b);

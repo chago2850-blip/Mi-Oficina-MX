@@ -13,7 +13,7 @@ const pxToCm = (px) => r2(px * PX_CM);
 const lenPx = (v) => { if (!v) return 0; const n = parseFloat(v); if (Number.isNaN(n)) return 0; if (/pt$/.test(v)) return n / PX_PT; if (/cm$/.test(v)) return n / PX_CM; if (/mm$/.test(v)) return n / PX_CM / 10; if (/in$/.test(v)) return n * 96; return n; };
 
 // ------------------------------------------------------------------ cuadro con pestañas
-function tabbed(title, tabs, { preview, width = '560px', start = 0 } = {}) {
+export function tabbed(title, tabs, { preview, width = '560px', start = 0 } = {}) {
   const heads = h('div', { class: 'fx-tabs', role: 'tablist' });
   const panes = h('div', { class: 'fx-panes' });
   tabs.forEach((tb, i) => {
@@ -25,10 +25,10 @@ function tabbed(title, tabs, { preview, width = '560px', start = 0 } = {}) {
   const body = h('div', { class: 'fx' }, heads, panes, preview || '');
   return modal({ title: t(title), body, width, buttons: [{ label: 'Cancelar', value: null }, { label: 'Aceptar', primary: true, value: true }] }).then((ok) => (ok ? body : null));
 }
-const field = (label, el, extra = '') => h('label', { class: `fx-field ${extra}` }, h('span', {}, t(label)), el);
-const numIn = (name, value, { step = 0.1, min = -100, max = 1000, unit = '' } = {}) => h('span', { class: 'fx-num' }, h('input', { type: 'number', name, value, step, min, max }), unit ? h('small', {}, unit) : '');
-const sel = (name, value, options) => h('select', { name }, ...options.map(([v, l]) => h('option', { value: v, selected: String(v) === String(value) ? true : null }, t(l))));
-const chk = (name, label, on) => h('label', { class: 'fx-check' }, h('input', { type: 'checkbox', name, checked: on ? true : null }), ` ${t(label)}`);
+export const field = (label, el, extra = '') => h('label', { class: `fx-field ${extra}` }, h('span', {}, t(label)), el);
+export const numIn = (name, value, { step = 0.1, min = -100, max = 1000, unit = '' } = {}) => h('span', { class: 'fx-num' }, h('input', { type: 'number', name, value, step, min, max }), unit ? h('small', {}, unit) : '');
+export const sel = (name, value, options) => h('select', { name }, ...options.map(([v, l]) => h('option', { value: v, selected: String(v) === String(value) ? true : null }, t(l))));
+export const chk = (name, label, on) => h('label', { class: 'fx-check' }, h('input', { type: 'checkbox', name, checked: on ? true : null }), ` ${t(label)}`);
 const val = (box, name) => { const el = box.querySelector(`[name="${name}"]`); if (!el) return undefined; if (el.type === 'checkbox') return el.checked; if (el.type === 'number') return Number(el.value); return el.value; };
 
 // ------------------------------------------------------------------ Párrafo

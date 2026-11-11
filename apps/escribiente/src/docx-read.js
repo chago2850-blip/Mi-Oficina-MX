@@ -34,7 +34,8 @@ const HIGHLIGHT = { yellow: '#FFFF00', green: '#00FF00', cyan: '#00FFFF', magent
 // fuentes con métricas compatibles que suelen estar en Linux
 const FONT_ALT = { Calibri: 'Carlito', Cambria: 'Caladea', Arial: "'Liberation Sans'", 'Times New Roman': "'Liberation Serif'", 'Courier New': "'Liberation Mono'", Helvetica: "'Liberation Sans'", 'Calibri Light': 'Carlito', 'Segoe UI': "'Noto Sans'", Georgia: 'Gelasio', Verdana: "'DejaVu Sans'" };
 // comillas simples: el CSS va dentro de style="…"
-const fontCss = (f) => { if (!f) return null; const alt = FONT_ALT[f]; return `'${f.replace(/['"]/g, '')}'${alt ? `, ${alt}` : ''}`; };
+// LibreOffice escribe nombres con alternativas («Calibri;Carlito»)
+const fontCss = (f) => { if (!f) return null; const [f0, ...more] = f.split(';').map((x) => x.replace(/['"]/g, '').trim()).filter(Boolean); const alt = FONT_ALT[f0] || more.map((x) => `'${x}'`).join(', '); return `'${f0}'${alt ? `, ${alt}` : ''}`; };
 const NUMFMT = { decimal: 'decimal', decimalZero: 'decimal-leading-zero', lowerLetter: 'lower-alpha', upperLetter: 'upper-alpha', lowerRoman: 'lower-roman', upperRoman: 'upper-roman', ordinal: 'decimal', cardinalText: 'decimal', ordinalText: 'decimal', none: 'none' };
 
 // ------------------------------------------------------------------ propiedades
@@ -306,6 +307,7 @@ export async function readDocx(bytes) {
     }
   }
   const counters = new Map(); // abs -> [n por nivel]
+  let chapnum = null; const usedStyles = new Map();
   const levelOf = (numId, ilvl) => { const n = numbering.nums.get(numId); if (!n) return null; const a = numbering.abstracts.get(n.abs); return a ? a.levels.get(ilvl) || a.levels.get(0) : null; };
   // comentarios, notas
   const rc = await readComments(zip);
@@ -407,11 +409,27 @@ export async function readDocx(bytes) {
 
   async function run(rEl, base, relMap, b, out) {
     const r = effRun(kid(rEl, 'rPr'), base);
+    // estilo de carácter del documento → data-cstyle (el formato del estilo no se repite en el texto)
+    const rs = kid(kid(rEl, 'rPr'), 'rStyle') && av(kid(kid(rEl, 'rPr'), 'rStyle'), 'val');
+    const rst = rs && S.styles.get(rs);
+    let cid = null; let wbase = base;
+    if (rst && rst.type === 'character' && !/^(Hyperlink|FollowedHyperlink|FootnoteReference|EndnoteReference|CommentReference|DefaultParagraphFont|PageNumber|LineNumber|.*Char)$/i.test(rs) && !ctx.hyperlink) {
+      const CN = { emphasis: 'Emphasis', 'énfasis': 'Emphasis', 'strong emphasis': 'Strong', 'énfasis fuerte': 'Strong', strong: 'Strong', 'source text': 'SourceText', 'texto de código': 'SourceText', quotation: 'Quotation', 'cita textual': 'Quotation' };
+      cid = { StrongEmphasis: 'Strong' }[rs] || CN[(rst.name || '').toLowerCase()] || rs; wbase = merge(base, ...styleChain(S, rs).map((x) => x.r));
+      if (cid === rs && !usedStyles.has(rs) && !/^(Strong|StrongEmphasis|Emphasis|SourceText|Quotation)$/.test(rs)) {
+        const cr = merge(...styleChain(S, rs).map((x) => x.r)); const css = {};
+        if (cr.font) css['font-family'] = fontCss(cr.font); if (cr.size) css['font-size'] = pt(cr.size); if (cr.color) css.color = cr.color;
+        if (cr.b) css['font-weight'] = 'bold'; if (cr.i) css['font-style'] = 'italic'; if (cr.highlight || cr.shd) css['background-color'] = cr.highlight || cr.shd;
+        if (cr.u) css['text-decoration'] = 'underline'; if (cr.smallCaps) css['font-variant'] = 'small-caps'; if (cr.caps) css['text-transform'] = 'uppercase';
+        usedStyles.set(rs, { id: rs, name: rst.name || rs, kind: 'c', css });
+      }
+    }
     let txt = '';
     const flush = () => { if (txt) { emitText(txt); txt = ''; } };
     const emitText = (t) => {
       if (ctx.field.length && ctx.field[ctx.field.length - 1].phase === 'instr') return;
-      out.html += runWrap(r, base, esc(t).replace(/\n/g, '<br>'));
+      const hh = runWrap(r, wbase, esc(t).replace(/\n/g, '<br>'));
+      out.html += cid ? `<span data-cstyle="${esc(cid)}">${hh}</span>` : hh;
     };
     for (const c of rEl.children) {
       switch (c.localName) {
@@ -509,9 +527,30 @@ export async function readDocx(bytes) {
     let content = out.html;
     const hasPB = false;
     // número de títulos numerados: se escribe como texto (las listas de títulos llegan en la parte 2)
-    if (li && tag !== 'p') { const n = nextNumber(li); void n; content = `${esc(numberText(li))}\t${content}`; }
-    const style = paraCss(p, r, { inList: !!li && tag === 'p' });
-    const open = `<${tag}${cls ? ` class="${cls}"` : ''} style="${style}"${paraData(p)}>`;
+    // títulos numerados (1, 1.1, 1.1.1): numeración de capítulos del documento
+    if (li && /^h[1-3]$/.test(tag)) {
+      nextNumber(li);
+      if (!chapnum) { const l0 = numbering.abstracts.get(li.abs)?.levels.get(0); const tx = l0?.text || ''; chapnum = l0?.fmt === 'upperRoman' ? 'IA1' : /^[^%]+%1/.test(tx) ? 'cap' : /^%1\.$/.test(tx) ? '1.' : '1'; }
+    } else if (li && tag !== 'p') { nextNumber(li); content = `${esc(numberText(li))}\t${content}`; }
+    // estilo de párrafo propio del documento
+    let dataStyle = '';
+    if (tag === 'p' && !cls && !li && p.style && p.style !== S.defaultPara && !/^(Normal|ListParagraph|Prrafodelista)$/i.test(p.style)) {
+      const sty = S.styles.get(p.style);
+      if (sty && sty.type === 'paragraph') {
+        if (!usedStyles.has(p.style)) {
+          const ch = styleChain(S, p.style);
+          const sp = merge(...ch.map((x) => x.p)); const sr = merge(...ch.map((x) => x.r));
+          const cssObj = {}; for (const part of paraCss(sp, sr).split(';')) { const k = part.indexOf(':'); if (k > 0) cssObj[part.slice(0, k)] = part.slice(k + 1); }
+          if (!sp.before) delete cssObj['margin-top']; if (!sp.after) delete cssObj['margin-bottom'];
+          const base = sty.basedOn && /^(Heading[1-6]|Title|Subtitle|Quote)$/.test(sty.basedOn) ? sty.basedOn : 'Normal';
+          usedStyles.set(p.style, { id: p.style, name: sty.name, kind: 'p', parent: base, next: p.style, css: cssObj });
+        }
+        dataStyle = ` data-style="${esc(p.style)}"`;
+      }
+    }
+    let style = paraCss(p, r, { inList: !!li && tag === 'p' });
+    if (dataStyle) { const sc = usedStyles.get(p.style)?.css || {}; style = style.split(';').filter((part) => { const k = part.indexOf(':'); return k > 0 && sc[part.slice(0, k)] !== part.slice(k + 1); }).join(';'); }
+    const open = `<${tag}${cls ? ` class="${cls}"` : ''}${dataStyle} style="${style}"${paraData(p)}>`;
     // saltos de página dentro del párrafo: se parte en dos con el salto en medio
     const parts = content.split('\uE0FF');
     const PB = '<div class="pb" contenteditable="false"></div>';
@@ -624,7 +663,8 @@ export async function readDocx(bytes) {
             const lst = tag === 'ul' ? (/[○o◦]/.test(bullet) ? 'circle' : /[■▪§]/.test(bullet) ? 'square' : 'disc') : NUMFMT[fmt] || 'decimal';
             const ind = pr.li.lvl.p; const left = ((pr.p.indL ?? ind.indL) || 360 * (lv + 1)) * TW_PT;
             const prevLeft = stack.length ? stack[stack.length - 1].left : 0;
-            html += `<${tag} style="list-style-type:${lst};padding-left:${pt(Math.max(12, left - prevLeft))};margin-top:0;margin-bottom:0"${tag === 'ol' && n2 !== 1 ? ` start="${n2}"` : ''}>`;
+            const legal = tag === 'ol' && [...(numbering.abstracts.get(pr.li.abs)?.levels.values() || [])].some((lv) => (lv.text.match(/%\d/g) || []).length > 1);
+            html += `<${tag}${legal && !stack.length ? ' data-ml="m-legal"' : ''} style="list-style-type:${lst};padding-left:${pt(Math.max(12, left - prevLeft))};margin-top:0;margin-bottom:0"${tag === 'ol' && n2 !== 1 ? ` start="${n2}"` : ''}>`;
             stack.push({ tag, ilvl: lv, numId: pr.li.numId, left });
           }
           html += `<li>${phtml.replace(/^<p /, '<p ').replace(/margin-bottom:([^;"]*)/, 'margin-bottom:$1')}`;
@@ -693,7 +733,7 @@ export async function readDocx(bytes) {
   box.querySelectorAll('p:empty,h1:empty,h2:empty,h3:empty,li:empty').forEach((p) => p.append(document.createElement('br')));
   let meta = null; try { const mt = await zip.file(META_DOCX)?.async('string'); if (mt) meta = JSON.parse(mt); } catch { /* */ }
   const { sources } = applyMeta(box, meta, comments, (tex) => { try { return temml.renderToString(tex, { annotate: true }); } catch { return null; } });
-  return { html: box.innerHTML || '<p><br></p>', page, footnotes, endnotes, comments, sources, header, footer, columns, defTab: dts ? Math.round(dts * TWIP_PX * 100) / 100 : null, warnings: warnings.size ? [`No se pudieron conservar del todo: ${[...warnings].join(', ')}`] : [] };
+  return { html: box.innerHTML || '<p><br></p>', page, footnotes, endnotes, comments, sources, header, footer, columns, defTab: dts ? Math.round(dts * TWIP_PX * 100) / 100 : null, chapnum, styles: Object.fromEntries(usedStyles), warnings: warnings.size ? [`No se pudieron conservar del todo: ${[...warnings].join(', ')}`] : [] };
 }
 
 function fmtNum(v, f) {

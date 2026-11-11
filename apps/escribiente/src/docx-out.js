@@ -9,6 +9,7 @@ import {
 import JSZip from 'jszip';
 import { t } from '../../shared/i18n.js';
 import { collectMeta, META_DOCX } from './meta.js';
+import { LIST_PRESETS, CHAPTER_PRESETS, BUILTIN, BUILTIN_CHAR } from './estilos.js';
 
 const PX_TWIP = 15; // 1 px (96 ppp) = 15 twips
 const ptFromCss = (v) => {
@@ -92,7 +93,7 @@ async function rasterize(img) {
 
 class Builder {
   constructor(settings = {}) {
-    this.olInstance = 0; this.settings = settings;
+    this.olInstance = 0; this.settings = settings; this.listDefs = new Map();
     this.commentIds = new Map(); this.footIds = new Map(); this.endIds = new Map(); this.revId = 1;
   }
   numFor(map, key) { if (!map.has(key)) map.set(key, map.size + 1); return map.get(key); }
@@ -145,6 +146,7 @@ class Builder {
       if (tag === 'SUB') f.subScript = true;
       if (tag === 'FONT') { if (n.color) f.color = hex(n.color); if (n.face) f.font = firstFont(n.face); }
       fmtFromStyle(n.style, f, n);
+      if (n.dataset?.cstyle) f.cstyle = n.dataset.cstyle;
       if (tag === 'A' && n.getAttribute('href')) {
         const inner = await this.runs(n, { ...f, link: true }, []);
         out.push(new ExternalHyperlink({ link: n.getAttribute('href'), children: inner }));
@@ -163,7 +165,7 @@ class Builder {
     if (f.strike) p.strike = true;
     if (f.superScript) p.superScript = true;
     if (f.subScript) p.subScript = true;
-    if (f.link) p.style = 'Hyperlink';
+    if (f.link) p.style = 'Hyperlink'; else if (f.cstyle) p.style = CHAR_ID[f.cstyle] || f.cstyle;
     if (f.color) p.color = f.color;
     if (f.size) p.size = Math.round(f.size * 2);
     if (f.font) p.font = f.font;
@@ -234,6 +236,8 @@ class Builder {
     const tag = el.tagName;
     const props = this.paraProps(el, extra);
     if (/^H[1-6]$/.test(tag)) { props.heading = HeadingLevel[`HEADING_${tag[1]}`]; props.outlineLevel = Number(tag[1]) - 1; }
+    if (/^H[1-3]$/.test(tag) && this.settings.chapnum && CHAPTER_PRESETS[this.settings.chapnum]?.fmts && !props.numbering) props.numbering = { reference: 'chapters', level: Number(tag[1]) - 1 };
+    if (el.dataset?.style && this.settings.styles?.[el.dataset.style]) props.style = el.dataset.style;
     if (tag === 'P' && el.classList.contains('title')) props.heading = HeadingLevel.TITLE;
     if (tag === 'P' && el.classList.contains('subtitle')) props.style = 'Subtitle';
     if (tag === 'BLOCKQUOTE') props.style = 'Quote';
@@ -244,19 +248,29 @@ class Builder {
     return new Paragraph({ ...props, children });
   }
 
-  async list(el, level = 0, out = [], instance = null) {
-    const ordered = el.tagName === 'OL';
-    if (ordered && instance == null) instance = ++this.olInstance;
+  // formato de cada nivel de una lista (biblioteca de listas, o el tipo de la propia lista)
+  listCtx(top) {
+    const lst = (top.style.listStyleType || '').replace(/["']/g, '').trim();
+    let key = top.dataset.ml && LIST_PRESETS[top.dataset.ml] ? top.dataset.ml : top.tagName === 'OL' ? `n:${lst || 'decimal'}` : `b:${lst && !/^(disc|circle|square)$/.test(lst) ? lst : { circle: '◦', square: '▪' }[lst] || '•'}`;
+    const start = top.tagName === 'OL' ? Number(top.getAttribute('start')) || 1 : 1;
+    const ref = `L${[...`${key}|${start}`].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36)}`;
+    if (!this.listDefs.has(ref)) this.listDefs.set(ref, levelsFor(key, start));
+    return { ref, instance: top.tagName === 'OL' ? ++this.olInstance : 0, kind: top.tagName };
+  }
+
+  async list(el, level = 0, out = [], ctx = null) {
+    if (!ctx) ctx = this.listCtx(el);
     for (const li of el.children) {
+      // sublista suelta dentro de la lista (así la crea «Aumentar sangría»)
+      if (li.tagName === 'OL' || li.tagName === 'UL') { await this.list(li, Math.min(level + 1, 8), out, li.tagName === ctx.kind ? ctx : this.listCtx(li)); continue; }
       if (li.tagName !== 'LI') continue;
-      // Contenido directo del <li> (sin sublistas)
       const clone = li.cloneNode(true);
       clone.querySelectorAll('ul,ol').forEach((x) => x.remove());
       const blocks = [...clone.children].filter((c) => /^(P|H[1-6]|DIV)$/.test(c.tagName));
-      const numbering = ordered ? { reference: 'numbers', level, instance } : { reference: 'bullets', level };
+      const numbering = { reference: ctx.ref, level, ...(ctx.instance ? { instance: ctx.instance } : {}) };
       if (blocks.length) for (const b of blocks) out.push(await this.paragraph(b, { numbering }));
       else out.push(new Paragraph({ ...this.paraProps(li), numbering, children: await this.runs(clone) }));
-      for (const sub of li.children) if (sub.tagName === 'UL' || sub.tagName === 'OL') await this.list(sub, Math.min(level + 1, 8), out, sub.tagName === 'OL' ? (ordered ? instance : null) : null);
+      for (const sub of li.children) if (sub.tagName === 'UL' || sub.tagName === 'OL') await this.list(sub, Math.min(level + 1, 8), out, sub.tagName === ctx.kind ? ctx : this.listCtx(sub));
     }
     return out;
   }
@@ -470,9 +484,11 @@ export async function htmlToDocx(editorEl, settings) {
       paragraphStyles: [
         { id: 'Subtitle', name: 'Subtitle', basedOn: 'Normal', next: 'Normal', run: { size: 28, color: '6B6F80' } },
         { id: 'Quote', name: 'Quote', basedOn: 'Normal', next: 'Normal', run: { italics: true, color: '444444' }, paragraph: { indent: { left: 720, right: 720 } } },
+        ...docStyles(b, settings, 'p'),
       ],
+      characterStyles: docStyles(b, settings, 'c'),
     },
-    numbering: { config: [{ reference: 'bullets', levels: bulletLevels }, { reference: 'numbers', levels: numLevels }] },
+    numbering: { config: [{ reference: 'bullets', levels: bulletLevels }, { reference: 'numbers', levels: numLevels }, ...[...b.listDefs].map(([reference, levels]) => ({ reference, levels })), ...(settings.chapnum && CHAPTER_PRESETS[settings.chapnum]?.fmts ? [{ reference: 'chapters', levels: chapterLevels(settings.chapnum) }] : [])] },
     comments: comments.length ? { children: comments } : undefined,
     footnotes: Object.keys(footnotes).length ? footnotes : undefined,
     background: settings.pageColor ? { color: hex(settings.pageColor) } : undefined,
@@ -559,4 +575,54 @@ function mathKids(el) {
 
 export function parseTabs(v) {
   return String(v || '').split(',').map((t) => { const m = /^([lcrd]):(\d+(?:\.\d+)?)(?::(.))?$/.exec(t.trim()); return m ? { k: m[1], x: Number(m[2]), f: m[3] || '' } : null; }).filter(Boolean).sort((a, b) => a.x - b.x);
+}
+
+// ---------------------------------------------------------------- listas, capítulos y estilos para Word
+const FMT = { decimal: LevelFormat.DECIMAL, 'lower-alpha': LevelFormat.LOWER_LETTER, 'upper-alpha': LevelFormat.UPPER_LETTER, 'lower-roman': LevelFormat.LOWER_ROMAN, 'upper-roman': LevelFormat.UPPER_ROMAN };
+function levelsFor(key, start = 1) {
+  const P = LIST_PRESETS[key];
+  const ind = (l) => ({ paragraph: { indent: { left: 360 * (l + 1) + 360, hanging: 360 } } });
+  if ((P && P.bullet) || key.startsWith('b:')) {
+    const ch = P?.bullet || key.slice(2) || '•';
+    return Array.from({ length: 9 }, (_, l) => ({ level: l, format: LevelFormat.BULLET, text: l === 0 ? ch : ['◦', '▪', '•'][(l - 1) % 3], alignment: AlignmentType.LEFT, style: ind(l) }));
+  }
+  const fmts = P ? P.levels : [key.slice(2), 'lower-alpha', 'lower-roman'];
+  return Array.from({ length: 9 }, (_, l) => {
+    const f = fmts[Math.min(l, fmts.length - 1)] || 'decimal';
+    const text = P?.legal ? `${Array.from({ length: l + 1 }, (_, k) => `%${k + 1}`).join('.')}.` : `%${l + 1}${P?.suffix || '.'}`;
+    return { level: l, format: FMT[f] || LevelFormat.DECIMAL, text, start: l === 0 ? start : 1, alignment: AlignmentType.LEFT, style: ind(l) };
+  });
+}
+function chapterLevels(key) {
+  const P = CHAPTER_PRESETS[key];
+  return [0, 1, 2].map((l) => {
+    const body = P.own ? `%${l + 1}` : Array.from({ length: l + 1 }, (_, k) => `%${k + 1}`).join(P.sep || '.');
+    const text = `${l === 0 && P.prefix1 ? t(P.prefix1) : ''}${body}${P.after.trim()}`;
+    return { level: l, format: FMT[P.fmts[l]] || LevelFormat.DECIMAL, text, alignment: AlignmentType.LEFT, suffix: 'space', style: { paragraph: { indent: { left: 0, hanging: 0 } } } };
+  });
+}
+// estilos del documento (propios y cambios a los predeterminados) como estilos de Word
+// la biblioteca docx ya trae un estilo de párrafo «Strong»: el de carácter va con otro identificador
+const CHAR_ID = { Strong: 'StrongEmphasis' };
+function docStyles(b, settings, kind) {
+  const out = [];
+  const st = settings.styles || {};
+  const cssText = (o) => Object.entries(o || {}).map(([k, v]) => `${k}:${v}`).join(';');
+  const builtinIds = kind === 'p' ? BUILTIN.map((x) => x.id) : BUILTIN_CHAR.map((x) => x.id);
+  for (const s of Object.values(st)) {
+    if ((s.kind || 'p') !== kind) continue;
+    const bc = kind === 'c' && BUILTIN_CHAR.find((x) => x.id === s.id);
+    const el = document.createElement(kind === 'p' ? 'p' : 'span'); el.style.cssText = cssText(bc ? { ...bc.css, ...s.css } : s.css);
+    const run = b.runProps(fmtFromStyle(el.style, {}, el));
+    const def = { id: kind === 'c' ? CHAR_ID[s.id] || s.id : s.id, name: s.name || s.id, run };
+    if (kind === 'p') {
+      const par = b.paraProps(el); delete par.style;
+      Object.assign(def, { basedOn: builtinIds.includes(s.id) ? undefined : (s.parent || 'Normal'), next: s.next || 'Normal', paragraph: par, quickFormat: true });
+      if (/^Heading[1-6]$/.test(s.id)) def.basedOn = 'Normal';
+    } else if (s.parent) def.basedOn = s.parent;
+    out.push(def);
+  }
+  // estilos de carácter predeterminados que se usan en el documento
+  if (kind === 'c') for (const bc of BUILTIN_CHAR) if (!st[bc.id]) { const el = document.createElement('span'); el.style.cssText = cssText(bc.css); out.push({ id: CHAR_ID[bc.id] || bc.id, name: bc.name, run: b.runProps(fmtFromStyle(el.style, {}, el)) }); }
+  return out;
 }

@@ -65,6 +65,7 @@ const P = {
   wrap: 'M4 6h16 M4 12h13a3 3 0 010 6h-4 M15 16l-2 2 2 2 M4 18h5',
   borders: 'M3 3h18v18H3z M3 12h18 M12 3v18',
   tabs: 'M3 6h18 M3 18h18 M7 10v4 M7 14h4 M16 10v4 M12 14h4',
+  chapters: 'M4 5h3 M4 12h3 M4 19h3 M10 5h10 M12 12h8 M14 19h6',
   pilcrow: 'M13 4v16 M17 4v16 M19 4H10a4 4 0 000 8h3',
   changeCase: 'M3 18L7.5 6l4.5 12 M4.6 14h5.8 M20 11v7 M20 13.5a2.8 2.8 0 10-.1 2.5',
   dialogLauncher: 'M4 4h16v16H4z M10 14l4-4 M10 10h4v4',

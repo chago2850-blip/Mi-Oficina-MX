@@ -87,7 +87,7 @@ export async function readOdt(bytes) {
     if (!doc) return;
     for (const d of doc.getElementsByTagNameNS(NS.style, 'default-style')) defaults[A(d, 'style', 'family')] = readProps(d);
     for (const s of doc.getElementsByTagNameNS(NS.style, 'style')) {
-      styles.set(`${A(s, 'style', 'family')}:${A(s, 'style', 'name')}`, { name: A(s, 'style', 'name'), display: A(s, 'style', 'display-name') || A(s, 'style', 'name'), family: A(s, 'style', 'family'), parent: A(s, 'style', 'parent-style-name'), listStyle: A(s, 'style', 'list-style-name'), props: readProps(s), el: s, outline: A(s, 'style', 'default-outline-level') });
+      styles.set(`${A(s, 'style', 'family')}:${A(s, 'style', 'name')}`, { name: A(s, 'style', 'name'), display: A(s, 'style', 'display-name') || A(s, 'style', 'name'), family: A(s, 'style', 'family'), parent: A(s, 'style', 'parent-style-name'), listStyle: A(s, 'style', 'list-style-name'), props: readProps(s), el: s, outline: A(s, 'style', 'default-outline-level'), auto: s.parentNode?.localName === 'automatic-styles', next: A(s, 'style', 'next-style-name') });
     }
     for (const ls of doc.getElementsByTagNameNS(NS.text, 'list-style')) {
       const levels = {};
@@ -95,7 +95,7 @@ export async function readOdt(bytes) {
         const lv = Number(A(l, 'text', 'level')) || 1;
         const lp = kid(l, 'list-level-properties'); const la = lp && kid(lp, 'list-level-label-alignment');
         const ind = lenToPx(A(la, 'fo', 'margin-left') || A(lp, 'text', 'space-before') || '0') || 24 * lv;
-        levels[lv] = l.localName === 'list-level-style-number' ? { num: true, fmt: A(l, 'style', 'num-format') || '1', start: Number(A(l, 'text', 'start-value') || 1), ind } : { num: false, char: A(l, 'text', 'bullet-char') || '•', ind };
+        levels[lv] = l.localName === 'list-level-style-number' ? { num: true, fmt: A(l, 'style', 'num-format') || '1', start: Number(A(l, 'text', 'start-value') || 1), ind, display: Number(A(l, 'text', 'display-levels') || 1), suffix: A(l, 'style', 'num-suffix'), prefix: A(l, 'style', 'num-prefix') } : { num: false, char: A(l, 'text', 'bullet-char') || '•', ind };
       }
       listStyles.set(A(ls, 'style', 'name'), levels);
     }
@@ -111,6 +111,25 @@ export async function readOdt(bytes) {
     for (const s of ch) { Object.assign(r.p, s.props.p); Object.assign(r.t, s.props.t); Object.assign(r.flags, s.props.flags); if (s.listStyle) r.listStyle = s.listStyle; if (s.outline) r.outline = s.outline; }
     return r;
   };
+  // estilos con nombre del documento (no los de LibreOffice): se conservan como estilos de Escribiente
+  const LO_BUILTIN = /^(Standard|Text_20_|Default|Heading|Title|Subtitle|Quotations|List|Table|Header|Footer|Footnote|Endnote|Caption|Illustration|Index|Contents|Frame|Preformatted|Signature|Salutation|Horizontal|Hanging|First|Marginalia|Addressee|Sender|Drawing|Figure|Text$|Numbering|Appendix|Bibliography|User_20_Index|Internet|Visited|Placeholder|ListLabel|WW8Num|WWNum|Outline|Main_20_index|Page_20_Number|Line_20_numbering|Example|Teletype|User_20_Entry|Variable|Definition|Citation|Rubies|Vertical|Drop_20_Caps|Bullet_20_Symbols|Numbering_20_Symbols|Endnote_20_|Footnote_20_)/;
+  const CHAR_NAMES = { emphasis: 'Emphasis', 'énfasis': 'Emphasis', 'strong emphasis': 'Strong', 'énfasis fuerte': 'Strong', strong: 'Strong', 'source text': 'SourceText', 'texto de código': 'SourceText', quotation: 'Quotation', 'cita textual': 'Quotation' };
+  const CHAR_IN = new Proxy({}, { get: (_, k) => (typeof k === 'string' ? CHAR_NAMES[(styles.get(`text:${k}`)?.display || k.replace(/_20_/g, ' ')).toLowerCase()] : undefined) });
+  const usedStyles = new Map();
+  const PARENT_IN = { Standard: 'Normal', Text_20_body: 'Normal', Title: 'Title', Subtitle: 'Subtitle', Quotations: 'Quote', ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [`Heading_20_${n}`, `Heading${n}`])) };
+  const namedOf = (family, name) => { const ch = chain(family, name); for (let i = ch.length - 1; i >= 0; i--) if (!ch[i].auto) return ch[i]; return null; };
+  const ownCss = (s) => Object.fromEntries(Object.entries({ ...s.props.p, ...s.props.t }).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v).replace(/"/g, "'")]));
+  const register = (s, kind) => {
+    const id = kind === 'c' && CHAR_IN[s.name] ? CHAR_IN[s.name] : s.name;
+    if (usedStyles.has(id)) return id;
+    if (kind === 'c' && CHAR_IN[s.name]) { usedStyles.set(id, { id, name: id, kind: 'c', css: ownCss(s) }); return id; }
+    const par = s.parent && styles.get(`paragraph:${s.parent}`);
+    let parent = PARENT_IN[s.parent] || 'Normal';
+    if (kind === 'p' && par && !LO_BUILTIN.test(par.name) && !par.auto) parent = register(par, 'p');
+    usedStyles.set(id, { id, name: s.display, kind, parent, next: s.next && !LO_BUILTIN.test(s.next) ? s.next : id, css: ownCss(s) });
+    return id;
+  };
+  const diffOf = (full, base) => { const o = {}; for (const [k, v] of Object.entries(full)) if (base[k] !== v) o[k] = v; return o; };
   const cssOf = (o) => Object.entries(o).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${String(v).replace(/"/g, "'")}`).join(';');
   const footnotes = {}; const endnotes = {}; const comments = []; const imgs = {};
   const warn = new Set();
@@ -136,12 +155,15 @@ export async function readOdt(bytes) {
         case 'bookmark': case 'bookmark-start': { const nm = A(n, 'text', 'name'); if (nm) out += `<a id="${esc(nm)}" class="bm"></a>`; break; }
         case 'span': {
           const st = resolve('text', A(n, 'text', 'style-name'));
-          const diff = {}; for (const [k, v] of Object.entries(st.t)) if (base[k] !== v) diff[k] = v;
+          const named = namedOf('text', A(n, 'text', 'style-name'));
+          const cid = named && (CHAR_IN[named.name] || !LO_BUILTIN.test(named.name)) ? register(named, 'c') : null;
+          const nbase = cid ? { ...base, ...resolve('text', named.name).t } : base;
+          const diff = {}; for (const [k, v] of Object.entries(st.t)) if (nbase[k] !== v) diff[k] = v;
           let inner = await inline(n, { ...base, ...st.t });
           if (st.flags.sup) inner = `<sup>${inner}</sup>`; if (st.flags.sub) inner = `<sub>${inner}</sub>`;
           if (st.flags.outline && diff.color) diff['-webkit-text-stroke'] = `.6px ${diff.color}`;
           const c = cssOf(diff);
-          out += c || st.flags.hidden ? `<span${st.flags.hidden ? ' class="hidden-text"' : ''}${c ? ` style="${c}"` : ''}>${inner}</span>` : inner;
+          out += c || st.flags.hidden || cid ? `<span${st.flags.hidden ? ' class="hidden-text"' : ''}${cid ? ` data-cstyle="${esc(cid)}"` : ''}${c ? ` style="${c}"` : ''}>${inner}</span>` : inner;
           break;
         }
         case 'a': out += `<a href="${esc(A(n, 'xlink', 'href') || '')}">${await inline(n, base)}</a>`; break;
@@ -206,6 +228,7 @@ export async function readOdt(bytes) {
 
   // numeración de listas: contador por estilo de lista y nivel
   const counters = new Map();
+  let chapFromList = null;
   const para = async (n, { inList = false } = {}) => {
     const ln = n.localName;
     const st = resolve('paragraph', A(n, 'text', 'style-name'));
@@ -220,8 +243,12 @@ export async function readOdt(bytes) {
     const pcss = { ...st.p }; if (inList) { delete pcss['margin-left']; delete pcss['text-indent']; }
     // valores normales explícitos para que el CSS del editor no los cambie
     if (pcss['margin-top'] == null) pcss['margin-top'] = '0pt'; if (pcss['margin-bottom'] == null) pcss['margin-bottom'] = '0pt';
-    const css = cssOf({ ...pcss, ...st.t });
-    const data = [];
+    const named = namedOf('paragraph', A(n, 'text', 'style-name'));
+    const custom = named && !LO_BUILTIN.test(named.name) && tag === 'p' && !cls ? register(named, 'p') : null;
+    let full = { ...pcss, ...st.t };
+    if (custom) { const ns = resolve('paragraph', named.name); full = diffOf(full, { ...ns.p, ...ns.t }); }
+    const css = cssOf(full);
+    const data = custom ? [`data-style="${esc(custom)}"`] : [];
     for (const k of ['keepnext', 'keeplines', 'pbb']) if (st.flags[k]) data.push(`data-${k}="1"`);
     if (st.flags.widow) data.push('data-widow="0"'); if (st.flags.lr) data.push(`data-lr="${st.flags.lr}"`); if (st.flags.tabs) data.push(`data-tabs="${st.flags.tabs}"`);
     let inner = await inline(n, st.t);
@@ -244,7 +271,10 @@ export async function readOdt(bytes) {
     if (!cont || !counters.has(key)) counters.set(key, (lv.start || 1) - 1);
     const startAt = counters.get(key) + 1;
     const prevInd = level > 1 ? (ls[level - 1]?.ind || 24 * (level - 1)) : 0;
-    let o = `<${tag} style="list-style-type:${type};padding-left:${+(Math.max(16, lv.ind - prevInd) * 0.75).toFixed(1)}pt;margin-top:0;margin-bottom:0"${tag === 'ol' && startAt !== 1 ? ` start="${startAt}"` : ''}>`;
+    const legal = level === 1 && tag === 'ol' && Object.values(ls).some((x) => x.display > 1);
+    const BUL = { '◦': 'b-circle', '▪': 'b-square', '✓': 'b-check', '➢': 'b-arrow', '–': 'b-dash' };
+    const ml = legal ? 'm-legal' : level === 1 && tag === 'ul' && BUL[lv.char] ? BUL[lv.char] : level === 1 && tag === 'ol' && lv.suffix === ')' ? 'n-1p' : '';
+    let o = `<${tag}${ml ? ` data-ml="${ml}"` : ''} style="list-style-type:${type};padding-left:${+(Math.max(16, lv.ind - prevInd) * 0.75).toFixed(1)}pt;margin-top:0;margin-bottom:0"${tag === 'ol' && startAt !== 1 ? ` start="${startAt}"` : ''}>`;
     for (const it of l.children) {
       if (it.localName !== 'list-item' && it.localName !== 'list-header') continue;
       if (it.localName === 'list-item') { const sv = A(it, 'text', 'start-value'); if (sv) counters.set(key, Number(sv) - 1); counters.set(key, counters.get(key) + 1); }
@@ -302,7 +332,17 @@ export async function readOdt(bytes) {
   const block = async (n) => {
     const ln = n.localName;
     if (ln === 'p' || ln === 'h') { const r = await para(n); return `${r.pbb ? '' : ''}${r.html}`; }
-    if (ln === 'list') return listHtml(n, null, 1);
+    if (ln === 'list') {
+      // lista que sólo tiene títulos (así guarda LibreOffice la numeración de capítulos de Word): numeración de capítulos
+      const items = [...n.getElementsByTagNameNS(NS.text, 'list-item')];
+      const hs = items.flatMap((it) => [...it.children].filter((c) => c.localName === 'h' || c.localName === 'p'));
+      if (hs.length && hs.every((c) => c.localName === 'h')) {
+        const lv = (listStyles.get(A(n, 'text', 'style-name')) || {})[1];
+        if (lv?.num && !chapFromList) chapFromList = lv.fmt === 'I' ? 'IA1' : lv.prefix?.trim() ? 'cap' : (lv.suffix || '').includes('.') ? '1.' : '1';
+        let o = ''; for (const c of hs) o += (await para(c)).html; return o;
+      }
+      return listHtml(n, null, 1);
+    }
     if (ln === 'table') return table(n);
     if (ln === 'section') {
       const sst = styles.get(`section:${A(n, 'text', 'style-name')}`)?.el; const cn = Number(A(sst?.getElementsByTagNameNS(NS.style, 'columns')[0], 'fo', 'column-count') || 1);
@@ -347,10 +387,16 @@ export async function readOdt(bytes) {
     return lines.join('\n');
   };
   if (mp) { header = hfText(kid(mp, 'header')); footer = hfText(kid(mp, 'footer')); }
+  // numeración de capítulos (esquema de numeración de LibreOffice)
+  let chapnum = null;
+  const ol1 = [...(stylesDoc?.getElementsByTagNameNS(NS.text, 'outline-level-style') || [])].find((l) => A(l, 'text', 'level') === '1');
+  const of = ol1 && A(ol1, 'style', 'num-format');
+  if (!of) chapnum = chapFromList;
+  if (of) chapnum = of === 'I' ? 'IA1' : (A(ol1, 'style', 'num-prefix') || '').trim() ? 'cap' : (A(ol1, 'style', 'num-suffix') || '').includes('.') ? '1.' : '1';
   const mg = (tag, ns = 'dc') => meta?.getElementsByTagNameNS(NS[ns], tag)[0]?.textContent || '';
   const box = document.createElement('div');
   box.innerHTML = sanitize(html || '<p><br></p>');
   let sources = [];
   try { const mt = await zip.file(META_ODT)?.async('string'); if (mt) ({ sources } = applyMeta(box, JSON.parse(mt), comments, null)); } catch { /* */ }
-  return { html: box.innerHTML || '<p><br></p>', page, header, footer, defTab, footnotes, endnotes, comments, sources, warnings: warn.size ? [`No se pudieron conservar del todo: ${[...warn].join(', ')}`] : [], props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
+  return { html: box.innerHTML || '<p><br></p>', page, header, footer, defTab, chapnum, styles: Object.fromEntries(usedStyles), footnotes, endnotes, comments, sources, warnings: warn.size ? [`No se pudieron conservar del todo: ${[...warn].join(', ')}`] : [], props: { title: mg('title'), author: mg('creator') || mg('initial-creator', 'meta'), subject: mg('subject'), keywords: mg('keyword', 'meta') } };
 }
