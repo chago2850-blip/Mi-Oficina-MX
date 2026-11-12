@@ -122,8 +122,8 @@ jobs:
           cmake -S libdmg-hfsplus -B libdmg-hfsplus/build >/dev/null
           make -C libdmg-hfsplus/build -j"$(nproc)" >/dev/null
       - name: Instaladores de macOS (firma ad-hoc)
+        # si falla por un error del proyecto, se detiene la publicación (antes se omitían los .dmg sin avisar)
         if: steps.dmgtools.outcome == 'success'
-        continue-on-error: true
         run: |
           T="$RUNNER_TEMP/tools"
           RCODESIGN="$(find "$T" -type f -name rcodesign | head -1)" \
