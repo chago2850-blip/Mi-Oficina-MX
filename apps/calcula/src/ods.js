@@ -131,9 +131,10 @@ export async function writeOds(wb, props = {}) {
   const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta ${NSDECL} office:version="1.3"><office:meta><meta:generator>Calcula Datos · Mi Oficina MX</meta:generator><dc:title>${x(props.title)}</dc:title><dc:creator>${x(props.author)}</dc:creator></office:meta></office:document-meta>`;
   zip.file('content.xml', content); zip.file('styles.xml', styles); zip.file('meta.xml', meta);
   // datos propios de Calcula Datos que ODF no guarda tal cual (escenarios)
-  const extra = {}; for (const s of wb.sheets) if (s.x3?.scenarios?.length) extra[s.name] = { scenarios: s.x3.scenarios };
-  if (Object.keys(extra).length) zip.file('calcula.json', JSON.stringify({ app: 'Calcula', v: 1, sheets: extra }));
-  zip.file('META-INF/manifest.xml', '<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/></manifest:manifest>');
+  const extra = {}; for (const s of wb.sheets) if (s.x3?.scenarios?.length || s.charts?.length) extra[s.name] = { scenarios: s.x3?.scenarios?.length ? s.x3.scenarios : undefined, charts: s.charts?.length ? s.charts : undefined };
+  const hasExtra = Object.keys(extra).length > 0;
+  if (hasExtra) zip.file('calcula.json', JSON.stringify({ app: 'Calcula', v: 1, sheets: extra }));
+  zip.file('META-INF/manifest.xml', `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>${hasExtra ? '<manifest:file-entry manifest:full-path="calcula.json" manifest:media-type="application/json"/>' : ''}</manifest:manifest>`);
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', mimeType: 'application/vnd.oasis.opendocument.spreadsheet' });
 }
 
@@ -243,7 +244,7 @@ export async function readOds(wb, bytes) {
     try { wb.hf.addNamedExpression(name, ref); wb.names.push({ name, expr: ref }); } catch { /* */ }
   }
   if (!wb.sheets.length) wb.addSheet('Hoja1');
-  try { const j = JSON.parse(await zip.file('calcula.json')?.async('string') || '{}'); for (const [name, x] of Object.entries(j.sheets || {})) { const sh = wb.sheets.find((q) => q.name === name); if (sh && x.scenarios) { sh.x3 ||= {}; sh.x3.scenarios = x.scenarios; } } } catch { /* sin datos propios */ }
+  try { const j = JSON.parse(await zip.file('calcula.json')?.async('string') || '{}'); for (const [name, x] of Object.entries(j.sheets || {})) { const sh = wb.sheets.find((q) => q.name === name); if (sh && x.scenarios) { sh.x3 ||= {}; sh.x3.scenarios = x.scenarios; } if (sh && x.charts) sh.charts = x.charts; } } catch { /* sin datos propios */ }
   wb.active = 0; wb.hf.clearUndoStack?.(); wb.undoStack = []; wb.redoStack = [];
   return { warnings: [] };
 }

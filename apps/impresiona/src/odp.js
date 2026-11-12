@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import { themeById } from './themes.js';
 import { chartSvg } from './charts.js';
 import { cellLook } from './tablas.js';
+import { odfPath, parseSvgPath, SIDES } from './trazos.js';
 
 const NS = {
   office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', style: 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
@@ -83,7 +84,7 @@ export async function writeOdp(pres, props = {}) {
   const defName = (kind, key, xml) => { const k = `${kind}|${key}`; if (!defs.has(k)) defs.set(k, xml(`${kind}${defs.size + 1}`)); return /draw:name="([^"]+)"/.exec(defs.get(k))[1]; };
   const graphicProps = (o, st, { fillDef, text = false } = {}) => {
     const p = [];
-    const isLine = o.shape === 'line' || o.shape === 'lineArrow';
+    const isLine = o.shape === 'line' || o.shape === 'lineArrow' || (o.shape === 'path' && !o.closed);
     const fill = isLine ? null : st.fill === undefined ? fillDef : st.fill;
     if (st.grad && fill) {
       const g = st.grad; const gn = defName('Degradado', JSON.stringify([fill, g]), (n) => `<draw:gradient draw:name="${n}" draw:style="${g.type === 'radial' ? 'radial' : 'linear'}" draw:start-color="${fill}" draw:end-color="${g.c2 || '#ffffff'}" draw:start-intensity="100%" draw:end-intensity="100%" draw:angle="${Math.round((((90 - (g.angle ?? 90)) % 360) + 360) % 360) * 10}" draw:border="0%"${g.type === 'radial' ? ' draw:cx="50%" draw:cy="50%"' : ''}/>`);
@@ -93,7 +94,7 @@ export async function writeOdp(pres, props = {}) {
     const stroke = isLine ? (st.stroke || th.accent) : st.stroke;
     if (stroke) {
       const dn = DASH_ODF[st.dash] && defName('Guion', st.dash, () => { const d = DASH_ODF[st.dash]; return `<draw:stroke-dash draw:name="${d[0].replace(/ /g, '_20_')}" draw:display-name="${d[0]}" draw:style="${d[1]}" draw:dots1="${d[2]}" draw:dots1-length="${d[3]}"${d[4] ? ` draw:dots2="${d[4]}" draw:dots2-length="${d[5]}"` : ''} draw:distance="${d[6]}"/>`; });
-      p.push(`draw:stroke="${dn ? 'dash' : 'solid'}"${dn ? ` draw:stroke-dash="${dn}"` : ''} svg:stroke-color="${stroke}" svg:stroke-width="${cm(st.strokeW || (isLine ? 4 : 2))}"`);
+      p.push(`draw:stroke="${dn ? 'dash' : 'solid'}"${dn ? ` draw:stroke-dash="${dn}"` : ''} svg:stroke-color="${stroke}" svg:stroke-width="${cm(st.strokeW || (isLine ? (o.shape === 'path' ? 3 : 4) : 2))}"`);
       if (st.strokeOpacity != null) p.push(`svg:stroke-opacity="${Math.round(st.strokeOpacity * 100)}%"`);
       if (isLine) for (const [end, kind] of [['start', st.arrowStart], ['end', st.arrowEnd || (o.shape === 'lineArrow' ? 'triangle' : null)]]) {
         const M = MARKER_ODF[kind]; if (!M) continue;
@@ -127,7 +128,8 @@ export async function writeOdp(pres, props = {}) {
     return `<office:event-listeners><presentation:event-listener script:event-name="dom:click" ${a}/></office:event-listeners>`;
   };
   const image = (src, name) => { const m = /^data:image\/([a-z+]+);base64,(.*)$/i.exec(src || ''); if (!m) return null; const ext = m[1].toLowerCase().replace('jpeg', 'jpg').replace('svg+xml', 'svg'); const p = `Pictures/${name || `img${++pic}`}.${ext}`; zip.file(p, m[2], { base64: true }); pics.push(p); return p; };
-  const objXml = (o, idx) => withAlt(objXml0(o, idx), o);
+  const linked = new Set(); for (const sl of pres.slides) for (const q of sl.objects) if (q.conn) { linked.add(q.conn.a.id); linked.add(q.conn.b.id); }
+  const objXml = (o, idx) => { let xml = withAlt(objXml0(o, idx), o); if (linked.has(o.id)) xml = xml.replace(/^<([a-z]+:[a-z-]+)\b/, `<$1 draw:id="sh${o.id}" xml:id="sh${o.id}"`); return xml; };
   const objXml0 = (o, idx) => {
     const st = o.style || {};
     const pos = `svg:x="${cm(o.x)}" svg:y="${cm(o.y)}" svg:width="${cm(o.w)}" svg:height="${cm(o.h)}"${o.rot ? ` draw:transform="rotate(${(-o.rot * Math.PI / 180).toFixed(5)}) translate(${cm(o.x)} ${cm(o.y)})"` : ''}`;
@@ -143,6 +145,18 @@ export async function writeOdp(pres, props = {}) {
       const ang = ((o.rot || 0) * Math.PI) / 180; const cx = o.x + o.w / 2, cy = o.y + o.h / 2; const dx = (Math.cos(ang) * o.w) / 2, dy = (Math.sin(ang) * o.w) / 2;
       const [x1, x2] = o.flipH ? [cx + dx, cx - dx] : [cx - dx, cx + dx]; const [y1, y2] = o.flipH ? [cy + dy, cy - dy] : [cy - dy, cy + dy];
       return `<draw:line draw:style-name="${gr}" svg:x1="${cm(x1)}" svg:y1="${cm(y1)}" svg:x2="${cm(x2)}" svg:y2="${cm(y2)}">${evt(o, pres.slides)}</draw:line>`;
+    }
+    if (o.type === 'shape' && o.shape === 'path' && o.conn) {
+      // conector de verdad: LibreOffice lo mantiene unido a las formas
+      const gr = auto('graphic', `<style:graphic-properties ${graphicProps(o, st)}/>`);
+      const P = o.pts.map(([px, py]) => [o.x + px * o.w, o.y + py * o.h]); const a = P[0], b = P[P.length - 1];
+      const type = { straight: 'line', curved: 'curve', elbow: 'standard' }[o.conn.kind] || 'standard';
+      return `<draw:connector draw:style-name="${gr}" draw:type="${type}" draw:start-shape="sh${o.conn.a.id}" draw:start-glue-point="${SIDES.indexOf(o.conn.a.side)}" draw:end-shape="sh${o.conn.b.id}" draw:end-glue-point="${SIDES.indexOf(o.conn.b.side)}" svg:x1="${cm(a[0])}" svg:y1="${cm(a[1])}" svg:x2="${cm(b[0])}" svg:y2="${cm(b[1])}">${evt(o, pres.slides)}</draw:connector>`;
+    }
+    if (o.type === 'shape' && o.shape === 'path') {
+      const gr = auto('graphic', `<style:graphic-properties ${graphicProps(o, st, { fillDef: th.accent })}/>`);
+      const g = odfPath(o);
+      return `<draw:path draw:style-name="${gr}" ${posNoRot} svg:viewBox="${g.viewBox}" svg:d="${g.d}">${paras(o.html, base, st.align || 'center', paraExtra(st))}${evt(o, pres.slides)}</draw:path>`;
     }
     if (o.type === 'shape') {
       const gr = auto('graphic', `<style:graphic-properties ${graphicProps(o, st, { fillDef: th.accent })}/>`);
@@ -333,16 +347,43 @@ export async function readOdp(bytes, uid) {
         const o = { id: uid(), type: 'shape', shape: type, ...pos, html: textHtml(el), style: styleOf(st, { fill: st.fill === undefined ? '#729FCF' : st.fill, valign: 'middle', align: 'center', raw: true }) };
         if (geo && A(geo, 'draw', 'mirror-horizontal') === 'true') o.flipH = true; if (geo && A(geo, 'draw', 'mirror-vertical') === 'true') o.flipV = true;
         s.objects.push(o);
+      } else if (ln === 'path' || ln === 'polygon' || ln === 'polyline') {
+        const pos = posOf(el);
+        const vb = A(el, 'svg', 'viewBox') || `0 0 ${pos.w} ${pos.h}`;
+        let g;
+        if (ln === 'path') g = parseSvgPath(A(el, 'svg', 'd') || '', vb, pos);
+        else { const nums = String(A(el, 'draw', 'points') || '').split(/[\s,]+/).map(Number); const d = nums.reduce((acc, n, i) => acc + (i % 2 ? ` ${n}` : `${i ? ' L' : 'M'}${n}`), ''); g = parseSvgPath(d, vb, pos); g.closed = ln === 'polygon'; }
+        if (g.pts.length >= 2) {
+          const open = !g.closed && ln !== 'polygon';
+          s.objects.push({ id: uid(), type: 'shape', shape: 'path', ...pos, pts: g.pts.map(([x, y]) => [Math.round((x / Math.max(1, pos.w)) * 10000) / 10000, Math.round((y / Math.max(1, pos.h)) * 10000) / 10000]), closed: !open, smooth: false, html: textHtml(el), style: styleOf(st, open ? { stroke: st.stroke || '#3465A4', fill: undefined } : { fill: st.fill === undefined ? '#729FCF' : st.fill, valign: 'middle', align: 'center', raw: true }) });
+        }
+      } else if (ln === 'connector') {
+        const x1 = lenToPx(A(el, 'svg', 'x1')) * k, x2 = lenToPx(A(el, 'svg', 'x2')) * k, y1 = lenToPx(A(el, 'svg', 'y1')) * k, y2 = lenToPx(A(el, 'svg', 'y2')) * k;
+        const o = { id: uid(), type: 'shape', shape: 'path', x: Math.round(Math.min(x1, x2)), y: Math.round(Math.min(y1, y2)), w: Math.max(1, Math.round(Math.abs(x2 - x1))), h: Math.max(1, Math.round(Math.abs(y2 - y1))), rot: 0, closed: false, html: '', style: styleOf(st, { stroke: st.stroke || '#000000', strokeW: st.strokeW || 2, fill: undefined }) };
+        o.pts = [[x1 <= x2 ? 0 : 1, y1 <= y2 ? 0 : 1], [x1 <= x2 ? 1 : 0, y1 <= y2 ? 1 : 0]];
+        const sa = A(el, 'draw', 'start-shape'), sb = A(el, 'draw', 'end-shape');
+        const kind = { line: 'straight', curve: 'curved' }[A(el, 'draw', 'type')] || 'elbow';
+        if (sa && sb) pendingConn.push({ o, sa, sb, ga: Number(A(el, 'draw', 'start-glue-point') ?? 0), gb: Number(A(el, 'draw', 'end-glue-point') ?? 2), kind });
+        s.objects.push(o);
       } else if (ln === 'line') {
         const x1 = lenToPx(A(el, 'svg', 'x1')) * k, x2 = lenToPx(A(el, 'svg', 'x2')) * k, y1 = lenToPx(A(el, 'svg', 'y1')) * k, y2 = lenToPx(A(el, 'svg', 'y2')) * k;
         const len = Math.hypot(x2 - x1, y2 - y1); const ang = Math.round((Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI);
         const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
         s.objects.push({ id: uid(), type: 'shape', shape: 'line', x: Math.round(cx - len / 2), y: Math.round(cy - 10), w: Math.round(len), h: 20, rot: ((ang % 360) + 360) % 360, html: '', style: styleOf(st, { stroke: st.stroke || '#000000', strokeW: st.strokeW || 2, fill: undefined }) });
       }
+      if (s.objects.length > before) {
+        const o0 = s.objects[s.objects.length - 1]; const did = A(el, 'draw', 'id') || el.getAttribute('xml:id'); if (did) idMap.set(did, o0.id);
+        const nm = A(el, 'draw', 'name'); if (nm && !/^(Gráfico)$/.test(nm)) o0.name = nm;
+        const ti = [...el.children].find((c) => c.localName === 'title')?.textContent; const de = [...el.children].find((c) => c.localName === 'desc')?.textContent;
+        if (ti || de) o0.alt = { ...(ti ? { title: ti } : {}), ...(de ? { desc: de } : {}) };
+      }
       if (s.objects.length > before) { const o = s.objects[s.objects.length - 1]; const l = evtLink(el); if (l) o.link = l; if (group) o.group = group; for (const key of Object.keys(o.style || {})) if (o.style[key] === undefined) delete o.style[key]; }
     }
     };
+    const idMap = new Map(); const pendingConn = [];
     await walk(page, null);
+    // conectores: se unen a las formas por su draw:id (los puntos de LibreOffice: 0 arriba, 1 derecha, 2 abajo, 3 izquierda)
+    for (const pc of pendingConn) { const a = idMap.get(pc.sa), b = idMap.get(pc.sb); if (a && b) pc.o.conn = { a: { id: a, side: SIDES[pc.ga] || 'top' }, b: { id: b, side: SIDES[pc.gb] || 'top' }, kind: pc.kind }; }
     if (pst.hidden) s.hidden = true;
     slides.push(s);
   }

@@ -90,6 +90,10 @@ jobs:
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase10-calc3.mjs
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase11-impresiona3.mjs
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase11-impresiona3.mjs
+          xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase12-impresiona4.mjs
+          OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase12-impresiona4.mjs
+          xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase13-calc4.mjs
+          OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase13-calc4.mjs
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase6-calc.mjs
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase6-calc.mjs
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase7-impresiona.mjs

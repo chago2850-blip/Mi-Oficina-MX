@@ -6,6 +6,7 @@ import { readCoreProps } from '../../shared/coreprops.js';
 import { CHART_TYPES, parseChartData, chartDataText, chartSvg } from './charts.js';
 import { runShow, runPresenter, runAudience, EXIT_TYPES, PATH_TYPES, buildSteps } from './show.js';
 import * as NV from './navegador.js';
+import * as TZ from './trazos.js';
 import * as F3 from './fase3.js';
 import * as F4 from './fase4.js';
 import * as SZ from './slidesize.js';
@@ -66,6 +67,7 @@ function renderSlide(s, mode = 'thumb') {
   if (!s.bg && !s.bgImage && th.id === 'claro') el.append(h('div', { class: 'deco', style: { background: th.accent } }));
   const isMaster = s === pres.master;
   const master = !isMaster && pres.master ? pres.master : null;
+  if (!isMaster) TZ.updateConnectors(s);
   const list = master ? [...master.objects.map((o) => ({ ...o, __m: true })), ...s.objects] : s.objects;
   for (const o of list) {
     const st = o.style || {};
@@ -405,6 +407,7 @@ function onKey(e) {
   if (e.key === 'F5') { e.preventDefault(); present(e.shiftKey ? cur : 0); return; }
   if (e.key === 'F4' && selected.size) { e.preventDefault(); OB.posSizeDialog(); return; }
   if (e.key === 'F3' && e.shiftKey && selected.size) { e.preventDefault(); DS.duplicateDialog(); return; }
+  if (e.key === 'F8' && selected.size) { e.preventDefault(); TZ.editPoints(); return; }
   if (e.key === 'F5' && e.shiftKey && (e.ctrlKey || e.metaKey)) { e.preventDefault(); NV.navigator(); return; }
   if (mod && e.key.toLowerCase() === 'k' && selected.size) { e.preventDefault(); OB.linkDialog(); return; }
   if (mod && e.shiftKey && e.key.toLowerCase() === 'g') { e.preventDefault(); if (e.altKey) OB.ungroup(); else OB.group(); return; }
@@ -826,6 +829,17 @@ async function onCommand(cmd, arg) {
     case 'deleteSlide': return deleteSlide();
     case 'present': return present(0);
     case 'customShows': return DS.customShowsDialog();
+    case 'drawCurve': return TZ.startTool('curve');
+    case 'drawPolygon': return TZ.startTool('polygon');
+    case 'drawPolyline': return TZ.startTool('polyline');
+    case 'drawFreehand': return TZ.startTool('freehand');
+    case 'connector': { const tl = TZ.startTool('connector'); TZ.setConnectorKind(arg || 'elbow'); return tl; }
+    case 'connStraight': return TZ.setKind('straight');
+    case 'connElbow': return TZ.setKind('elbow');
+    case 'connCurved': return TZ.setKind('curved');
+    case 'editPoints': return TZ.editPoints();
+    case 'closeObj': return TZ.toggleClosed();
+    case 'smoothObj': return TZ.toggleSmooth();
     case 'photoAlbum': return NV.photoAlbumDialog();
     case 'navigator': return NV.navigator();
     case 'objName': return NV.nameDialog();
@@ -958,7 +972,8 @@ async function findText(q, replace = false) {
 // ------------------------------------------------------------------ cinta
 const layoutMenu = (apply) => LAYOUTS.map((l) => ({ label: l.name, icon: 'layout', run: () => (apply ? setLayout(l.id) : addSlide(l.id)) }));
 const SHAPE_ICONS = { rect: 'rect', roundRect: 'rect', ellipse: 'ellipse', triangle: 'triangle', rtTriangle: 'triangle', arrow: 'arrow', leftArrow: 'arrow', upArrow: 'arrow', downArrow: 'arrow', leftRightArrow: 'arrow', chevron: 'arrow', homePlate: 'arrow', star: 'star', star4: 'star', line: 'line', lineArrow: 'line' };
-const shapeMenu = () => OB.SHAPES.map(([k, l]) => ({ label: l, icon: SHAPE_ICONS[k] || 'rect', run: () => addShape(k) }));
+const shapeMenu = () => [...OB.SHAPES.map(([k, l]) => ({ label: l, icon: SHAPE_ICONS[k] || 'rect', run: () => addShape(k) })), '-', ...drawMenu()];
+const drawMenu = () => [{ label: 'Curva', icon: 'line', run: () => onCommand('drawCurve') }, { label: 'Polígono', icon: 'star', run: () => onCommand('drawPolygon') }, { label: 'Polilínea', icon: 'line', run: () => onCommand('drawPolyline') }, { label: 'Forma libre', icon: 'brush', run: () => onCommand('drawFreehand') }, '-', { label: 'Conector en ángulo', icon: 'arrow', run: () => onCommand('connector', 'elbow') }, { label: 'Conector recto', icon: 'arrow', run: () => onCommand('connector', 'straight') }, { label: 'Conector curvo', icon: 'arrow', run: () => onCommand('connector', 'curved') }];
 const rotateMenu = () => [{ label: 'Girar 90° a la derecha', run: () => OB.rotate(90) }, { label: 'Girar 90° a la izquierda', run: () => OB.rotate(-90) }, '-', { label: 'Voltear horizontalmente', run: () => OB.flip('h') }, { label: 'Voltear verticalmente', run: () => OB.flip('v') }];
 const arrangeMenu = () => [{ label: 'Traer al frente', icon: 'front', run: () => arrange('front') }, { label: 'Enviar al fondo', icon: 'back', run: () => arrange('back') }, '-', { label: 'Alinear a la izquierda', icon: 'alignLeft', run: () => arrange('left') }, { label: 'Centrar horizontalmente', icon: 'alignCenter', run: () => arrange('hcenter') }, { label: 'Alinear a la derecha', icon: 'alignRight', run: () => arrange('right') }, { label: 'Alinear arriba', icon: 'alignObj', run: () => arrange('top') }, { label: 'Centrar verticalmente', icon: 'alignCenter', run: () => arrange('vcenter') }, { label: 'Alinear abajo', icon: 'footer', run: () => arrange('bottom') }, '-', { label: 'Distribuir horizontalmente', icon: 'distCols', run: () => OB.distribute('h') }, { label: 'Distribuir verticalmente', icon: 'distRows', run: () => OB.distribute('v') }];
 
@@ -999,7 +1014,7 @@ const TABS = [
     { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
     { label: 'Imágenes', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }, { cmd: 'photoAlbum', label: 'Álbum fotográfico', icon: 'slideDup', size: 'lg' }] },
     { label: 'Multimedia', items: [{ cmd: 'insertVideo', label: 'Video', icon: 'present', size: 'lg' }, { cmd: 'insertAudio', label: 'Audio', icon: 'notes', size: 'lg' }, { cmd: 'insertCamera', label: 'Cámara en vivo', icon: 'image', size: 'lg' }] },
-    { label: 'Ilustraciones', items: [{ cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: shapeMenu }, { cmd: 'chart', label: 'Gráfico', icon: 'chart', size: 'lg' }] },
+    { label: 'Ilustraciones', items: [{ cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: shapeMenu }, { cmd: 'drawMenu', label: 'Líneas y conectores', icon: 'line', size: 'lg', menu: drawMenu }, { cmd: 'chart', label: 'Gráfico', icon: 'chart', size: 'lg' }] },
     { label: 'Encabezado y pie', items: [{ cmd: 'footer', label: 'Pie y número', icon: 'footer', size: 'lg' }] },
     { label: 'Texto', items: [{ cmd: 'textbox', label: 'Cuadro de texto', icon: 'textbox', size: 'lg' }, { cmd: 'fieldMenu', label: 'Campo', icon: 'func', size: 'lg', menu: () => DS.fieldMenu() }] },
     { label: 'Vínculos', items: [{ cmd: 'objLink', label: 'Hipervínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
@@ -1045,6 +1060,7 @@ const TABS = [
   { id: 'format', label: 'Formato de forma', contextual: true, groups: [
     { label: 'Estilos', items: [{ cmd: 'fill', label: 'Relleno', icon: 'fill', size: 'lg', color: true, colorValue: '#DC3A63' }, { cmd: 'stroke', label: 'Contorno', icon: 'rect', size: 'lg', color: true, colorValue: '#1D2030' }, { stack: [{ cmd: 'areaDlg', label: 'Área…', icon: 'fill', showLabel: true }, { cmd: 'lineDlg', label: 'Línea…', icon: 'line', showLabel: true }, { cmd: 'textDlg', label: 'Texto…', icon: 'textbox', showLabel: true }] }, { cmd: 'painter', label: 'Clonar formato', icon: 'brush', size: 'lg' }] },
     { label: 'Organizar', items: [{ cmd: 'front', label: 'Al frente', icon: 'front', size: 'lg', split: () => [{ label: 'Traer al frente', run: () => arrange('front') }, { label: 'Traer adelante', kbd: 'Ctrl++', run: () => OB.zStep(1) }] }, { cmd: 'back', label: 'Al fondo', icon: 'back', size: 'lg', split: () => [{ label: 'Enviar al fondo', run: () => arrange('back') }, { label: 'Enviar atrás', kbd: 'Ctrl+-', run: () => OB.zStep(-1) }] }, { cmd: 'align', label: 'Alinear', icon: 'alignObj', size: 'lg', menu: arrangeMenu }, { stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }, { cmd: 'rotateMenu', label: 'Girar y voltear', icon: 'recover', showLabel: true, menu: rotateMenu }, { cmd: 'duplicateObj', label: 'Duplicar…', icon: 'copy', showLabel: true, kbd: 'Mayús+F3' }] }, { cmd: 'delete', label: 'Eliminar', icon: 'trash', size: 'lg' }] },
+    { label: 'Puntos y conectores', items: [{ stack: [{ cmd: 'editPoints', label: 'Editar puntos', icon: 'alignObj', showLabel: true, kbd: 'F8' }, { cmd: 'closeObj', label: 'Cerrar objeto', icon: 'rect', showLabel: true }, { cmd: 'smoothObj', label: 'Suavizar', icon: 'line', showLabel: true }] }, { cmd: 'connKind', label: 'Tipo de conector', icon: 'arrow', size: 'lg', menu: () => [{ label: 'En ángulo', run: () => onCommand('connElbow') }, { label: 'Recto', run: () => onCommand('connStraight') }, { label: 'Curvo', run: () => onCommand('connCurved') }] }] },
     { label: 'Tamaño', items: [{ cmd: 'posSize', label: 'Posición y tamaño…', icon: 'pageSetup', size: 'lg', kbd: 'F4' }] },
     { label: 'Imagen', items: [{ stack: [{ cmd: 'crop', label: 'Recortar…', icon: 'image', showLabel: true }, { cmd: 'imgAdjust', label: 'Ajustes de imagen…', icon: 'brush', showLabel: true }, { cmd: 'origSize', label: 'Tamaño original', icon: 'zoomIn', showLabel: true }] }] },
     { label: 'Accesibilidad', items: [{ cmd: 'objName', label: 'Nombre y texto alternativo…', icon: 'textbox', size: 'lg' }] },
@@ -1057,6 +1073,7 @@ const MODE = new URLSearchParams(location.search);
 if (MODE.get('audience') === '1' || MODE.get('render') === '1') {
   runAudience({ renderSlide, setPres: (p) => { pres = p; }, getPres: () => pres, api, render: MODE.get('render') === '1' });
 } else {
+TZ.init({ get stage() { return stage; }, stagePoint, slide: () => slide(), commit, select, selObjs: () => selObjs(), uid, renderAll, objById, scale: () => scale, size: () => pres.size });
 NV.init({ getPres: () => pres, cur: () => cur, setCur: (i) => { cur = i; }, goto, slide: () => slide(), commit, select, selObjs: () => selObjs(), newSlide, uid, buildSteps, docName: () => shell.doc?.name || '', docProps: () => shell.docProps() });
 TBL.init({ slide: () => slide(), commit, selObjs: () => selObjs(), stopEditing: () => { if (editing) stopEditing(); } });
 DS.init({ getPres: () => pres, cur: () => cur, setCur: (i) => { cur = i; }, slide: () => slide(), commit, renderAll, renderSlide, uid, newSlide, stopEditing: () => { if (editing) stopEditing(); }, selObjs: () => selObjs(), select, present, readPptx, readOdp, docName: () => shell.doc?.name || '', docProps: () => shell.docProps() });
@@ -1076,4 +1093,4 @@ makePres('blank'); renderAll();
 shell.start();
 addEventListener('keydown', (e) => { if (e.altKey && e.key === 'F5') { e.preventDefault(); presenter(cur); } });
 }
-window.__impresiona = { DS, TBL, NV, theme, get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, F3, F4, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto, OB, selected: () => [...selected] };
+window.__impresiona = { DS, TBL, NV, TZ, theme, get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, F3, F4, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto, OB, selected: () => [...selected] };

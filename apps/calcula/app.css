@@ -108,3 +108,6 @@ body.printing #printRoot { display: block; padding: 0; background: #fff; }
 .cf-cats, .cf-list { width: 100%; }
 .cf-num .fx-field.wide { margin-top: 10px; }
 .cf-prev { margin-top: 10px; }
+/* propiedades del gráfico: series */
+.ser-row { display: grid; grid-template-columns: 1fr 44px auto auto; gap: 10px; align-items: center; }
+.ser-row input[type=color] { width: 40px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 4px; }

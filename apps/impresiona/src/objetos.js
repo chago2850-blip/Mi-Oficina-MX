@@ -5,6 +5,7 @@
 // y acciones al hacer clic, ocultar diapositiva, cuadrícula con ajuste y clonar formato. GPL-3.0
 import { h, toast, form, t } from '../../shared/office.js';
 import { tabbed, field, numIn, sel, chk } from '../../shared/dialogs.js';
+import { svgPath } from './trazos.js';
 
 let C = null; // { getPres, slide, commit, select, selected, selObjs, objById, renderAll, cur, uid }
 export function init(ctx) { C = ctx; }
@@ -62,9 +63,10 @@ export function shapeSvg(o, th) {
     else { const a = ((g.angle ?? 90) * Math.PI) / 180; const x = Math.cos(a) / 2, y = Math.sin(a) / 2; defs += `<linearGradient id="${id}" x1="${0.5 - x}" y1="${0.5 - y}" x2="${0.5 + x}" y2="${0.5 + y}"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>`; }
     fill = `url(#${id})`;
   }
-  const isLine = o.shape === 'line' || o.shape === 'lineArrow';
+  const isLine = o.shape === 'line' || o.shape === 'lineArrow' || (o.shape === 'path' && !o.closed);
+  if (o.shape === 'path' && !o.closed) fill = 'none';
   const stroke = isLine ? (st.stroke || th.accent) : (st.stroke || 'none');
-  const sw = isLine ? (st.strokeW || 4) : (st.strokeW || (st.stroke ? 2 : 0));
+  const sw = isLine ? (st.strokeW || (o.shape === 'path' ? 3 : 4)) : (st.strokeW || (st.stroke ? 2 : 0));
   const dash = DASH[st.dash] ? ` stroke-dasharray="${DASH[st.dash].split(' ').map((n) => n * Math.max(1, sw / 2)).join(' ')}"` : '';
   const sop = st.strokeOpacity != null ? ` stroke-opacity="${st.strokeOpacity}"` : '';
   const fop = st.fillOpacity != null ? ` fill-opacity="${st.fillOpacity}"` : '';
@@ -78,6 +80,10 @@ export function shapeSvg(o, th) {
   };
   const wrap = (body) => `<svg width="100%" height="100%" viewBox="0 0 ${w} ${hh}" preserveAspectRatio="none">${defs ? `<defs>${defs}</defs>` : ''}${body}</svg>`;
   const common = `fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dash}${sop}${fop}`;
+  if (o.shape === 'path') {
+    const ms = o.closed ? '' : head(st.arrowStart, false); const me = o.closed ? '' : head(st.arrowEnd, true);
+    return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${hh}" preserveAspectRatio="none" overflow="visible" style="overflow:visible">${defs ? `<defs>${defs}</defs>` : ''}<path d="${svgPath(o, w, hh)}" ${common} stroke-linejoin="round" stroke-linecap="round"${ms}${me} vector-effect="non-scaling-stroke"/></svg>`;
+  }
   if (isLine) {
     const ms = head(st.arrowStart, false); const me = head(st.arrowEnd || (o.shape === 'lineArrow' ? 'triangle' : null), true);
     return wrap(`<line x1="${sw}" y1="${hh / 2}" x2="${w - sw}" y2="${hh / 2}" stroke="${stroke}" stroke-width="${sw}"${dash}${sop}${ms}${me}/>`);

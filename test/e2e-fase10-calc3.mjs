@@ -99,6 +99,7 @@ try {
     await reopen(w, path.join(out, `esc.${ext}`)); await wait(400);
     assert.deepEqual(await w.evaluate(() => (window.__calcula.wb.sheets[0].x3?.scenarios || []).map((s) => [s.name, s.range, s.values])), [['Base', 'B2:B3', [[0.1], [2]]], ['Caro', 'B2:B3', [[0.2], [3]]]], ext);
   }
+  if (hasSoffice) { fs.mkdirSync(path.join(out, 'lo'), { recursive: true }); execFileSync('soffice', ['--headless', '--convert-to', 'xlsx', '--outdir', path.join(out, 'lo'), path.join(out, 'esc.ods')], { stdio: 'ignore' }); assert.ok(fs.existsSync(path.join(out, 'lo', 'esc.xlsx')), 'LibreOffice abre el .ods con escenarios'); }
   log('Escenarios: crear, mostrar y resumen en una hoja nueva (se guardan en .xlsx y .ods)');
   // 2) operaciones múltiples de una y dos variables
   await w.evaluate(() => window.__shell.newDoc('blank')); await wait(300);

@@ -237,3 +237,10 @@ body.render-mode .show-stage.aud { display: block; }
 .nav-tree .nav-slide.on { color: var(--accent, #dc3a63); }
 .nav-tree .nav-obj { padding-left: 26px; font-size: 13px; color: var(--ink-2, #555); }
 .album-list { max-height: 200px; }
+/* dibujar curvas, polígonos, formas libres y conectores */
+.draw-layer { position: absolute; inset: 0; z-index: 40; cursor: crosshair; outline: none; }
+.draw-layer svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.draw-layer path { fill: none; stroke: #1565c0; stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+.pts-layer { position: absolute; inset: 0; z-index: 41; pointer-events: none; }
+.pt-handle { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; background: #fff; border: 2px solid #1565c0; border-radius: 2px; pointer-events: auto; cursor: move; box-sizing: border-box; }
+.t-shape svg[overflow="visible"] { overflow: visible; }

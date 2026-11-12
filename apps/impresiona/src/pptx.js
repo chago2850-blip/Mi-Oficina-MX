@@ -1,6 +1,7 @@
 // Abrir y guardar .pptx para Impresiona (pptxtojson para leer, PptxGenJS para escribir). GPL-3.0
 import JSZip from 'jszip';
 import { cellLook } from './tablas.js';
+import { pptxPoints, parseSvgPath } from './trazos.js';
 import { parse } from 'pptxtojson';
 import PptxGenJS from 'pptxgenjs';
 import { themeById } from './themes.js';
@@ -30,6 +31,14 @@ export async function readPptx(bytes, uid) {
     if (el.type === 'shape' && !fillColor(el.fill) && !el.borderWidth && el.content && (el.shapType === 'rect' || !el.shapType)) {
       // Cuadro de texto guardado como rectángulo sin relleno ni borde
       return [{ ...base, type: 'text', html: sanitizeHtml(el.content), style: { valign: { mid: 'middle', ctr: 'middle', b: 'bottom', bottom: 'bottom' }[el.vAlign] || 'top', raw: true } }];
+    }
+    if (el.type === 'shape' && el.shapType === 'custom' && el.path) {
+      // geometría libre (curvas, polígonos, formas de otros programas)
+      const g = parseSvgPath(el.path, `0 0 ${el.width} ${el.height}`, { w: base.w, h: base.h });
+      if (g.pts.length >= 2) {
+        const fc = fillColor(el.fill); const open = !g.closed;
+        return [{ ...base, type: 'shape', shape: 'path', pts: g.pts.map(([x, y]) => [Math.round((x / Math.max(1, base.w)) * 10000) / 10000, Math.round((y / Math.max(1, base.h)) * 10000) / 10000]), closed: !open, smooth: false, html: el.content ? sanitizeHtml(el.content) : '', style: { fill: open ? undefined : (fc || null), ...(el.borderColor && el.borderWidth ? { stroke: el.borderColor, strokeW: Math.max(1, Math.round(el.borderWidth * PT_PX)) } : {}), valign: 'middle', align: 'center' } }];
+      }
     }
     if (el.type === 'shape') {
       const sh = SHAPES[el.shapType];
@@ -176,9 +185,9 @@ function fillOpt(st, th, def) {
   return { color: c.replace('#', ''), ...(st.fillOpacity != null || st.opacity != null ? { transparency: Math.round((1 - (st.fillOpacity ?? 1) * (st.opacity ?? 1)) * 100) } : {}) };
 }
 function lineOpt(o, st, th) {
-  const isLine = o.shape === 'line' || o.shape === 'lineArrow';
+  const isLine = o.shape === 'line' || o.shape === 'lineArrow' || (o.shape === 'path' && !o.closed);
   const col = st.stroke || (isLine ? th.accent : null); if (!col) return { type: 'none' };
-  const L = { color: col.replace('#', ''), width: (st.strokeW || (isLine ? 4 : 1)) * 0.75 };
+  const L = { color: col.replace('#', ''), width: (st.strokeW || (isLine ? (o.shape === 'path' ? 3 : 4) : 1)) * 0.75 };
   if (DASH_OUT[st.dash]) L.dashType = DASH_OUT[st.dash];
   if (st.strokeOpacity != null) L.transparency = Math.round((1 - st.strokeOpacity) * 100);
   if (isLine) { const a = st.arrowStart, b = st.arrowEnd || (o.shape === 'lineArrow' ? 'triangle' : null); if (HEAD_OUT[a]) L.beginArrowType = HEAD_OUT[a]; if (HEAD_OUT[b]) L.endArrowType = HEAD_OUT[b]; }
@@ -221,12 +230,14 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
           ...(st.pad ? { margin: [st.pad.l, st.pad.r, st.pad.b, st.pad.t].map((v) => Math.round(v * 0.75)) } : {}),
           ...(st.lineH ? { lineSpacingMultiple: st.lineH / 1.2 } : {}), ...(st.paraSp != null ? { paraSpaceAfter: st.paraSp } : {}),
         };
-        if (o.type === 'shape') Object.assign(opts, { shape: SHAPE_OUT[o.shape] || 'rect', fill: fillOpt(st, th, th.accent), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, color: (st.color || '#FFFFFF').replace('#', '') });
+        if (o.type === 'shape' && o.shape === 'path') Object.assign(opts, { shape: 'custGeom', points: pptxPoints(o, PX_IN), fill: o.closed ? fillOpt(st, th, th.accent) : { type: 'none' }, line: lineOpt(o, st, th), color: (st.color || (o.closed ? '#FFFFFF' : th.text)).replace('#', '') });
+        else if (o.type === 'shape') Object.assign(opts, { shape: SHAPE_OUT[o.shape] || 'rect', fill: fillOpt(st, th, th.accent), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, color: (st.color || '#FFFFFF').replace('#', '') });
         else if (st.fill) opts.fill = fillOpt(st, th);
         slide.addText(runs, { ...opts, ...(o.name ? { objectName: o.name } : {}) });
       } else if (o.type === 'shape') {
         const isLn = o.shape === 'line' || o.shape === 'lineArrow';
         if (isLn) Object.assign(pos, { y: (o.y + o.h / 2) * PX_IN, h: 0 });
+        if (o.shape === 'path') { slide.addShape('custGeom', { ...pos, ...(o.name ? { objectName: o.name } : {}), points: pptxPoints(o, PX_IN), fill: o.closed ? (fillOpt(st, th, th.accent) || { type: 'none' }) : { type: 'none' }, line: lineOpt(o, st, th), ...fxOpt(o, st) }); continue; }
         slide.addShape(SHAPE_OUT[o.shape] || 'rect', { ...pos, ...(o.name ? { objectName: o.name } : {}), fill: o.shape === 'line' || o.shape === 'lineArrow' ? undefined : (fillOpt(st, th, th.accent) || { type: 'none' }), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, ...fxOpt(o, st) });
       } else if (o.type === 'chart') {
         const d = o.data || { cats: [], series: [] };

@@ -14,6 +14,7 @@ import { injectVba } from './xlsx.js';
 import * as CE from './celdas.js';
 import * as DT from './datos.js';
 import * as AN from './analisis.js';
+import * as GR from './graficos.js';
 
 const wb = new Workbook();
 let shell, grid, nameBox, fxInput, tabsBar, statusInfo, zoom;
@@ -346,32 +347,20 @@ async function pasteFromClipboard() {
 
 // ------------------------------------------------------------------ gráficos
 const uid = () => Math.random().toString(36).slice(2, 10);
-const CHART_TYPES = [['column', 'Columnas'], ['bar', 'Barras'], ['line', 'Líneas'], ['area', 'Área'], ['pie', 'Circular'], ['scatter', 'Dispersión']];
-const PALETTE = ['#0E9C74', '#5B48E8', '#DC3A63', '#F08A24', '#1F8FD6', '#8E6CD9', '#2FB4A8', '#E0B000'];
+const CHART_TYPES = GR.CHART_TYPES;
 const charts = new Map(); // id -> instancia echarts
 
-function chartData(ch, s = wb.sheet) {
-  const g = F3.resolveRange(ch.range, s); if (!g) return null;
-  const val = (r, c) => wb.value(r, c, s);
-  const headerRow = [...Array(g.c2 - g.c1 + 1).keys()].some((i) => typeof val(g.r1, g.c1 + i) === 'string') && g.r2 > g.r1;
-  const catCol = [...Array(g.r2 - g.r1 + 1).keys()].slice(headerRow ? 1 : 0).some((i) => typeof val(g.r1 + i, g.c1) === 'string') || (g.c2 > g.c1 && headerRow && typeof val(g.r1, g.c1) !== 'number' && val(g.r1, g.c1) == null);
-  const r0 = headerRow ? g.r1 + 1 : g.r1, c0 = catCol ? g.c1 + 1 : g.c1;
-  const cats = []; for (let r = r0; r <= g.r2; r++) { if (s.hiddenRows.has(r)) continue; cats.push(catCol ? wb.display(r, g.c1, s).text : String(r - r0 + 1)); }
-  const series = [];
-  for (let c = c0; c <= g.c2; c++) {
-    const data = []; for (let r = r0; r <= g.r2; r++) { if (s.hiddenRows.has(r)) continue; const v = val(r, c); data.push(typeof v === 'number' ? v : null); }
-    series.push({ name: headerRow ? wb.display(g.r1, c, s).text : `Serie ${c - c0 + 1}`, data });
-  }
-  return { cats, series };
+// hoja y celdas de los datos de un gráfico (pueden estar en otra hoja: 'Hoja 2'!A1:C9)
+function chartSource(ch, s = wb.sheet) {
+  const m = /^\s*(?:'((?:[^']|'')+)'|([^'!]+))!(.+)$/.exec(String(ch.range || ''));
+  const ds = m ? wb.sheets.find((q) => q.name === (m[1] || m[2]).replace(/''/g, "'")) || s : s;
+  return { ds, g: F3.resolveRange(m ? m[3] : ch.range, ds) };
 }
+function chartLayout(ch, s = wb.sheet) { const { ds, g } = chartSource(ch, s); const L = GR.chartLayout(wb, ch, ds, g); if (L) L.sheetName = ds.name; return L; }
+function chartData(ch, s = wb.sheet) { return chartLayout(ch, s); }
 function chartOption(ch, s) {
   const d = chartData(ch, s) || { cats: [], series: [] };
-  const base = { color: PALETTE, animation: !document.body.classList.contains('printing'), title: ch.title ? { text: ch.title, left: 'center', top: 8, textStyle: { fontSize: 15, fontWeight: 600, color: '#1D2030', fontFamily: 'Inter, sans-serif' } } : undefined, tooltip: { trigger: ch.type === 'pie' ? 'item' : 'axis' }, legend: d.series.length > 1 || ch.type === 'pie' ? { bottom: 4, type: 'scroll' } : undefined, grid: { left: 50, right: 20, top: ch.title ? 48 : 20, bottom: d.series.length > 1 ? 44 : 28, containLabel: true } };
-  if (ch.type === 'pie') return { ...base, series: [{ type: 'pie', radius: ['0%', '62%'], center: ['50%', '52%'], data: d.cats.map((c, i) => ({ name: c, value: d.series[0]?.data[i] })), label: { formatter: '{b}: {d}%' } }] };
-  if (ch.type === 'scatter') return { ...base, xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: d.series.slice(1).map((sr) => ({ type: 'scatter', name: sr.name, data: sr.data.map((v, i) => [d.series[0].data[i], v]) })) };
-  const horizontal = ch.type === 'bar';
-  const cat = { type: 'category', data: d.cats, axisLabel: { color: '#4B5066' } }, valAx = { type: 'value', axisLabel: { color: '#4B5066' }, splitLine: { lineStyle: { color: '#ECEDF2' } } };
-  return { ...base, xAxis: horizontal ? valAx : cat, yAxis: horizontal ? cat : valAx, series: d.series.map((sr) => ({ type: ch.type === 'column' || ch.type === 'bar' ? 'bar' : 'line', name: sr.name, data: sr.data, smooth: false, areaStyle: ch.type === 'area' ? { opacity: 0.25 } : undefined, barMaxWidth: 48 })) };
+  return GR.buildOption(ch, d, { printing: document.body.classList.contains('printing') });
 }
 function mountCharts() {
   charts.forEach((c) => c.dispose()); charts.clear();
@@ -422,22 +411,17 @@ async function insertChart(type) {
   g = clampToUsed(g);
   const p = grid.prefix();
   const ch = { id: uid(), type: type || 'column', range: rangeStr(g), title: '', x: p.cx[g.c2 + 1] + 24, y: p.ry[g.r1], w: 480, h: 300 };
-  if (!type) { const v = await chartDialog(ch, 'Insertar gráfico'); if (!v) return; Object.assign(ch, v); }
+  if (!type) { const v = await chartDialog(ch, 'Insertar gráfico'); if (!v) return; for (const [k, x] of Object.entries(v)) if (x !== undefined) ch[k] = x; }
   act('Insertar gráfico', () => { wb.sheet.charts.push(ch); }, { hf: false });
   mountCharts();
 }
 async function chartDialog(ch, title) {
-  return form(title, [
-    { name: 'type', label: 'Tipo de gráfico', type: 'select', value: ch.type, options: CHART_TYPES },
-    { name: 'title', label: 'Título', value: ch.title, placeholder: 'Opcional' },
-    { name: 'range', label: 'Datos (rango)', value: ch.range },
-  ], 'Aceptar');
+  const L = chartLayout(ch); return GR.chartDialog(ch, title, { resolve: (r) => !!chartSource({ ...ch, range: r }).g, seriesNames: (L?.series || []).map((x) => x.name) });
 }
 async function editChart(ch) {
-  const v = await chartDialog(ch, 'Editar gráfico');
+  const v = await chartDialog(ch, 'Propiedades del gráfico');
   if (!v) return;
-  if (!F3.resolveRange(v.range)) { toast('Rango no válido', { error: true }); return; }
-  act('Editar gráfico', () => Object.assign(ch, v), { hf: false });
+  act('Editar gráfico', () => { for (const [k, x] of Object.entries(v)) { if (x === undefined) delete ch[k]; else ch[k] = x; } }, { hf: false });
   refreshCharts();
 }
 
@@ -568,15 +552,17 @@ const adapter = {
       wb.hf.clearUndoStack?.(); wb.undoStack = [];
       afterLoad(); return {};
     }
-    if (f.ext === 'ods') { const r = await readOds(wb, f.bytes); afterLoad(); return { ...r, props: await odsProps(f.bytes) }; }
+    if (f.ext === 'ods') { const r = await readOds(wb, f.bytes); await GR.readOdsCharts(f.bytes, wb); afterLoad(); return { ...r, props: await odsProps(f.bytes) }; }
     const r = await readXlsx(wb, f.bytes);
+    await GR.readXlsxCharts(f.bytes, wb);
     afterLoad();
     return r;
   },
   async serialize(ext) {
     if (ext === 'csv') return toCsv(wb);
-    if (ext === 'ods') return writeOds(wb, shell.docProps());
-    const bytes = await writeXlsx(wb, shell.docProps());
+    const layoutOf = (ch, sh) => chartLayout(ch, sh);
+    if (ext === 'ods') return GR.addOdsCharts(await writeOds(wb, shell.docProps()), wb, layoutOf);
+    const bytes = await GR.addXlsxCharts(await writeXlsx(wb, shell.docProps()), wb, layoutOf);
     if (ext === 'xlsm' && wb.vba) return injectVba(bytes, wb.vba);
     return bytes;
   },
@@ -886,4 +872,4 @@ shell.start();
 // Al cambiar el idioma, las fórmulas y errores se vuelven a mostrar en el idioma nuevo
 onLang(() => { grid.invalidate(); grid.draw(); refresh(); });
 
-window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q, CE, DT, AN };
+window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q, CE, DT, AN, GR, charts: () => charts, editChart, chartOption };
