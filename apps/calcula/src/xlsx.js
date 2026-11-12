@@ -175,7 +175,7 @@ export async function writeXlsx(wb, props = {}) {
     if (s.protected) await ws.protect(s.protected.password || '', { selectLockedCells: true, selectUnlockedCells: true });
     for (const g of s.x3?.rowGroups || []) for (let r = g.a; r <= g.b; r++) ws.getRow(r + 1).outlineLevel = 1;
     for (const g of s.x3?.colGroups || []) for (let c = g.a; c <= g.b; c++) ws.getColumn(c + 1).outlineLevel = 1;
-    const x3 = s.x3 && (s.x3.sparklines.length || s.x3.slicers.length || s.x3.rowGroups.length || s.x3.colGroups.length || s.x3.solver || s.x3.stdFilter) ? s.x3 : undefined;
+    const x3 = s.x3 && (s.x3.sparklines.length || s.x3.slicers.length || s.x3.rowGroups.length || s.x3.colGroups.length || s.x3.solver || s.x3.stdFilter || s.x3.scenarios?.length) ? s.x3 : undefined;
     if (s.charts.length || s.pivot || x3 || s.cf.some((r) => r.type === 'dup' || r.type === 'text')) meta.sheets[s.name] = { charts: s.charts, pivot: s.pivot || undefined, cf: s.cf, x3 };
   }
   for (const n of wb.names || []) { try { x.definedNames.add(n.expr.replace(/^=/, ''), n.name); } catch { /* */ } }

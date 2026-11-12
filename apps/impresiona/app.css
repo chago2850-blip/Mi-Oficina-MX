@@ -229,3 +229,11 @@ body.render-mode .show-stage.aud { display: block; }
 #printRoot .plines i { display: block; border-bottom: 1px solid #bbb; height: 22px; }
 #printRoot h3 { margin: 14px 0 6px; font-size: 15px; }
 #printRoot .pdoc p { margin: 2px 0; }
+/* navegador y álbum */
+.nav-tree { max-height: 420px; overflow: auto; display: flex; flex-direction: column; }
+.nav-tree button { text-align: left; border: 0; background: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font: inherit; color: inherit; }
+.nav-tree button:hover, .nav-tree button:focus-visible { background: var(--hover, #eef); }
+.nav-tree .nav-slide { font-weight: 600; margin-top: 4px; }
+.nav-tree .nav-slide.on { color: var(--accent, #dc3a63); }
+.nav-tree .nav-obj { padding-left: 26px; font-size: 13px; color: var(--ink-2, #555); }
+.album-list { max-height: 200px; }

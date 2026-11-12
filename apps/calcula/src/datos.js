@@ -6,6 +6,7 @@
 import { h, toast, t, tf } from '../../shared/office.js';
 import { tabbed, field, numIn, sel, chk } from '../../shared/dialogs.js';
 import { colName, addr, parseAddr, parseRange } from './workbook.js';
+import { allLists, listRank } from './analisis.js';
 
 let C = null; // { wb, grid, shell, act, refresh, sel, clamp, switchSheet, renderTabs, refreshCharts }
 export function init(ctx) { C = ctx; }
@@ -33,6 +34,7 @@ export async function sortDialog() {
     { label: 'Opciones', body: h('div', { class: 'fx-grid' },
       chk('header', 'El intervalo contiene etiquetas de columna', hdr), chk('cs', 'Distinguir mayúsculas y minúsculas', false),
       chk('natural', 'Orden natural (2 antes de 10, «a2» antes de «a10»)', true), chk('formats', 'Incluir los formatos', true),
+      field('Orden personalizado (criterio 1)', sel('list', '', [['', t('(ninguno)')], ...allLists().map((l, i) => [String(i), l.slice(0, 4).join(', ') + (l.length > 4 ? '…' : '')])])),
       field('Dirección', sel('dir', 'rows', [['rows', 'De arriba abajo (ordenar filas)'], ['cols', 'De izquierda a derecha (ordenar columnas)']])),
       field('Copiar el resultado en', h('input', { name: 'copyTo', placeholder: t('Por ejemplo: H1 (vacío: en su lugar)') }))) },
   ], { width: '560px' });
@@ -40,12 +42,12 @@ export async function sortDialog() {
   const keys = [1, 2, 3].map((i) => ({ c: valOf(body, `k${i}`), asc: valOf(body, `o${i}`) === 'asc' })).filter((k) => k.c !== '').map((k) => ({ ...k, c: Number(k.c) }));
   if (!keys.length) return null;
   let dest = null; if (valOf(body, 'copyTo').trim()) { dest = parseAddr(valOf(body, 'copyTo').trim().split(':')[0]); if (!dest) { toast('Dirección no válida', { error: true }); return null; } }
-  const opts = { header: valOf(body, 'header'), cs: valOf(body, 'cs'), natural: valOf(body, 'natural'), formats: valOf(body, 'formats'), dir: valOf(body, 'dir'), dest };
+  const opts = { header: valOf(body, 'header'), cs: valOf(body, 'cs'), natural: valOf(body, 'natural'), formats: valOf(body, 'formats'), dir: valOf(body, 'dir'), dest, list: valOf(body, 'list') !== '' ? allLists()[Number(valOf(body, 'list'))] : null };
   if (opts.dir === 'cols') keys.forEach((k) => { k.c = g.r1 + (k.c - g.c1); }); // en columnas, el criterio es una fila
   sortMulti(g, keys, opts);
   return { g, keys, opts };
 }
-export function sortMulti(g, keys, { header = false, cs = false, natural = true, formats = true, dir = 'rows', dest = null } = {}) {
+export function sortMulti(g, keys, { header = false, cs = false, natural = true, formats = true, dir = 'rows', dest = null, list = null } = {}) {
   const wb = C.wb; const s = wb.sheet;
   const byCols = dir === 'cols';
   const lines = []; // cada fila (o columna) con sus celdas
@@ -61,7 +63,9 @@ export function sortMulti(g, keys, { header = false, cs = false, natural = true,
   const rank = (x) => (x == null || x === '' ? 3 : typeof x === 'number' ? 0 : typeof x === 'string' ? 1 : 2);
   lines.sort((a, b) => {
     for (let k = 0; k < keys.length; k++) {
-      const x = a.vals[k]; const y = b.vals[k]; const rx = rank(x); const ry = rank(y);
+      const x = a.vals[k]; const y = b.vals[k];
+      if (k === 0 && list) { const d0 = listRank(list, x) - listRank(list, y); if (d0 && Number.isFinite(d0)) return keys[k].asc ? d0 : -d0; if (listRank(list, x) !== listRank(list, y)) return listRank(list, x) === Infinity ? 1 : -1; }
+      const rx = rank(x); const ry = rank(y);
       if (rx !== ry) return rx - ry; // vacíos al final
       let d = 0; if (rx === 0) d = x - y; else if (rx === 1) d = coll.compare(x, y); else if (rx === 2) d = String(x).localeCompare(String(y));
       if (d) return keys[k].asc ? d : -d;
@@ -168,7 +172,7 @@ export function fillSeries(g, { dir = 'down', type = 'linear', unit = 'day', sta
 // autorrelleno con lo que hay en la primera celda (números, días, meses y texto con número)
 function autoFill(g, dir) {
   const wb = C.wb; const vert = dir === 'down' || dir === 'up';
-  const lists = ['lunes,martes,miércoles,jueves,viernes,sábado,domingo', 'enero,febrero,marzo,abril,mayo,junio,julio,agosto,septiembre,octubre,noviembre,diciembre', 'lun,mar,mié,jue,vie,sáb,dom', 'ene,feb,mar,abr,may,jun,jul,ago,sep,oct,nov,dic', 'Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday', 'January,February,March,April,May,June,July,August,September,October,November,December'].map((l) => l.split(','));
+  const lists = allLists();
   const n = vert ? g.r2 - g.r1 + 1 : g.c2 - g.c1 + 1;
   const sr = dir === 'up' ? g.r2 : g.r1; const sc = dir === 'left' ? g.c2 : g.c1;
   const v0 = wb.value(sr, sc); const out = [];

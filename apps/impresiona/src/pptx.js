@@ -1,5 +1,6 @@
 // Abrir y guardar .pptx para Impresiona (pptxtojson para leer, PptxGenJS para escribir). GPL-3.0
 import JSZip from 'jszip';
+import { cellLook } from './tablas.js';
 import { parse } from 'pptxtojson';
 import PptxGenJS from 'pptxgenjs';
 import { themeById } from './themes.js';
@@ -222,11 +223,11 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
         };
         if (o.type === 'shape') Object.assign(opts, { shape: SHAPE_OUT[o.shape] || 'rect', fill: fillOpt(st, th, th.accent), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, color: (st.color || '#FFFFFF').replace('#', '') });
         else if (st.fill) opts.fill = fillOpt(st, th);
-        slide.addText(runs, opts);
+        slide.addText(runs, { ...opts, ...(o.name ? { objectName: o.name } : {}) });
       } else if (o.type === 'shape') {
         const isLn = o.shape === 'line' || o.shape === 'lineArrow';
         if (isLn) Object.assign(pos, { y: (o.y + o.h / 2) * PX_IN, h: 0 });
-        slide.addShape(SHAPE_OUT[o.shape] || 'rect', { ...pos, fill: o.shape === 'line' || o.shape === 'lineArrow' ? undefined : (fillOpt(st, th, th.accent) || { type: 'none' }), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, ...fxOpt(o, st) });
+        slide.addShape(SHAPE_OUT[o.shape] || 'rect', { ...pos, ...(o.name ? { objectName: o.name } : {}), fill: o.shape === 'line' || o.shape === 'lineArrow' ? undefined : (fillOpt(st, th, th.accent) || { type: 'none' }), line: lineOpt(o, st, th), rectRadius: o.shape === 'roundRect' ? 0.15 : undefined, ...fxOpt(o, st) });
       } else if (o.type === 'chart') {
         const d = o.data || { cats: [], series: [] };
         const CT = { column: 'bar', bar: 'bar', line: 'line', area: 'area', pie: 'pie', doughnut: 'doughnut', scatter: 'scatter' };
@@ -236,13 +237,13 @@ export async function writePptx(pres, renderSlideImage, props = {}) {
         if (!data.length) continue;
         slide.addChart(CT[o.chartType] || 'bar', data, { ...pos, barDir: o.chartType === 'bar' ? 'bar' : 'col', title: o.title || undefined, showTitle: !!o.title, showLegend: d.series.length > 1 || o.chartType === 'pie' || o.chartType === 'doughnut', legendPos: 'b', chartColors: [th.accent, th.accent2, 'F08A24', '1F8FD6', '2FB4A8', '8E6CD9'].map((c) => c.replace('#', '')), catAxisLabelColor: th.text.replace('#', ''), valAxisLabelColor: th.text.replace('#', ''), titleColor: th.title.replace('#', ''), dataLabelColor: th.text.replace('#', '') });
       } else if (o.type === 'image' && o.src) {
-        const c = o.crop; const io = { data: o.src, ...pos, ...fxOpt(o, st), ...(st.opacity != null ? { transparency: Math.round((1 - st.opacity) * 100) } : {}) };
+        const c = o.crop; const io = { data: o.src, ...pos, ...(o.name ? { objectName: o.name } : {}), ...(o.alt?.desc || o.alt?.title ? { altText: o.alt.desc || o.alt.title } : {}), ...fxOpt(o, st), ...(st.opacity != null ? { transparency: Math.round((1 - st.opacity) * 100) } : {}) };
         if (c) { const fw = (100 - c.l - c.r) / 100, fh = (100 - c.t - c.b) / 100; Object.assign(io, { w: pos.w / fw, h: pos.h / fh, sizing: { type: 'crop', x: (pos.w / fw) * (c.l / 100), y: (pos.h / fh) * (c.t / 100), w: pos.w, h: pos.h } }); }
         slide.addImage(io);
       } else if (o.type === 'media' && o.src?.startsWith('data:')) {
         slide.addMedia({ type: o.kind === 'audio' ? 'audio' : 'video', data: o.src.replace(/^data:/, ''), ...pos });
       } else if (o.type === 'table') {
-        const rows = o.rows.map((r) => r.filter((c) => !c.hidden).map((c) => ({ text: c.text, options: { fill: c.bg ? { color: c.bg.replace('#', '') } : undefined, color: c.color ? c.color.replace('#', '') : undefined, bold: c.bold, colspan: c.cs > 1 ? c.cs : undefined, rowspan: c.rs > 1 ? c.rs : undefined } })));
+        const rows = o.rows.map((r, ri) => r.map((c, ci) => [c, ci]).filter(([c]) => !c.hidden).map(([c, ci]) => { const L = cellLook(o, ri, ci, th); return { text: c.text, options: { fill: L.bg ? { color: L.bg.replace('#', '') } : undefined, color: L.color ? L.color.replace('#', '') : undefined, bold: L.bold, align: L.align || undefined, colspan: c.cs > 1 ? c.cs : undefined, rowspan: c.rs > 1 ? c.rs : undefined } }; }));
         slide.addTable(rows, { ...pos, fontSize: st.size || 14, border: { type: 'solid', pt: 0.75, color: '9AA0B4' }, autoPage: false });
       }
     }

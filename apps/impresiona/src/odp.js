@@ -2,6 +2,7 @@
 import JSZip from 'jszip';
 import { themeById } from './themes.js';
 import { chartSvg } from './charts.js';
+import { cellLook } from './tablas.js';
 
 const NS = {
   office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', style: 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
@@ -31,6 +32,16 @@ const MARKER_IN = { ...Object.fromEntries(Object.entries(MARKER_ODF).map(([k, v]
 const DASH_IN = { ...Object.fromEntries(Object.entries(DASH_ODF).map(([k, v]) => [v[0], k])), Guiones: 'dash', Puntos: 'dot', GuionPunto: 'dashDot', GuionLargo: 'longDash' };
 const SHAPE_IN = Object.fromEntries(Object.entries(SHAPE_ODF).map(([k, v]) => [v, k]));
 
+// nombre y texto alternativo del objeto (draw:name, svg:title y svg:desc, como LibreOffice)
+function withAlt(xml, o) {
+  if (!xml || (!o.name && !o.alt)) return xml;
+  const m = /^<([a-z]+:[a-z-]+)\b/.exec(xml); if (!m) return xml;
+  let out = xml;
+  if (o.name) out = out.replace(/ draw:name="[^"]*"/, '').replace(new RegExp(`^<${m[1]}`), `<${m[1]} draw:name="${x(o.name)}"`);
+  const kids = `${o.alt?.title ? `<svg:title>${x(o.alt.title)}</svg:title>` : ''}${o.alt?.desc ? `<svg:desc>${x(o.alt.desc)}</svg:desc>` : ''}`;
+  if (kids) { const close = `</${m[1]}>`; const k = out.lastIndexOf(close); if (k > 0) out = out.slice(0, k) + kids + out.slice(k); }
+  return out;
+}
 export async function writeOdp(pres, props = {}) {
   const zip = new JSZip();
   zip.file('mimetype', 'application/vnd.oasis.opendocument.presentation', { compression: 'STORE' });
@@ -116,7 +127,8 @@ export async function writeOdp(pres, props = {}) {
     return `<office:event-listeners><presentation:event-listener script:event-name="dom:click" ${a}/></office:event-listeners>`;
   };
   const image = (src, name) => { const m = /^data:image\/([a-z+]+);base64,(.*)$/i.exec(src || ''); if (!m) return null; const ext = m[1].toLowerCase().replace('jpeg', 'jpg').replace('svg+xml', 'svg'); const p = `Pictures/${name || `img${++pic}`}.${ext}`; zip.file(p, m[2], { base64: true }); pics.push(p); return p; };
-  const objXml = (o, idx) => {
+  const objXml = (o, idx) => withAlt(objXml0(o, idx), o);
+  const objXml0 = (o, idx) => {
     const st = o.style || {};
     const pos = `svg:x="${cm(o.x)}" svg:y="${cm(o.y)}" svg:width="${cm(o.w)}" svg:height="${cm(o.h)}"${o.rot ? ` draw:transform="rotate(${(-o.rot * Math.PI / 180).toFixed(5)}) translate(${cm(o.x)} ${cm(o.y)})"` : ''}`;
     const posNoRot = o.rot ? `svg:width="${cm(o.w)}" svg:height="${cm(o.h)}" draw:transform="rotate(${(-o.rot * Math.PI / 180).toFixed(5)}) translate(${cm(o.x)} ${cm(o.y)})"` : pos;
@@ -140,7 +152,14 @@ export async function writeOdp(pres, props = {}) {
     if (o.type === 'chart') { const svg = chartSvg(o, th); const p = `Pictures/grafico${idx}-${++pic}.svg`; zip.file(p, svg); pics.push(p); return `<draw:frame ${posNoRot} draw:name="Gráfico"><draw:image xlink:href="${p}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>`; }
     if (o.type === 'table') {
       const cols = Math.max(...o.rows.map((r) => r.length));
-      const rows = o.rows.map((r, ri) => `<table:table-row>${r.map((c) => (c.hidden ? '<table:covered-table-cell/>' : `<table:table-cell office:value-type="string"${c.cs > 1 ? ` table:number-columns-spanned="${c.cs}"` : ''}><text:p>${ri === 0 ? `<text:span text:style-name="${auto('text', '<style:text-properties fo:font-weight="bold"/>')}">${x(c.text)}</text:span>` : x(c.text)}</text:p></table:table-cell>`)).join('')}</table:table-row>`).join('');
+      const rows = o.rows.map((r, ri) => `<table:table-row>${r.map((c, ci) => {
+        if (c.hidden) return '<table:covered-table-cell/>';
+        const L = cellLook(o, ri, ci, th);
+        const cs = auto('table-cell', `<style:graphic-properties ${L.bg ? `draw:fill="solid" draw:fill-color="${L.bg}"` : 'draw:fill="none"'}/><style:paragraph-properties fo:border="0.5pt solid ${L.border || '#9AA0B4'}"/>`);
+        const tp = (L.bold || L.color) ? auto('text', `<style:text-properties${L.bold ? ' fo:font-weight="bold"' : ''}${L.color ? ` fo:color="${L.color}"` : ''}/>`) : null;
+        const pp = L.align ? auto('paragraph', `<style:paragraph-properties fo:text-align="${L.align === 'right' ? 'end' : L.align === 'center' ? 'center' : 'start'}"/>`) : null;
+        return `<table:table-cell table:style-name="${cs}" office:value-type="string"${c.cs > 1 ? ` table:number-columns-spanned="${c.cs}"` : ''}${c.rs > 1 ? ` table:number-rows-spanned="${c.rs}"` : ''}><text:p${pp ? ` text:style-name="${pp}"` : ''}>${tp ? `<text:span text:style-name="${tp}">${x(c.text)}</text:span>` : x(c.text)}</text:p></table:table-cell>`;
+      }).join('')}</table:table-row>`).join('');
       return `<draw:frame ${posNoRot}><table:table><table:table-column table:number-columns-repeated="${cols}"/>${rows}</table:table></draw:frame>`;
     }
     return '';

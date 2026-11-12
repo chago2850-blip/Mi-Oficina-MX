@@ -13,6 +13,7 @@ import { readOds, writeOds } from './ods.js';
 import { injectVba } from './xlsx.js';
 import * as CE from './celdas.js';
 import * as DT from './datos.js';
+import * as AN from './analisis.js';
 
 const wb = new Workbook();
 let shell, grid, nameBox, fxInput, tabsBar, statusInfo, zoom;
@@ -664,6 +665,15 @@ async function onCommand(cmd, arg) {
     case 'newSheet': return newSheet();
     case 'sortAsc': return sortSel(true);
     case 'sortDialog': return DT.sortDialog();
+    case 'scenarioNew': return AN.createScenarioDialog();
+    case 'scenarios': return AN.scenariosDialog();
+    case 'multipleOps': return AN.multipleOpsDialog();
+    case 'sortLists': return AN.sortListsDialog();
+    case 'markInvalid': return AN.markInvalid();
+    case 'traceError': return AN.traceError();
+    case 'clearMarks': return AN.clearMarks();
+    case 'insertDate': return AN.insertNow('date');
+    case 'insertTime': return AN.insertNow('time');
     case 'fillDown': return DT.fillDir('down');
     case 'fillRight': return DT.fillDir('right');
     case 'fillUp': return DT.fillDir('up');
@@ -811,7 +821,7 @@ const TABS = [
     { label: 'Gráficos', items: [{ cmd: 'insertChart', label: 'Gráfico recomendado', icon: 'chart', size: 'lg' }, { cmd: 'charts', label: 'Todos los gráficos', icon: 'chartPie', size: 'lg', menu: chartMenu }] },
     { label: 'Minigráficos', items: [{ stack: [{ cmd: 'sparkline', label: 'Línea', icon: 'chartLine', showLabel: true }, { cmd: 'sparklineCol', label: 'Columna', icon: 'chart', showLabel: true }, { cmd: 'sparklineWin', label: 'Ganancia o pérdida', icon: 'decDec', showLabel: true }] }] },
     { label: 'Filtros', items: [{ cmd: 'slicer', label: 'Segmentación de datos', icon: 'filter', size: 'lg' }] },
-    { label: 'Funciones', items: [{ cmd: 'insertFunction', label: 'Función', icon: 'func', size: 'lg' }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
+    { label: 'Funciones', items: [{ cmd: 'insertFunction', label: 'Función', icon: 'func', size: 'lg' }, { cmd: 'dateTime', label: 'Fecha y hora', icon: 'recover', size: 'lg', menu: () => [{ label: 'Fecha de hoy', kbd: 'Ctrl+;', run: () => onCommand('insertDate') }, { label: 'Hora actual', kbd: 'Ctrl+Mayús+;', run: () => onCommand('insertTime') }] }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
     { label: 'Vínculos', items: [{ cmd: 'hyperlink', label: 'Hipervínculo', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
     { label: 'Hojas', items: [{ cmd: 'newSheet', label: 'Hoja nueva', icon: 'sheetAdd', size: 'lg' }] },
   ] },
@@ -821,14 +831,14 @@ const TABS = [
   { id: 'formulas', label: 'Fórmulas', groups: [
     { label: 'Biblioteca de funciones', items: [{ cmd: 'insertFunction', label: 'Insertar función', icon: 'func', size: 'lg' }, { cmd: 'autoSum', label: 'Autosuma', icon: 'sum', size: 'lg', menu: sumMenu }] },
     { label: 'Nombres definidos', items: [{ cmd: 'defineName', label: 'Definir nombre', icon: 'textbox', size: 'lg' }, { cmd: 'nameManager', label: 'Administrador de nombres', icon: 'layout', size: 'lg' }] },
-    { label: 'Auditoría de fórmulas', items: [{ stack: [{ cmd: 'tracePre', label: 'Rastrear precedentes', icon: 'tracePre', showLabel: true }, { cmd: 'traceDep', label: 'Rastrear dependientes', icon: 'traceDep', showLabel: true }, { cmd: 'clearArrows', label: 'Quitar flechas', icon: 'close', showLabel: true }] }, { cmd: 'showFormulas', label: 'Mostrar fórmulas', icon: 'func', size: 'lg', kbd: 'Ctrl+`' }] },
+    { label: 'Auditoría de fórmulas', items: [{ stack: [{ cmd: 'tracePre', label: 'Rastrear precedentes', icon: 'tracePre', showLabel: true }, { cmd: 'traceDep', label: 'Rastrear dependientes', icon: 'traceDep', showLabel: true }, { cmd: 'clearArrows', label: 'Quitar flechas', icon: 'close', showLabel: true }] }, { stack: [{ cmd: 'traceError', label: 'Rastrear error', icon: 'tracePre', showLabel: true }, { cmd: 'markInvalid', label: 'Marcar datos no válidos', icon: 'check', showLabel: true }, { cmd: 'clearMarks', label: 'Quitar marcas', icon: 'close', showLabel: true }] }, { cmd: 'showFormulas', label: 'Mostrar fórmulas', icon: 'func', size: 'lg', kbd: 'Ctrl+`' }] },
   ] },
   { id: 'data', label: 'Datos', groups: [
     { label: 'Obtener y transformar', items: [{ cmd: 'getData', label: 'Obtener datos', icon: 'open', size: 'lg', menu: () => [{ label: 'Desde texto/CSV…', run: () => onCommand('getDataCsv') }, { label: 'Desde un libro de Excel…', run: () => onCommand('getDataXlsx') }, { label: 'Desde JSON…', run: () => onCommand('getDataJson') }, '-', { label: 'Desde tabla o rango', run: () => onCommand('getDataRange') }] }, { cmd: 'refreshAll', label: 'Actualizar todo', icon: 'recover', size: 'lg' }, { cmd: 'queries', label: 'Consultas y conexiones', icon: 'layout', size: 'lg' }] },
-    { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'sortDialog', label: 'Ordenar…', icon: 'sortAsc', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }, { cmd: 'stdFilter', label: 'Filtro estándar…', icon: 'filter', size: 'lg' }] },
+    { label: 'Ordenar y filtrar', items: [{ cmd: 'sortAsc', label: 'A → Z', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortDesc', label: 'Z → A', icon: 'sortDesc', size: 'lg' }, { cmd: 'sortDialog', label: 'Ordenar…', icon: 'sortAsc', size: 'lg' }, { cmd: 'sortLists', label: 'Listas de ordenamiento…', icon: 'bullets', size: 'lg' }, { cmd: 'filter', label: 'Filtro', icon: 'filter', size: 'lg', kbd: 'Ctrl+Mayús+L' }, { cmd: 'stdFilter', label: 'Filtro estándar…', icon: 'filter', size: 'lg' }] },
     { label: 'Herramientas de datos', items: [{ cmd: 'textToColumns', label: 'Texto en columnas…', icon: 'columns', size: 'lg' }, { cmd: 'subtotals', label: 'Subtotales…', icon: 'sum', size: 'lg' }, { cmd: 'duplicates', label: 'Quitar duplicados…', icon: 'trash', size: 'lg' }, { cmd: 'consolidate', label: 'Consolidar…', icon: 'layout', size: 'lg' }, { cmd: 'validation', label: 'Validación de datos', icon: 'check', size: 'lg' }, { cmd: 'clearValidation', label: 'Quitar validación', icon: 'close', size: 'lg' }, { cmd: 'refreshPivot', label: 'Actualizar dinámica', icon: 'recover', size: 'lg' }] },
     { label: 'Análisis', items: [{ cmd: 'statsMenu', label: 'Estadísticas', icon: 'chart', size: 'lg', menu: statsMenu }, { cmd: 'fillRandom', label: 'Números aleatorios…', icon: 'func', size: 'lg' }] },
-    { label: 'Previsión', items: [{ cmd: 'whatIf', label: 'Análisis de hipótesis', icon: 'func', size: 'lg', menu: () => [{ label: 'Buscar objetivo…', run: () => onCommand('goalSeek') }, { label: 'Solver…', run: () => onCommand('solver') }] }] },
+    { label: 'Previsión', items: [{ cmd: 'whatIf', label: 'Análisis de hipótesis', icon: 'func', size: 'lg', menu: () => [{ label: 'Administrador de escenarios…', run: () => onCommand('scenarios') }, { label: 'Crear escenario…', run: () => onCommand('scenarioNew') }, { label: 'Operaciones múltiples (tabla de datos)…', run: () => onCommand('multipleOps') }, '-', { label: 'Buscar objetivo…', run: () => onCommand('goalSeek') }, { label: 'Solver…', run: () => onCommand('solver') }] }] },
     { label: 'Esquema', items: [{ stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }] }, { stack: [{ cmd: 'hideDetail', label: 'Ocultar detalle', icon: 'minus', showLabel: true }, { cmd: 'showDetail', label: 'Mostrar detalle', icon: 'plus', showLabel: true }] }] },
     { label: 'Exportar', items: [{ cmd: 'exportCsv', label: 'Guardar CSV', icon: 'words', size: 'lg' }, { cmd: 'exportOds', label: 'Guardar ODS', icon: 'sheet', size: 'lg' }] },
   ] },
@@ -848,6 +858,7 @@ buildWorkspace(shell.workspace);
 F.initFeatures({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g) });
 F3.init({ wb, grid, shell, act, refresh, applyFilter, mountCharts, refreshCharts });
 Q.init({ wb, grid, shell, act, refresh, switchSheet, refreshCharts });
+AN.init({ wb, grid, shell, act, refresh, switchSheet, refreshCharts, sel: () => grid.range, clamp: (g) => clampToUsed(g), renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 DT.init({ wb, grid, shell, act, refresh, switchSheet, dup: (i) => duplicateSheet(i), refreshCharts, sel: () => grid.range, clamp: (g) => clampToUsed(g), renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 CE.init({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g), curStyle: () => curStyle(), FONTS, renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 { const pc = grid.positionCharts.bind(grid); grid.positionCharts = () => { pc(); F3.positionSlicers(); }; }
@@ -857,6 +868,7 @@ shell.status.append(h('span', {}, 'Listo'), h('div', { class: 'grow' }), statusI
 addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key === '1') { e.preventDefault(); formatCells(); }
+  if (mod && (e.key === ';' || e.key === ':' || e.code === 'Semicolon') && document.activeElement === grid.canvas) { e.preventDefault(); AN.insertNow(e.shiftKey ? 'time' : 'date'); }
   if (mod && e.shiftKey && (e.key === 'V' || e.key === 'v') && document.activeElement === grid.canvas) { e.preventDefault(); CE.pasteSpecial(); }
   if (mod && !e.shiftKey && (e.key === 'k' || e.key === 'K') && document.activeElement === grid.canvas) { e.preventDefault(); CE.linkDialog(); }
   if (mod && (e.key === '`' || e.code === 'Backquote')) { e.preventDefault(); CE.toggleFormulas(); }
@@ -874,4 +886,4 @@ shell.start();
 // Al cambiar el idioma, las fórmulas y errores se vuelven a mostrar en el idioma nuevo
 onLang(() => { grid.invalidate(); grid.draw(); refresh(); });
 
-window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q, CE, DT };
+window.__calcula = { wb, grid, onCommand, emptyBook, afterLoad, buildPrint, refresh, F, F3, Q, CE, DT, AN };

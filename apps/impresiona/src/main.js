@@ -4,13 +4,15 @@ import { THEMES, LAYOUTS, themeById, layoutObjects, PLACEHOLDER } from './themes
 import { readPptx, writePptx } from './pptx.js';
 import { readCoreProps } from '../../shared/coreprops.js';
 import { CHART_TYPES, parseChartData, chartDataText, chartSvg } from './charts.js';
-import { runShow, runPresenter, runAudience, EXIT_TYPES, PATH_TYPES } from './show.js';
+import { runShow, runPresenter, runAudience, EXIT_TYPES, PATH_TYPES, buildSteps } from './show.js';
+import * as NV from './navegador.js';
 import * as F3 from './fase3.js';
 import * as F4 from './fase4.js';
 import * as SZ from './slidesize.js';
 import { readOdp, writeOdp } from './odp.js';
 import * as OB from './objetos.js';
 import * as DS from './diapositivas.js';
+import * as TBL from './tablas.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -78,9 +80,10 @@ function renderSlide(s, mode = 'thumb') {
     if (o.type === 'shape') box.innerHTML = shapeSvg(o, th);
     if (o.type === 'table') {
       const t = h('table', { class: 'stable', style: { fontSize: `${st.size || 14}pt`, color: th.text } });
+      const hdr = TBL.opts(o).header;
       o.rows.forEach((row, ri) => {
         const tr = h('tr');
-        row.forEach((c) => { if (c.hidden) return; tr.append(h(ri === 0 ? 'th' : 'td', { rowspan: c.rs > 1 ? c.rs : null, colspan: c.cs > 1 ? c.cs : null, style: { background: c.bg || (ri === 0 ? th.accent : ''), color: c.color || (ri === 0 ? '#fff' : ''), fontWeight: c.bold || ri === 0 ? '600' : '' } }, c.text)); });
+        row.forEach((c, ci) => { if (c.hidden) return; const L = TBL.cellLook(o, ri, ci, th); tr.append(h(ri === 0 && hdr ? 'th' : 'td', { 'data-r': ri, 'data-c': ci, rowspan: c.rs > 1 ? c.rs : null, colspan: c.cs > 1 ? c.cs : null, style: { background: L.bg, color: L.color, fontWeight: L.bold ? '600' : '400', textAlign: L.align || '', borderColor: L.border, borderTop: L.borderTop || '' } }, c.text)); });
         t.append(tr);
       });
       box.append(t);
@@ -332,7 +335,7 @@ function startEditing(id, placeCaret = true, ev = null) {
   editing = id; selected = new Set([id]);
   let el = slideEl.querySelector(`[data-id="${id}"]`);
   if (o.type === 'table') {
-    el.querySelectorAll('td,th').forEach((c) => { c.contentEditable = 'true'; });
+    el.querySelectorAll('td,th').forEach((c) => { c.contentEditable = 'true'; c.addEventListener('focus', () => TBL.setCurrent(id, Number(c.dataset.r), Number(c.dataset.c))); });
     const first = ev ? ev.target.closest('td,th') : el.querySelector('td,th');
     first?.focus();
     el.addEventListener('focusout', () => setTimeout(() => { if (editing === id && !el.contains(document.activeElement)) stopEditing(); }, 0));
@@ -402,6 +405,7 @@ function onKey(e) {
   if (e.key === 'F5') { e.preventDefault(); present(e.shiftKey ? cur : 0); return; }
   if (e.key === 'F4' && selected.size) { e.preventDefault(); OB.posSizeDialog(); return; }
   if (e.key === 'F3' && e.shiftKey && selected.size) { e.preventDefault(); DS.duplicateDialog(); return; }
+  if (e.key === 'F5' && e.shiftKey && (e.ctrlKey || e.metaKey)) { e.preventDefault(); NV.navigator(); return; }
   if (mod && e.key.toLowerCase() === 'k' && selected.size) { e.preventDefault(); OB.linkDialog(); return; }
   if (mod && e.shiftKey && e.key.toLowerCase() === 'g') { e.preventDefault(); if (e.altKey) OB.ungroup(); else OB.group(); return; }
   if (mod && (e.key === '+' || e.key === '=') && selected.size) { e.preventDefault(); OB.zStep(e.shiftKey ? 9 : 1); return; }
@@ -663,6 +667,7 @@ function reflect() {
   rb.setContextual('format', selected.size > 0);
   rb.setOn('hideSlide', !!slide()?.hidden); rb.setOn('grid', !!pres.grid?.on); rb.setOn('snapGrid', !!pres.grid?.snap);
   rb.setContextual('media', selObjs().some((o) => o.type === 'media'));
+  rb.setContextual('tableDesign', selObjs().some((o) => o.type === 'table'));
   rb.setContextual('camera', selObjs().some((o) => o.type === 'camera'));
   rb.setOn('useNarration', pres.useNarration !== false && pres.slides.some((s) => s.narration));
   rb.setOn('useTimings', pres.useTimings !== false && pres.slides.some((s) => s.advanceAfter > 0));
@@ -762,7 +767,7 @@ const adapter = {
     { id: 'clase', name: 'Clase', thumb: tplThumb('#F0FAF6', '#0A4A3A', '#0E9C74') },
     { id: 'proyecto', name: 'Avance de proyecto', thumb: tplThumb('linear-gradient(135deg,#5B48E8,#2A1C8F)', '#fff', '#FFD38A') },
   ],
-  exportFormats: [{ ext: 'pptx', ic: 'slides', label: 'Presentación de PowerPoint (.pptx)', desc: 'Para abrir en otros programas de presentaciones.' }, { ext: 'odp', ic: 'slides', label: 'Presentación ODF (.odp)', desc: 'Formato abierto, compatible con LibreOffice Impress.' }, { ic: 'image', label: 'Imágenes PNG', desc: 'Una imagen por diapositiva, para redes sociales o documentos.', run: () => { shell.hideBackstage(); exportImages(); } }],
+  exportFormats: [{ ext: 'pptx', ic: 'slides', label: 'Presentación de PowerPoint (.pptx)', desc: 'Para abrir en otros programas de presentaciones.' }, { ext: 'odp', ic: 'slides', label: 'Presentación ODF (.odp)', desc: 'Formato abierto, compatible con LibreOffice Impress.' }, { ic: 'image', label: 'Imágenes PNG', desc: 'Una imagen por diapositiva, para redes sociales o documentos.', run: () => { shell.hideBackstage(); exportImages(); } }, { ic: 'link', label: 'Página web (.html)', desc: 'Un solo archivo que se abre en cualquier navegador, con índice, notas y navegación con el teclado.', run: () => { shell.hideBackstage(); NV.exportHtml(); } }],
   async newDoc(tpl) { makePres(tpl); cur = 0; selected.clear(); editing = null; undoStack.length = 0; redoStack.length = 0; fitMode = true; renderAll(); },
   async load(f) {
     if (f.ext === 'odp') {
@@ -821,6 +826,24 @@ async function onCommand(cmd, arg) {
     case 'deleteSlide': return deleteSlide();
     case 'present': return present(0);
     case 'customShows': return DS.customShowsDialog();
+    case 'photoAlbum': return NV.photoAlbumDialog();
+    case 'navigator': return NV.navigator();
+    case 'objName': return NV.nameDialog();
+    case 'exportHtml': return NV.exportHtml();
+    case 'tblRowAbove': return TBL.insertRow(false);
+    case 'tblRowBelow': return TBL.insertRow(true);
+    case 'tblColLeft': return TBL.insertCol(false);
+    case 'tblColRight': return TBL.insertCol(true);
+    case 'tblDelRow': return TBL.deleteRow();
+    case 'tblDelCol': return TBL.deleteCol();
+    case 'tblMerge': return TBL.mergeDialog();
+    case 'tblSplit': return TBL.splitCell();
+    case 'tblFill': return TBL.cellFormat({ bg: arg === 'transparent' ? null : arg });
+    case 'tblColor': return TBL.cellFormat({ color: arg === 'transparent' ? null : arg });
+    case 'tblBold': { const o = selObjs().find((x) => x.type === 'table'); const cc = TBL.current(); const cell = o?.rows[cc.r]?.[cc.c]; return TBL.cellFormat({ bold: !(cell?.bold ?? TBL.cellLook(o, cc.r, cc.c, theme()).bold) }); }
+    case 'tblLeft': return TBL.cellFormat({ align: 'left' });
+    case 'tblCenter': return TBL.cellFormat({ align: 'center' });
+    case 'tblRight': return TBL.cellFormat({ align: 'right' });
     case 'showSettings': return DS.showSettingsDialog();
     case 'outline': return DS.outlineView();
     case 'summarySlide': return DS.summarySlide();
@@ -974,7 +997,7 @@ const TABS = [
   { id: 'insert', label: 'Insertar', groups: [
     { label: 'Diapositivas', items: [{ cmd: 'newSlideMenu', label: 'Nueva diapositiva', icon: 'slideAdd', size: 'lg', menu: () => layoutMenu(false) }, { stack: [{ cmd: 'insertSlidesFile', label: 'Diapositivas desde archivo…', icon: 'open', showLabel: true }, { cmd: 'summarySlide', label: 'Diapositiva de resumen', icon: 'bullets', showLabel: true }, { cmd: 'expandSlide', label: 'Expandir diapositiva', icon: 'slideDup', showLabel: true }] }] },
     { label: 'Tablas', items: [{ cmd: 'insertTable', label: 'Tabla', icon: 'table', size: 'lg' }] },
-    { label: 'Imágenes', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }] },
+    { label: 'Imágenes', items: [{ cmd: 'insertImage', label: 'Imagen', icon: 'image', size: 'lg' }, { cmd: 'photoAlbum', label: 'Álbum fotográfico', icon: 'slideDup', size: 'lg' }] },
     { label: 'Multimedia', items: [{ cmd: 'insertVideo', label: 'Video', icon: 'present', size: 'lg' }, { cmd: 'insertAudio', label: 'Audio', icon: 'notes', size: 'lg' }, { cmd: 'insertCamera', label: 'Cámara en vivo', icon: 'image', size: 'lg' }] },
     { label: 'Ilustraciones', items: [{ cmd: 'shapes', label: 'Formas', icon: 'star', size: 'lg', menu: shapeMenu }, { cmd: 'chart', label: 'Gráfico', icon: 'chart', size: 'lg' }] },
     { label: 'Encabezado y pie', items: [{ cmd: 'footer', label: 'Pie y número', icon: 'footer', size: 'lg' }] },
@@ -999,16 +1022,22 @@ const TABS = [
     { label: 'Grabar', items: [{ cmd: 'recordShow', label: 'Grabar con narración', icon: 'present', size: 'lg' }, { stack: [{ cmd: 'useNarration', label: 'Reproducir narración', icon: 'check', showLabel: true }, { cmd: 'clearNarration', label: 'Borrar narración', icon: 'trash', showLabel: true }] }] },
     { label: 'Configuración', items: [{ cmd: 'showSettings', label: 'Configurar la presentación', icon: 'pageSetup', size: 'lg' }, { cmd: 'customShows', label: 'Presentación personalizada', icon: 'columns', size: 'lg' }] },
     { label: 'Configurar', items: [{ cmd: 'rehearse', label: 'Ensayar intervalos', icon: 'recover', size: 'lg' }, { stack: [{ cmd: 'useTimings', label: 'Usar intervalos', icon: 'check', showLabel: true }, { cmd: 'clearTimings', label: 'Borrar intervalos', icon: 'trash', showLabel: true }] }] },
-    { label: 'Exportar', items: [{ cmd: 'exportImages', label: 'Imágenes PNG', icon: 'image', size: 'lg' }, { cmd: 'exportVideo', label: 'Video', icon: 'present', size: 'lg' }] },
+    { label: 'Exportar', items: [{ cmd: 'exportImages', label: 'Imágenes PNG', icon: 'image', size: 'lg' }, { cmd: 'exportHtml', label: 'Página web', icon: 'link', size: 'lg' }, { cmd: 'exportVideo', label: 'Video', icon: 'present', size: 'lg' }] },
   ] },
   { id: 'view', label: 'Vista', groups: [
-    { label: 'Vistas', items: [{ cmd: 'sorter', label: 'Clasificador', icon: 'columns', size: 'lg' }, { cmd: 'outline', label: 'Esquema', icon: 'bullets', size: 'lg' }, { cmd: 'master', label: 'Patrón de diapositivas', icon: 'layout', size: 'lg' }] },
+    { label: 'Vistas', items: [{ cmd: 'sorter', label: 'Clasificador', icon: 'columns', size: 'lg' }, { cmd: 'outline', label: 'Esquema', icon: 'bullets', size: 'lg' }, { cmd: 'navigator', label: 'Navegador', icon: 'find', size: 'lg', kbd: 'Ctrl+Mayús+F5' }, { cmd: 'master', label: 'Patrón de diapositivas', icon: 'layout', size: 'lg' }] },
     { label: 'Secciones', items: [{ stack: [{ cmd: 'addSection', label: 'Agregar sección', icon: 'plus', showLabel: true }, { cmd: 'renameSection', label: 'Cambiar nombre', icon: 'textbox', showLabel: true }] }] },
     { label: 'Cuadrícula', items: [{ stack: [{ cmd: 'grid', label: 'Mostrar cuadrícula', icon: 'table', showLabel: true }, { cmd: 'snapGrid', label: 'Ajustar a la cuadrícula', icon: 'alignObj', showLabel: true }, { cmd: 'gridOpts', label: 'Opciones…', icon: 'pageSetup', showLabel: true }] }] },
     { label: 'Zoom', items: [{ cmd: 'zoomReset', label: 'Ajustar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomIn', label: 'Acercar', icon: 'zoomIn', size: 'lg' }, { cmd: 'zoomOut', label: 'Alejar', icon: 'zoomOut', size: 'lg' }] },
   ] },
   { id: 'camera', label: 'Cámara', contextual: true, groups: [
     { label: 'Cámara', items: [{ cmd: 'cameraOptions', label: 'Opciones de la cámara', icon: 'image', size: 'lg' }] },
+  ] },
+  { id: 'tableDesign', label: 'Diseño de tabla', contextual: true, groups: [
+    { label: 'Filas y columnas', items: [{ stack: [{ cmd: 'tblRowAbove', label: 'Insertar fila arriba', icon: 'rowAdd', showLabel: true }, { cmd: 'tblRowBelow', label: 'Insertar fila abajo', icon: 'rowAdd', showLabel: true }, { cmd: 'tblDelRow', label: 'Eliminar fila', icon: 'rowDel', showLabel: true }] }, { stack: [{ cmd: 'tblColLeft', label: 'Insertar columna a la izquierda', icon: 'colAdd', showLabel: true }, { cmd: 'tblColRight', label: 'Insertar columna a la derecha', icon: 'colAdd', showLabel: true }, { cmd: 'tblDelCol', label: 'Eliminar columna', icon: 'colDel', showLabel: true }] }] },
+    { label: 'Combinar', items: [{ cmd: 'tblMerge', label: 'Combinar celdas…', icon: 'merge', size: 'lg' }, { cmd: 'tblSplit', label: 'Dividir celda', icon: 'columns', size: 'lg' }] },
+    { label: 'Estilos de tabla', items: [{ cmd: 'tblPreset', label: 'Estilo', icon: 'table', size: 'lg', menu: () => TBL.presetMenu() }, { cmd: 'tblOptions', label: 'Opciones', icon: 'check', size: 'lg', menu: () => TBL.optionsMenu() }] },
+    { label: 'Celda', items: [{ cmd: 'tblFill', label: 'Relleno de celda', icon: 'fill', size: 'lg', color: true, colorValue: '#FFF2CC' }, { stack: [{ row: [{ cmd: 'tblLeft', label: 'Izquierda', icon: 'alignLeft' }, { cmd: 'tblCenter', label: 'Centrar', icon: 'alignCenter' }, { cmd: 'tblRight', label: 'Derecha', icon: 'alignRight' }] }, { row: [{ cmd: 'tblBold', label: 'Negrita', icon: 'bold' }, { cmd: 'tblColor', label: 'Color del texto', icon: 'textColor', color: true, colorValue: '#C00000', colorOpts: { allowNone: true } }] }] }] },
   ] },
   { id: 'media', label: 'Reproducción', contextual: true, groups: [
     { label: 'Opciones', items: [{ cmd: 'mediaOptions', label: 'Opciones de reproducción', icon: 'present', size: 'lg' }, { cmd: 'captions', label: 'Subtítulos', icon: 'textbox', size: 'lg' }] },
@@ -1018,6 +1047,7 @@ const TABS = [
     { label: 'Organizar', items: [{ cmd: 'front', label: 'Al frente', icon: 'front', size: 'lg', split: () => [{ label: 'Traer al frente', run: () => arrange('front') }, { label: 'Traer adelante', kbd: 'Ctrl++', run: () => OB.zStep(1) }] }, { cmd: 'back', label: 'Al fondo', icon: 'back', size: 'lg', split: () => [{ label: 'Enviar al fondo', run: () => arrange('back') }, { label: 'Enviar atrás', kbd: 'Ctrl+-', run: () => OB.zStep(-1) }] }, { cmd: 'align', label: 'Alinear', icon: 'alignObj', size: 'lg', menu: arrangeMenu }, { stack: [{ cmd: 'group', label: 'Agrupar', icon: 'group', showLabel: true }, { cmd: 'ungroup', label: 'Desagrupar', icon: 'close', showLabel: true }, { cmd: 'rotateMenu', label: 'Girar y voltear', icon: 'recover', showLabel: true, menu: rotateMenu }, { cmd: 'duplicateObj', label: 'Duplicar…', icon: 'copy', showLabel: true, kbd: 'Mayús+F3' }] }, { cmd: 'delete', label: 'Eliminar', icon: 'trash', size: 'lg' }] },
     { label: 'Tamaño', items: [{ cmd: 'posSize', label: 'Posición y tamaño…', icon: 'pageSetup', size: 'lg', kbd: 'F4' }] },
     { label: 'Imagen', items: [{ stack: [{ cmd: 'crop', label: 'Recortar…', icon: 'image', showLabel: true }, { cmd: 'imgAdjust', label: 'Ajustes de imagen…', icon: 'brush', showLabel: true }, { cmd: 'origSize', label: 'Tamaño original', icon: 'zoomIn', showLabel: true }] }] },
+    { label: 'Accesibilidad', items: [{ cmd: 'objName', label: 'Nombre y texto alternativo…', icon: 'textbox', size: 'lg' }] },
     { label: 'Vínculo', items: [{ cmd: 'objLink', label: 'Acción al hacer clic…', icon: 'link', size: 'lg', kbd: 'Ctrl+K' }] },
   ] },
 ];
@@ -1027,6 +1057,8 @@ const MODE = new URLSearchParams(location.search);
 if (MODE.get('audience') === '1' || MODE.get('render') === '1') {
   runAudience({ renderSlide, setPres: (p) => { pres = p; }, getPres: () => pres, api, render: MODE.get('render') === '1' });
 } else {
+NV.init({ getPres: () => pres, cur: () => cur, setCur: (i) => { cur = i; }, goto, slide: () => slide(), commit, select, selObjs: () => selObjs(), newSlide, uid, buildSteps, docName: () => shell.doc?.name || '', docProps: () => shell.docProps() });
+TBL.init({ slide: () => slide(), commit, selObjs: () => selObjs(), stopEditing: () => { if (editing) stopEditing(); } });
 DS.init({ getPres: () => pres, cur: () => cur, setCur: (i) => { cur = i; }, slide: () => slide(), commit, renderAll, renderSlide, uid, newSlide, stopEditing: () => { if (editing) stopEditing(); }, selObjs: () => selObjs(), select, present, readPptx, readOdp, docName: () => shell.doc?.name || '', docProps: () => shell.docProps() });
 OB.init({ getPres: () => pres, slide: () => slide(), commit, select, selObjs: () => selObjs(), renderAll, cur: () => cur, uid, arrange: (k) => arrange(k, true) });
 F4.init({ getPres: () => pres, slide: () => slide(), commit, select, center, uid, runShow, renderSlide, prepareShow, goto: (i) => goto(Math.min(i, pres.slides.length - 1)) });
@@ -1044,4 +1076,4 @@ makePres('blank'); renderAll();
 shell.start();
 addEventListener('keydown', (e) => { if (e.altKey && e.key === 'F5') { e.preventDefault(); presenter(cur); } });
 }
-window.__impresiona = { DS, get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, F3, F4, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto, OB, selected: () => [...selected] };
+window.__impresiona = { DS, TBL, NV, theme, get pres() { return pres; }, set pres(p) { pres = p; }, get cur() { return cur; }, F: { insertChart }, F3, F4, presenter, renderAll, present, onCommand, buildPrint, select, startEditing, stopEditing, goto, OB, selected: () => [...selected] };

@@ -74,7 +74,7 @@ function formatDate(v, fmt) {
   const lit = [];
   let f = fmt.replace(/\[[^\]]*\]/g, '').replace(/"([^"]*)"|\\(.)/g, (_, a, b) => { lit.push(a ?? b); return `\u0001${String.fromCharCode(0xE000 + lit.length - 1)}\u0001`; });
   // "m" es minuto si va después de h o antes de s
-  f = f.replace(/(h+[^a-z]*)(mm?)/gi, (_, a, b) => a + (b.length === 2 ? '\u0002MM' : '\u0002M')).replace(/(mm?)([^a-z]*s)/gi, (_, a, b) => (a.length === 2 ? '\u0002MM' : '\u0002M') + b);
+  f = f.replace(/(h+[^a-z]*)(mm?)/gi, (_, a, b) => a + (b.length === 2 ? '\u0002MM' : '\u0002M')).replace(/(?<![\u0002m])(mm?)([^a-z]*s)/gi, (_, a, b) => (a.length === 2 ? '\u0002MM' : '\u0002M') + b);
   const h12 = ((hh + 11) % 12) + 1;
   const tok = {
     yyyy: String(Y), yy: String(Y).slice(-2), mmmmm: MESES[M][0].toUpperCase(), mmmm: MESES[M], mmm: MESES[M].slice(0, 3), mm: String(M + 1).padStart(2, '0'), m: String(M + 1),
