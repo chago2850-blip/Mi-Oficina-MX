@@ -63,7 +63,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e.mjs
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase2.mjs
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase2.mjs
-          python3 -m pip install --user -q msoffcrypto-tool || python3 -m pip install --break-system-packages -q msoffcrypto-tool || true
+          python3 -m pip install --user -q msoffcrypto-tool pypdf || python3 -m pip install --break-system-packages -q msoffcrypto-tool pypdf || true
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase3.mjs
           OFICINA_LANG=en xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase3.mjs
           xvfb-run -a -s "-screen 0 1600x1000x24" node test/e2e-fase4.mjs
