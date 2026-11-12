@@ -3,6 +3,7 @@ import { h, dropdown, closeDropdown, icon, esc, toast } from '../../shared/offic
 import { colName, addr, rangeStr, parseRange, parseAddr } from './workbook.js';
 import { toSpanish, toEnglish } from './i18n.js';
 import { parseInput } from './format.js';
+import { fontStack } from '../../shared/fuentes.js';
 
 const HDR_W = 46, HDR_H = 24;
 const GRID = '#E2E4EA', HDR_BG = '#F4F5F8', HDR_SEL = '#DCEFE8', HDR_TXT = '#5E6378';
@@ -82,7 +83,7 @@ export class Grid {
 
   // ------------------------------------------------------------------ dibujo
   requestDraw() { if (this._raf) return; this._raf = requestAnimationFrame(() => { this._raf = 0; this.draw(); }); }
-  font(st) { return `${st?.i ? 'italic ' : ''}${st?.b ? 'bold ' : ''}${((st?.size || 11) * 4) / 3}px ${st?.font ? `"${st.font}", ${FONT_DEF}` : FONT_DEF}`; }
+  font(st) { return `${st?.i ? 'italic ' : ''}${st?.b ? 'bold ' : ''}${((st?.size || 11) * 4) / 3}px ${st?.font ? fontStack(st.font) : FONT_DEF}`; }
 
   draw() {
     const ctx = this.ctx, s = this.s, wb = this.wb;

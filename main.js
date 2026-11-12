@@ -76,14 +76,33 @@ const fileArgs = (argv) => argv.slice(app.isPackaged ? 1 : 2).filter((a) => !a.s
 let pendingFiles = fileArgs(process.argv);
 let ready = false;
 
-if (!app.requestSingleInstanceLock()) {
+// Actualizaciones: si ya hay una copia abierta de una versión más antigua, esa copia se cierra
+// y esta toma su lugar (antes, al instalar una versión nueva con la vieja abierta, seguía la vieja).
+const newer = (a, b) => { const x = String(a || '').split('.').map(Number); const y = String(b || '').split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+let gotLock = app.requestSingleInstanceLock({ version: app.getVersion() });
+if (!gotLock) {
+  const until = Date.now() + 4000; const pause = new Int32Array(new SharedArrayBuffer(4));
+  while (!gotLock && Date.now() < until) { Atomics.wait(pause, 0, 0, 250); gotLock = app.requestSingleInstanceLock({ version: app.getVersion() }); }
+}
+if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', (_e, argv) => {
+  app.on('second-instance', (_e, argv, _cwd, data) => {
+    if (data?.version && newer(data.version, app.getVersion())) { app.quit(); return; }
     const files = fileArgs(argv);
     if (files.length) files.forEach((f) => openApp(appForFile(f), f));
     else showLauncher();
   });
+}
+// macOS: si la app se reemplazó en disco por otra versión mientras seguía abierta, se reinicia sola
+function replacedOnDisk() {
+  if (process.platform !== 'darwin' || !app.isPackaged) return false;
+  try {
+    const plist = fss.readFileSync(path.join(process.resourcesPath, '..', 'Info.plist'), 'utf8');
+    const v = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(plist)?.[1];
+    if (v && v !== app.getVersion()) { app.relaunch(); app.quit(); return true; }
+  } catch { /* sin Info.plist */ }
+  return false;
 }
 app.on('open-file', (e, file) => {
   e.preventDefault();
@@ -782,7 +801,7 @@ app.whenReady().then(() => {
   ready = true;
   files.forEach((f) => openApp(appForFile(f), f));
   if (process.env.OFICINA_OPEN) openApp(process.env.OFICINA_OPEN);
-  app.on('activate', () => showLauncher());
+  app.on('activate', () => { if (!replacedOnDisk()) showLauncher(); });
 });
 
 app.on('before-quit', () => { quitting = true; });

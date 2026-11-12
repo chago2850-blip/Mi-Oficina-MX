@@ -7,6 +7,7 @@ import { CHART_TYPES, parseChartData, chartDataText, chartSvg } from './charts.j
 import { runShow, runPresenter, runAudience, EXIT_TYPES, PATH_TYPES, buildSteps } from './show.js';
 import * as NV from './navegador.js';
 import * as TZ from './trazos.js';
+import { FONT_NAMES, fontStack } from '../../shared/fuentes.js';
 import * as F3 from './fase3.js';
 import * as F4 from './fase4.js';
 import * as SZ from './slidesize.js';
@@ -17,7 +18,7 @@ import * as TBL from './tablas.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clone = (o) => JSON.parse(JSON.stringify(o));
-const FONTS = ['Inter', 'Calibri', 'Arial', 'Georgia', 'Verdana', 'Trebuchet MS', 'Times New Roman', 'Courier New'];
+const FONTS = ['Inter', ...FONT_NAMES.filter((n) => n !== 'Inter')];
 const SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 54, 60, 72, 96];
 const TRANSITIONS = [['none', 'Ninguna'], ['fade', 'Desvanecer'], ['push', 'Empujar'], ['wipe', 'Barrido'], ['cover', 'Cubrir'], ['zoom', 'Zoom'], ['morph', 'Transformación']];
 const ANIMS = [['none', 'Ninguna'], ['appear', 'Aparecer'], ['fade', 'Desvanecer'], ['fly', 'Entrar desde abajo'], ['zoom', 'Acercar'], ['wipe', 'Barrido'], ['fadeOut', 'Salida: desvanecer'], ['flyOut', 'Salida: hacia abajo'], ['zoomOut', 'Salida: alejar'], ['pathRight', 'Trayectoria: derecha'], ['pathLeft', 'Trayectoria: izquierda'], ['pathUp', 'Trayectoria: arriba'], ['pathDown', 'Trayectoria: abajo'], ['pathArc', 'Trayectoria: arco'], ['pathCircle', 'Trayectoria: círculo'], ['pathWave', 'Trayectoria: onda']];
@@ -92,7 +93,7 @@ function renderSlide(s, mode = 'thumb') {
     }
     if (o.type === 'text' || (o.type === 'shape' && (o.html || mode === 'edit'))) {
       const os = objStyle(o, th);
-      const txt = h('div', { class: `otxt v-${st.valign || 'top'}${st.list ? ' list' : ''}`, style: { color: os.color, fontFamily: `"${os.font}", Inter, Carlito, sans-serif`, fontSize: `${os.size}pt`, textAlign: st.align || (o.type === 'shape' ? 'center' : 'left'), fontWeight: st.bold ? '700' : '', fontStyle: st.italic ? 'italic' : '', background: o.type === 'text' && st.fill ? st.fill : '', border: o.type === 'text' && st.stroke ? `${st.strokeW || 1}px solid ${st.stroke}` : '' } });
+      const txt = h('div', { class: `otxt v-${st.valign || 'top'}${st.list ? ' list' : ''}`, style: { color: os.color, fontFamily: fontStack(os.font || 'Inter'), fontSize: `${os.size}pt`, textAlign: st.align || (o.type === 'shape' ? 'center' : 'left'), fontWeight: st.bold ? '700' : '', fontStyle: st.italic ? 'italic' : '', background: o.type === 'text' && st.fill ? st.fill : '', border: o.type === 'text' && st.stroke ? `${st.strokeW || 1}px solid ${st.stroke}` : '' } });
       const inner = h('div', { class: 'tin', html: o.html || '' });
       if (o.role && !o.html) { inner.dataset.ph = t(PLACEHOLDER[o.role] || ''); if (mode !== 'edit') inner.classList.add('ph-hidden'); }
       txt.append(inner);
@@ -1002,7 +1003,7 @@ const TABS = [
     { label: 'Portapapeles', items: [{ cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg' }, { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut' }, { cmd: 'copy', label: 'Copiar', icon: 'copy' }] }] },
     { label: 'Diapositivas', items: [{ cmd: 'newSlide', label: 'Nueva diapositiva', icon: 'slideAdd', size: 'lg', kbd: 'Ctrl+M' }, { stack: [{ cmd: 'layout', label: 'Diseño', icon: 'layout', showLabel: true, menu: () => layoutMenu(true) }, { cmd: 'duplicateSlide', label: 'Duplicar', icon: 'slideDup', showLabel: true }, { cmd: 'deleteSlide', label: 'Eliminar', icon: 'slideDel', showLabel: true }] }, { stack: [{ cmd: 'hideSlide', label: 'Ocultar diapositiva', icon: 'eye', showLabel: true }] }] },
     { label: 'Fuente', items: [{ stack: [
-      { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS, width: '130px' } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '58px' } }, { cmd: 'grow', label: 'Aumentar', icon: 'grow' }, { cmd: 'shrink', label: 'Reducir', icon: 'shrink' }] },
+      { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS, width: '150px' } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '58px' } }, { cmd: 'grow', label: 'Aumentar', icon: 'grow' }, { cmd: 'shrink', label: 'Reducir', icon: 'shrink' }] },
       { row: [{ cmd: 'bold', label: 'Negrita', icon: 'bold' }, { cmd: 'italic', label: 'Cursiva', icon: 'italic' }, { cmd: 'underline', label: 'Subrayado', icon: 'underline' }, { cmd: 'strike', label: 'Tachado', icon: 'strike' }, { cmd: 'textColor', label: 'Color de fuente', icon: 'textColor', color: true, colorValue: '#DC3A63', colorOpts: { allowNone: false } }] },
     ] }] },
     { label: 'Párrafo', items: [{ stack: [{ row: [{ cmd: 'bullets', label: 'Viñetas', icon: 'bullets' }, { cmd: 'numbers', label: 'Numeración', icon: 'numbers' }] }, { row: [{ cmd: 'alignLeft', label: 'Izquierda', icon: 'alignLeft' }, { cmd: 'alignCenter', label: 'Centrar', icon: 'alignCenter' }, { cmd: 'alignRight', label: 'Derecha', icon: 'alignRight' }] }] }] },

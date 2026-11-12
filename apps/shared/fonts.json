@@ -1,0 +1,218 @@
+[
+ {
+  "name": "Alef",
+  "kind": "sans",
+  "stack": "'Alef', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Amiri",
+  "kind": "serif",
+  "stack": "'Amiri', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Caladea",
+  "kind": "serif",
+  "stack": "'Caladea', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Carlito",
+  "kind": "sans",
+  "stack": "'Carlito', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Comic Neue",
+  "kind": "sans",
+  "stack": "'Comic Neue', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "David Libre",
+  "kind": "serif",
+  "stack": "'David Libre', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "DejaVu Sans",
+  "kind": "sans",
+  "stack": "'DejaVu Sans', sans-serif",
+  "license": "Bitstream-Vera"
+ },
+ {
+  "name": "DejaVu Sans Mono",
+  "kind": "mono",
+  "stack": "'DejaVu Sans Mono', monospace",
+  "license": "Bitstream-Vera"
+ },
+ {
+  "name": "DejaVu Serif",
+  "kind": "serif",
+  "stack": "'DejaVu Serif', serif",
+  "license": "Bitstream-Vera"
+ },
+ {
+  "name": "EB Garamond",
+  "kind": "serif",
+  "stack": "'EB Garamond', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Frank Ruhl Libre",
+  "kind": "serif",
+  "stack": "'Frank Ruhl Libre', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Gelasio",
+  "kind": "serif",
+  "stack": "'Gelasio', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Gentium Book Basic",
+  "kind": "serif",
+  "stack": "'Gentium Book Basic', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Inter",
+  "kind": "sans",
+  "stack": "'Inter', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Karla",
+  "kind": "sans",
+  "stack": "'Karla', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Lato",
+  "kind": "sans",
+  "stack": "'Lato', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Liberation Mono",
+  "kind": "mono",
+  "stack": "'Liberation Mono', monospace",
+  "license": "Apache-2.0"
+ },
+ {
+  "name": "Liberation Sans",
+  "kind": "sans",
+  "stack": "'Liberation Sans', sans-serif",
+  "license": "Apache-2.0"
+ },
+ {
+  "name": "Liberation Serif",
+  "kind": "serif",
+  "stack": "'Liberation Serif', serif",
+  "license": "Apache-2.0"
+ },
+ {
+  "name": "Linux Biolinum G",
+  "kind": "sans",
+  "stack": "'Linux Biolinum G', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Linux Libertine G",
+  "kind": "serif",
+  "stack": "'Linux Libertine G', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Miriam Libre",
+  "kind": "sans",
+  "stack": "'Miriam Libre', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Montserrat",
+  "kind": "sans",
+  "stack": "'Montserrat', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Noto Sans",
+  "kind": "sans",
+  "stack": "'Noto Sans', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Noto Sans Arabic",
+  "kind": "sans",
+  "stack": "'Noto Sans Arabic', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Noto Sans Hebrew",
+  "kind": "sans",
+  "stack": "'Noto Sans Hebrew', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Noto Sans Mono",
+  "kind": "mono",
+  "stack": "'Noto Sans Mono', monospace",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Noto Serif",
+  "kind": "serif",
+  "stack": "'Noto Serif', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Open Sans",
+  "kind": "sans",
+  "stack": "'Open Sans', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Reem Kufi",
+  "kind": "sans",
+  "stack": "'Reem Kufi', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Roboto",
+  "kind": "sans",
+  "stack": "'Roboto', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Rubik",
+  "kind": "sans",
+  "stack": "'Rubik', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Scheherazade New",
+  "kind": "serif",
+  "stack": "'Scheherazade New', serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Source Code Pro",
+  "kind": "mono",
+  "stack": "'Source Code Pro', monospace",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Source Sans Pro",
+  "kind": "sans",
+  "stack": "'Source Sans Pro', sans-serif",
+  "license": "OFL-1.1"
+ },
+ {
+  "name": "Source Serif Pro",
+  "kind": "serif",
+  "stack": "'Source Serif Pro', serif",
+  "license": "OFL-1.1"
+ }
+]

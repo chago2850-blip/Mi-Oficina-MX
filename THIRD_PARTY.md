@@ -31,3 +31,13 @@ Mi Oficina MX se distribuye bajo la **GPL-3.0-or-later**. Incluye estas bibliote
 **PapelPDF** es del mismo autor y se publicó originalmente bajo MIT; dentro de esta suite se distribuye bajo la GPL-3.0.
 
 Los logotipos, íconos, temas y plantillas de Mi Oficina MX son originales (GPL-3.0). No se usa ningún nombre, ícono, fuente, plantilla ni texto de Microsoft. "Microsoft Office", "Word", "Excel" y "PowerPoint" son marcas de Microsoft Corporation y solo se mencionan para describir la compatibilidad de formatos.
+
+## Fuentes incluidas (`apps/shared/fonts/`)
+
+Las fuentes libres que trae LibreOffice y otras muy usadas, para que la suite se vea igual en Windows, macOS y Linux. Se generan con `scripts/fonts/build.py` a partir de los paquetes de Fontsource (Google Fonts) y de `dejavu-fonts-ttf`.
+
+| Fuente | Licencia |
+|---|---|
+| Liberation Sans, Serif y Mono (servidas con Arimo, Tinos y Cousine, de medidas idénticas) | Apache-2.0 |
+| Carlito, Caladea, Gelasio, Linux Libertine G y Linux Biolinum G (Libertinus), Gentium Book Basic (Gentium Book Plus), Noto Sans/Serif/Sans Mono/Sans Arabic/Sans Hebrew, Source Sans Pro, Source Serif Pro, Source Code Pro, Open Sans, Karla, Rubik, EB Garamond, Alef, Frank Ruhl Libre, David Libre, Miriam Libre, Amiri, Reem Kufi, Scheherazade New, Inter, Lato, Roboto, Montserrat, Comic Neue | SIL Open Font License 1.1 |
+| DejaVu Sans, DejaVu Serif, DejaVu Sans Mono | Licencia de Bitstream Vera y Arev (libre) |

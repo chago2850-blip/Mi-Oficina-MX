@@ -1,7 +1,7 @@
 {
   "name": "mi-oficina-mx",
   "productName": "Mi Oficina MX",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "description": "Suite ofimática libre y multiplataforma: Escribiente, Calcula Datos, Impresiona y PapelPDF.",
   "main": "main.js",
   "author": {
@@ -33,9 +33,45 @@
     "word-extractor": "1.0.4"
   },
   "devDependencies": {
+    "@fontsource/alef": "^5.3.0",
+    "@fontsource/amiri": "^5.3.0",
+    "@fontsource/arimo": "^5.3.0",
+    "@fontsource/caladea": "^5.3.0",
+    "@fontsource/carlito": "^5.3.0",
+    "@fontsource/comic-neue": "^5.3.0",
+    "@fontsource/cousine": "^5.3.0",
+    "@fontsource/david-libre": "^5.3.0",
+    "@fontsource/dejavu-sans": "^5.3.0",
+    "@fontsource/dejavu-serif": "^5.3.0",
+    "@fontsource/eb-garamond": "^5.3.0",
+    "@fontsource/frank-ruhl-libre": "^5.3.0",
+    "@fontsource/gelasio": "^5.3.0",
+    "@fontsource/gentium-book-plus": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/karla": "^5.3.0",
+    "@fontsource/lato": "^5.3.0",
+    "@fontsource/libertinus-sans": "^5.3.0",
+    "@fontsource/libertinus-serif": "^5.3.0",
+    "@fontsource/miriam-libre": "^5.3.0",
+    "@fontsource/montserrat": "^5.3.0",
+    "@fontsource/noto-sans": "^5.3.0",
+    "@fontsource/noto-sans-arabic": "^5.3.0",
+    "@fontsource/noto-sans-hebrew": "^5.3.0",
+    "@fontsource/noto-sans-mono": "^5.3.0",
+    "@fontsource/noto-serif": "^5.3.0",
+    "@fontsource/open-sans": "^5.3.0",
+    "@fontsource/reem-kufi": "^5.3.0",
+    "@fontsource/roboto": "^5.3.0",
+    "@fontsource/rubik": "^5.3.0",
+    "@fontsource/scheherazade-new": "^5.3.0",
+    "@fontsource/source-code-pro": "^5.3.1",
+    "@fontsource/source-sans-3": "^5.3.1",
+    "@fontsource/source-serif-4": "^5.3.1",
+    "@fontsource/tinos": "^5.3.0",
     "@tesseract.js-data/eng": "1.0.0",
     "@tesseract.js-data/spa": "1.0.0",
     "axe-core": "^4.10.2",
+    "dejavu-fonts-ttf": "^2.37.3",
     "diff": "9.0.0",
     "echarts": "6.1.0",
     "electron": "33.2.1",
@@ -58,7 +94,13 @@
       "buildResources": "build"
     },
     "extraResources": [
-      { "from": "build/dict", "to": "dict", "filter": ["*.bdic"] }
+      {
+        "from": "build/dict",
+        "to": "dict",
+        "filter": [
+          "*.bdic"
+        ]
+      }
     ],
     "files": [
       "main.js",

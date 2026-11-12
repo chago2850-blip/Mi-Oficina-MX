@@ -15,10 +15,11 @@ import * as CE from './celdas.js';
 import * as DT from './datos.js';
 import * as AN from './analisis.js';
 import * as GR from './graficos.js';
+import { FONT_NAMES, onFontsReady } from '../../shared/fuentes.js';
 
 const wb = new Workbook();
 let shell, grid, nameBox, fxInput, tabsBar, statusInfo, zoom;
-const FONTS = ['Calibri', 'Arial', 'Cambria', 'Times New Roman', 'Verdana', 'Tahoma', 'Georgia', 'Courier New', 'Inter'];
+const FONTS = FONT_NAMES;
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
 
 // ------------------------------------------------------------------ helpers de acciones
@@ -787,7 +788,7 @@ const TABS = [
   { id: 'home', label: 'Inicio', groups: [
     { label: 'Portapapeles', items: [{ cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg', split: () => [{ label: 'Pegar', run: () => onCommand('paste') }, { label: 'Pegar solo valores', run: () => onCommand('pasteValues') }, { label: 'Transponer', run: () => onCommand('pasteTranspose') }, '-', { label: 'Pegado especial…', kbd: 'Ctrl+Mayús+V', run: () => onCommand('pasteSpecial') }] }, { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut' }, { cmd: 'copy', label: 'Copiar', icon: 'copy' }, { cmd: 'clearFormat', label: 'Borrar formato', icon: 'clear' }] }] },
     { label: 'Fuente', items: [{ stack: [
-      { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS, width: '130px' } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '56px' } }, { cmd: 'grow', label: 'Aumentar', icon: 'grow' }, { cmd: 'shrink', label: 'Reducir', icon: 'shrink' }] },
+      { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS, width: '150px' } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '56px' } }, { cmd: 'grow', label: 'Aumentar', icon: 'grow' }, { cmd: 'shrink', label: 'Reducir', icon: 'shrink' }] },
       { row: [{ cmd: 'bold', label: 'Negrita', icon: 'bold', kbd: 'Ctrl+B' }, { cmd: 'italic', label: 'Cursiva', icon: 'italic', kbd: 'Ctrl+I' }, { cmd: 'underline', label: 'Subrayado', icon: 'underline', kbd: 'Ctrl+U' }, { cmd: 'strike', label: 'Tachado', icon: 'strike' }, { cmd: 'borders', label: 'Bordes', icon: 'borders', menu: borderMenu }, { cmd: 'fill', label: 'Color de relleno', icon: 'fill', color: true, colorValue: '#FFF59D' }, { cmd: 'color', label: 'Color de fuente', icon: 'textColor', color: true, colorValue: '#C62828', colorOpts: { allowNone: false } }] },
     ] }] },
     { label: 'Alineación', items: [{ stack: [
@@ -844,6 +845,7 @@ buildWorkspace(shell.workspace);
 F.initFeatures({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g) });
 F3.init({ wb, grid, shell, act, refresh, applyFilter, mountCharts, refreshCharts });
 Q.init({ wb, grid, shell, act, refresh, switchSheet, refreshCharts });
+onFontsReady(() => { grid.invalidate?.(); grid.draw(); });
 AN.init({ wb, grid, shell, act, refresh, switchSheet, refreshCharts, sel: () => grid.range, clamp: (g) => clampToUsed(g), renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 DT.init({ wb, grid, shell, act, refresh, switchSheet, dup: (i) => duplicateSheet(i), refreshCharts, sel: () => grid.range, clamp: (g) => clampToUsed(g), renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });
 CE.init({ wb, grid, shell, act, refresh, switchSheet, sel: () => grid.range, clamp: (g) => clampToUsed(g), curStyle: () => curStyle(), FONTS, renderTabs: () => { tabsBar.dataset.key = ''; renderTabs(); } });

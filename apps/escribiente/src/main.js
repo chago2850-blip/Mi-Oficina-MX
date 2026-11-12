@@ -13,6 +13,7 @@ import * as IN from './insertar.js';
 import * as PG from './pagina.js';
 import * as HT from './herramientas.js';
 import * as AR from './archivo.js';
+import { FONT_LIST } from '../../shared/fuentes.js';
 import { rtfToHtml } from './rtf.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
@@ -24,21 +25,7 @@ const PAGE_SIZES = {
   a4: { name: 'A4 (21 × 29.7 cm)', w: 794, h: 1123 },
   a5: { name: 'A5 (14.8 × 21 cm)', w: 559, h: 794 },
 };
-const FONTS = [
-  ['Calibri', 'Calibri, Carlito, "Liberation Sans", sans-serif'],
-  ['Cambria', 'Cambria, Caladea, "Liberation Serif", serif'],
-  ['Arial', 'Arial, "Liberation Sans", Helvetica, sans-serif'],
-  ['Times New Roman', '"Times New Roman", "Liberation Serif", Times, serif'],
-  ['Georgia', 'Georgia, "DejaVu Serif", serif'],
-  ['Verdana', 'Verdana, "DejaVu Sans", sans-serif'],
-  ['Tahoma', 'Tahoma, "DejaVu Sans", sans-serif'],
-  ['Trebuchet MS', '"Trebuchet MS", "DejaVu Sans", sans-serif'],
-  ['Garamond', 'Garamond, "EB Garamond", serif'],
-  ['Courier New', '"Courier New", "Liberation Mono", monospace'],
-  ['Inter', 'Inter, sans-serif'],
-  ['Noto Sans', '"Noto Sans", sans-serif'],
-  ['DejaVu Sans', '"DejaVu Sans", sans-serif'],
-];
+const FONTS = FONT_LIST;
 const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
 const BLOCK_STYLES = [
   ['p', 'Normal'], ['title', 'Título'], ['subtitle', 'Subtítulo'], ['h1', 'Título 1'], ['h2', 'Título 2'], ['h3', 'Título 3'], ['h4', 'Título 4'], ['blockquote', 'Cita'],
