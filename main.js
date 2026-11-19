@@ -612,6 +612,9 @@ ipcMain.handle('of:export-pdf', async (e, { suggestedName, open = false, ...opts
 });
 // páginas en PDF para la vista previa de impresión
 ipcMain.handle('of:pdf-bytes', async (e, opts = {}) => new Uint8Array(await makePdf(e.sender, opts)));
+ipcMain.handle('of:translate', async (e, o = {}) => { try { return { ok: true, ...(await require('./main/traducir').translate(o)) }; } catch (err) { return { ok: false, error: String(err?.message || err), offline: /ENOTFOUND|ERR_INTERNET_DISCONNECTED|ERR_NAME_NOT_RESOLVED|ENETUNREACH|ECONNREFUSED|fetch failed|ERR_NETWORK|aborted/i.test(String(err?.message || err)) }; } });
+ipcMain.handle('of:add-word', (e, w) => { try { return e.sender.session.addWordToSpellCheckerDictionary(String(w || '')); } catch { return false; } });
+ipcMain.handle('of:system-fonts', async () => { try { return await require('./main/fuentes-sistema').systemFonts(dataDir()); } catch { return []; } });
 ipcMain.handle('of:printers', async (e) => {
   try { return (await e.sender.getPrintersAsync()).map((p) => ({ name: p.name, displayName: p.displayName || p.name, isDefault: !!p.isDefault })); } catch { return []; }
 });

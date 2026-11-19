@@ -7,7 +7,7 @@ import { CHART_TYPES, parseChartData, chartDataText, chartSvg } from './charts.j
 import { runShow, runPresenter, runAudience, EXIT_TYPES, PATH_TYPES, buildSteps } from './show.js';
 import * as NV from './navegador.js';
 import * as TZ from './trazos.js';
-import { FONT_NAMES, fontStack } from '../../shared/fuentes.js';
+import { FONT_NAMES, fontStack, SYSTEM_FONTS, onSystemFonts, addFontOptions } from '../../shared/fuentes.js';
 import * as F3 from './fase3.js';
 import * as F4 from './fase4.js';
 import * as SZ from './slidesize.js';
@@ -1003,7 +1003,7 @@ const TABS = [
     { label: 'Portapapeles', items: [{ cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg' }, { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut' }, { cmd: 'copy', label: 'Copiar', icon: 'copy' }] }] },
     { label: 'Diapositivas', items: [{ cmd: 'newSlide', label: 'Nueva diapositiva', icon: 'slideAdd', size: 'lg', kbd: 'Ctrl+M' }, { stack: [{ cmd: 'layout', label: 'Diseño', icon: 'layout', showLabel: true, menu: () => layoutMenu(true) }, { cmd: 'duplicateSlide', label: 'Duplicar', icon: 'slideDup', showLabel: true }, { cmd: 'deleteSlide', label: 'Eliminar', icon: 'slideDel', showLabel: true }] }, { stack: [{ cmd: 'hideSlide', label: 'Ocultar diapositiva', icon: 'eye', showLabel: true }] }] },
     { label: 'Fuente', items: [{ stack: [
-      { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS, width: '150px' } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '58px' } }, { cmd: 'grow', label: 'Aumentar', icon: 'grow' }, { cmd: 'shrink', label: 'Reducir', icon: 'shrink' }] },
+      { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS.filter((n) => !SYSTEM_FONTS.includes(n)), width: '150px', after: (sl) => addFontOptions(sl, SYSTEM_FONTS) } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '58px' } }, { cmd: 'grow', label: 'Aumentar', icon: 'grow' }, { cmd: 'shrink', label: 'Reducir', icon: 'shrink' }] },
       { row: [{ cmd: 'bold', label: 'Negrita', icon: 'bold' }, { cmd: 'italic', label: 'Cursiva', icon: 'italic' }, { cmd: 'underline', label: 'Subrayado', icon: 'underline' }, { cmd: 'strike', label: 'Tachado', icon: 'strike' }, { cmd: 'textColor', label: 'Color de fuente', icon: 'textColor', color: true, colorValue: '#DC3A63', colorOpts: { allowNone: false } }] },
     ] }] },
     { label: 'Párrafo', items: [{ stack: [{ row: [{ cmd: 'bullets', label: 'Viñetas', icon: 'bullets' }, { cmd: 'numbers', label: 'Numeración', icon: 'numbers' }] }, { row: [{ cmd: 'alignLeft', label: 'Izquierda', icon: 'alignLeft' }, { cmd: 'alignCenter', label: 'Centrar', icon: 'alignCenter' }, { cmd: 'alignRight', label: 'Derecha', icon: 'alignRight' }] }] }] },
@@ -1084,6 +1084,8 @@ F3.init({ getPres: () => pres, slide: () => slide(), commit, select, center, uid
 shell = new OfficeShell({ appId: 'impresiona', appName: 'Impresiona', logo: '../shared/img/impresiona.svg', tabs: TABS, adapter });
 shell.ribbon.onRender = () => setTimeout(reflect, 0);
 buildWorkspace(shell.workspace);
+onSystemFonts((added) => { for (const n of added) if (!FONTS.includes(n)) FONTS.push(n); addFontOptions(shell.ribbon.controls.get('fontName'), added); });
+
 statusSlide = h('span', {}, '');
 zoomCtl = h('div', { class: 'zoom' }, h('button', { title: 'Alejar', html: icon('minus', 14), onclick: () => onCommand('zoomOut') }), h('span', { style: { minWidth: '44px', textAlign: 'center' } }, '100%'), h('button', { title: 'Acercar', html: icon('plus', 14), onclick: () => onCommand('zoomIn') }), h('button', { class: 'sb-btn', title: 'Ajustar a la ventana', onclick: () => onCommand('zoomReset') }, 'Ajustar'));
 zoomCtl.set = true;

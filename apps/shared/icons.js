@@ -45,6 +45,8 @@ const P = {
   find: 'M10.5 10.5m-6.5 0a6.5 6.5 0 1013 0a6.5 6.5 0 10-13 0 M15.5 15.5L21 21',
   replace: 'M4 7h11l-3-3 M20 17H9l3 3 M15 7a5 5 0 015 5 M9 17a5 5 0 01-5-5',
   spell: 'M4 15l4-10 4 10 M5.5 11h5 M13 15l3 4 5-8',
+  spellDoc: 'M6 2h9l5 5v15H6z M15 2v5h5 M8.5 15l2.5-6 2.5 6 M9.4 13h3.2 M14 17l1.8 2 3.2-4',
+  translate: 'M3 5h10 M8 3v2 M5 5c1 4 4 7 7 8 M11 5c-1 4-4 7-7 8 M12 21l4.5-10 4.5 10 M13.5 18h6',
   words: 'M4 6h16 M4 10h16 M4 14h10 M17 14l2 2 3-4 M4 18h8',
   pageSetup: 'M5 3h14v18H5z M8 7h8 M8 7v10 M16 7v10 M8 17h8',
   orientation: 'M4 7h10v14H4z M10 3h10v8 M16 15l3-3 M16 9l3 3',

@@ -228,6 +228,7 @@ export class Ribbon {
     if (it.select) {
       const s = h('select', { class: 'rsel', title: it.title || it.label, 'aria-label': it.title || it.label, style: { width: it.select.width || 'auto' } });
       it.select.options.forEach((o) => { const [v, l] = Array.isArray(o) ? o : [o, o]; s.append(h('option', { value: v }, l)); });
+      it.select.after?.(s);
       s.addEventListener('mousedown', () => this.onBeforeSelect?.());
       s.addEventListener('change', () => this.onCommand(it.cmd, s.value));
       this.controls.set(it.cmd, s);

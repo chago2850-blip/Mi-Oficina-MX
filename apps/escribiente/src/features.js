@@ -545,25 +545,73 @@ export async function finishMerge() {
   }
 }
 
-// ------------------------------------------------------------------ sangrías arrastrables en la regla
+// ------------------------------------------------------------------ sangrías y márgenes arrastrables en la regla
+// Como en OnlyOffice/Word: triángulo superior = sangría de primera línea, triángulo inferior
+// izquierdo = sangría izquierda (el cuadrito mueve ambas), triángulo derecho = sangría derecha.
+// Los bordes entre la zona gris y la blanca son los márgenes de la página: se arrastran para
+// cambiar los márgenes izquierdo y derecho del documento.
+const RCM = 96 / 2.54;
+function rulerTip(x, text) {
+  let tip = C.ruler.querySelector('.rtip');
+  if (!tip) { tip = h('div', { class: 'rtip' }); C.ruler.append(tip); }
+  tip.style.left = `${x}px`; tip.textContent = text;
+  return tip;
+}
+const fmtCm = (px) => `${(Math.round((px / RCM) * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })} cm`;
+function dragOn(m, onMove, onUp) {
+  m.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const x0 = e.clientX; const ctx = onMove(null);
+    const move = (ev) => onMove(ev.clientX - x0, ctx);
+    const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); C.ruler.querySelector('.rtip')?.remove(); onUp(ctx); };
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+  });
+}
 export function drawIndentMarkers(left, z, cw) {
-  const b = C.currentBlock();
-  if (!b) return;
-  const ml = parseFloat(b.style.marginLeft) || 0, ti = parseFloat(b.style.textIndent) || 0;
-  const mk = (cls, x, title, onDrag) => {
-    const m = h('div', { class: `indent ${cls}`, title, style: { left: `${x}px` } });
-    m.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      const x0 = e.clientX; const blocks = C.selectedBlocks();
-      const start = blocks.map((bl) => ({ bl, ml: parseFloat(bl.style.marginLeft) || 0, ti: parseFloat(bl.style.textIndent) || 0 }));
-      const move = (ev) => { const d = Math.round(((ev.clientX - x0) / z) / 6) * 6; start.forEach((s) => onDrag(s, d)); m.style.left = `${x + d * z}px`; };
-      const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); C.shell.markDirty(); C.schedulePaginate(); };
-      addEventListener('mousemove', move); addEventListener('mouseup', up);
-    });
+  const p = C.state.page;
+  // márgenes de la página
+  const pageLeft = left - p.ml * z;
+  const margin = (side) => {
+    const x = side === 'l' ? left : left + cw * z;
+    const m = h('div', { class: `mhandle ${side}`, title: t(side === 'l' ? 'Margen izquierdo' : 'Margen derecho'), style: { left: `${x}px` } });
+    dragOn(m, (dx, ctx) => {
+      if (dx === null) return { ml: p.ml, mr: p.mr, v: null };
+      const d = Math.round((dx / z) / (RCM / 10)) * (RCM / 10); // pasos de 1 mm
+      const other = side === 'l' ? ctx.mr : ctx.ml;
+      const v = Math.max(0, Math.min(p.w - other - 2 * RCM, (side === 'l' ? ctx.ml + d : ctx.mr - d)));
+      ctx.v = v;
+      const nx = side === 'l' ? pageLeft + v * z : pageLeft + (p.w - v) * z;
+      m.style.left = `${nx}px`;
+      const shade = C.ruler.querySelectorAll('.track .m')[side === 'l' ? 0 : 1]; if (shade) shade.style.width = `${v * z}px`;
+      rulerTip(nx, `${t(side === 'l' ? 'Margen izquierdo' : 'Margen derecho')}: ${fmtCm(v)}`);
+      return ctx;
+    }, (ctx) => { if (ctx.v != null) C.setPage(side === 'l' ? { ml: ctx.v } : { mr: ctx.v }); });
     C.ruler.append(m);
   };
-  mk('first', left + (ml + ti) * z, 'Sangría de primera línea', (s, d) => { s.bl.style.textIndent = s.ti + d ? `${s.ti + d}px` : ''; });
-  mk('left', left + ml * z, 'Sangría izquierda', (s, d) => { const v = Math.max(0, Math.min(cw - 40, s.ml + d)); s.bl.style.marginLeft = v ? `${v}px` : ''; });
+  margin('l'); margin('r');
+  // sangrías del párrafo
+  const b = C.currentBlock();
+  if (!b) return;
+  const ml = parseFloat(b.style.marginLeft) || 0, ti = parseFloat(b.style.textIndent) || 0, mr = parseFloat(b.style.marginRight) || 0;
+  const mk = (cls, x, title, onDrag, tipVal) => {
+    const m = h('div', { class: `indent ${cls}`, title: t(title), style: { left: `${x}px` } });
+    dragOn(m, (dx, ctx) => {
+      if (dx === null) return C.selectedBlocks().map((bl) => ({ bl, ml: parseFloat(bl.style.marginLeft) || 0, ti: parseFloat(bl.style.textIndent) || 0, mr: parseFloat(bl.style.marginRight) || 0 }));
+      const d = Math.round((dx / z) / 6) * 6;
+      ctx.forEach((s) => onDrag(s, d)); m.style.left = `${x + d * z}px`;
+      if (cls === 'left') { const f = C.ruler.querySelector('.indent.first'); if (f) f.style.left = `${left + (ml + ti + d) * z}px`; const bx = C.ruler.querySelector('.indent.both'); if (bx) bx.style.left = `${x + d * z}px`; }
+      if (cls === 'both') { for (const c2 of ['first', 'left']) { const f = C.ruler.querySelector(`.indent.${c2}`); if (f) f.style.left = `${(c2 === 'first' ? left + (ml + ti) * z : x) + d * z}px`; } }
+      rulerTip(x + d * z, `${t(title)}: ${fmtCm(tipVal(d))}`);
+      return ctx;
+    }, () => { C.shell.markDirty(); C.schedulePaginate(); });
+    C.ruler.append(m);
+  };
+  mk('first', left + (ml + ti) * z, 'Sangría de primera línea', (s, d) => { s.bl.style.textIndent = s.ti + d ? `${s.ti + d}px` : ''; }, (d) => ti + d);
+  // sangría izquierda (francesa): mueve el margen izquierdo y conserva la primera línea en su sitio
+  mk('left', left + ml * z, 'Sangría izquierda', (s, d) => { const v = Math.max(0, Math.min(cw - s.mr - 40, s.ml + d)); const dv = v - s.ml; s.bl.style.marginLeft = v ? `${v}px` : ''; s.bl.style.textIndent = s.ti - dv ? `${s.ti - dv}px` : ''; }, (d) => Math.max(0, ml + d));
+  mk('both', left + ml * z, 'Sangría izquierda y primera línea', (s, d) => { const v = Math.max(0, Math.min(cw - s.mr - 40, s.ml + d)); s.bl.style.marginLeft = v ? `${v}px` : ''; }, (d) => Math.max(0, ml + d));
+  mk('right', left + (cw - mr) * z, 'Sangría derecha', (s, d) => { const v = Math.max(0, Math.min(cw - s.ml - 40, s.mr - d)); s.bl.style.marginRight = v ? `${v}px` : ''; }, (d) => Math.max(0, mr - d));
 }
 
 // ------------------------------------------------------------------ tabulaciones

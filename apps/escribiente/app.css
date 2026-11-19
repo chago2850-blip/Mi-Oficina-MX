@@ -125,7 +125,13 @@ body.printing #printRoot { display: block; }
 .sheet .wm { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-38deg); font: 700 92px Inter, Carlito, sans-serif; letter-spacing: 6px; opacity: .55; white-space: nowrap; pointer-events: none; text-transform: uppercase; }
 .ruler .indent { position: absolute; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; transform: translateX(-6px); cursor: ew-resize; z-index: 2; }
 .ruler .indent.first { top: 2px; border-top: 7px solid var(--accent-2); }
-.ruler .indent.left { bottom: 2px; border-bottom: 7px solid var(--accent-2); }
+.ruler .indent.left { bottom: 6px; border-bottom: 7px solid var(--accent-2); }
+.ruler .indent.right { bottom: 2px; border-bottom: 7px solid var(--accent-2); }
+.ruler .indent.both { bottom: 1px; width: 10px; height: 5px; border: 1px solid var(--accent-2); background: var(--surface, #fff); transform: translateX(-6px); }
+.ruler .indent:hover { filter: brightness(1.25); }
+.ruler .mhandle { position: absolute; top: 3px; height: 16px; width: 7px; transform: translateX(-3px); cursor: col-resize; z-index: 1; }
+.ruler .mhandle:hover { background: rgba(0,0,0,.08); }
+.ruler .rtip { position: absolute; top: 24px; transform: translateX(-50%); background: var(--ink, #222); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; z-index: 10; }
 body[data-theme="dark"] .ruler .track { background: #2C2F3C; }
 .doc sup.en { color: var(--accent-2); cursor: pointer; font-weight: 600; padding: 0 1px; }
 .enotes { position: absolute; font-size: 9pt; line-height: 1.25; color: #333; }
@@ -266,3 +272,21 @@ body.printing .doc .fld, .m-print .fld { background: none; }
 .th-w { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 2px 9px; cursor: pointer; font: inherit; font-size: 12.5px; }
 .th-w:hover { border-color: var(--accent); color: var(--accent); }
 .doc p, .doc li { hyphens: manual; }
+
+/* revisión de documento (ortografía) */
+::highlight(spell-cur) { background-color: #FFE08A; color: #000; text-decoration: underline wavy #D93025; }
+.modal.spellbox { position: fixed; right: 24px; top: 150px; z-index: 60; width: 460px; max-width: calc(100vw - 32px); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.spellbox .sp-head { display: flex; justify-content: space-between; align-items: center; }
+.spellbox .sp-x { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--ink-3); }
+.spellbox .sp-lab { font-size: 12px; color: var(--ink-3); margin: 6px 0 4px; display: block; }
+.spellbox .sp-ctx { border: 1px solid var(--line-2); border-radius: 6px; padding: 8px 10px; min-height: 42px; font-size: 13px; line-height: 1.45; background: var(--surface); max-height: 96px; overflow: auto; }
+.spellbox .sp-ctx mark { background: #FFE08A; color: #000; text-decoration: underline wavy #D93025; }
+.spellbox .sp-cols { display: grid; grid-template-columns: 1fr 170px; gap: 12px; margin-top: 6px; }
+.spellbox .sp-word { width: 100%; box-sizing: border-box; margin-top: 4px; }
+.spellbox .sp-list { border: 1px solid var(--line-2); border-radius: 6px; height: 132px; overflow: auto; background: var(--surface); padding: 2px; }
+.spellbox .sp-sug { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font: inherit; color: inherit; }
+.spellbox .sp-sug.on, .spellbox .sp-sug:hover { background: var(--accent-soft, rgba(80,70,200,.12)); }
+.spellbox .sp-none { padding: 6px 8px; color: var(--ink-3); font-size: 12px; }
+.spellbox .sp-btns { display: flex; flex-direction: column; gap: 6px; padding-top: 22px; }
+.spellbox .sp-btns .btn { width: 100%; }
+.spellbox .sp-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: var(--ink-3); }

@@ -12,8 +12,9 @@ import * as TB from './tablas.js';
 import * as IN from './insertar.js';
 import * as PG from './pagina.js';
 import * as HT from './herramientas.js';
+import * as RV from './revision.js';
 import * as AR from './archivo.js';
-import { FONT_LIST } from '../../shared/fuentes.js';
+import { FONT_LIST, SYSTEM_FONTS, onSystemFonts, addFontOptions } from '../../shared/fuentes.js';
 import { rtfToHtml } from './rtf.js';
 import { odtToHtml, htmlToOdt } from './odt.js';
 
@@ -66,10 +67,16 @@ function buildWorkspace(ws) {
     if (e.target === pagesEl || e.target.classList.contains('sheet')) {
       e.preventDefault();
       editor.focus();
-      placeCaretAtEnd();
+      if (!caretAtPoint(e.clientX, e.clientY)) placeCaretAtEnd();
     }
   });
-  document.addEventListener('selectionchange', () => { if (editor.contains(document.getSelection().anchorNode)) { saveSelection(); reflectState(); F.refreshStylesPane(); } });
+  // Doble clic en cualquier parte de la hoja: «hacer clic y escribir» como en Word
+  pagesEl.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.hf-l, img, table, .pb, .cbk, .otab, .fld, .mf')) return;
+    if (e.target !== pagesEl && e.target !== editor && !e.target.classList.contains('sheet')) return;
+    clickAndType(e.clientX, e.clientY);
+  });
+  document.addEventListener('selectionchange', () => { if (editor.contains(document.getSelection().anchorNode)) { saveSelection(); reflectState(); F.refreshStylesPane(); const b = currentBlock(); if (b !== drawRuler.block) { drawRuler.block = b; drawRuler(); } } });
   scroller.addEventListener('scroll', () => { updateStatusPage(); positionImgBox(); });
   new ResizeObserver(() => schedulePaginate()).observe(editor);
   imgBox.addEventListener('mousedown', startImgResize);
@@ -265,6 +272,7 @@ function onEditorKey(e) {
   if (mod && e.key === 'F11') { e.preventDefault(); onCommand('stylesPane'); }
   if (e.key === 'F9' && !mod) { e.preventDefault(); IN.updateAll(); }
   if (mod && e.key === 'F7') { e.preventDefault(); onCommand('thesaurus'); }
+  if (!mod && !e.shiftKey && e.key === 'F7') { e.preventDefault(); onCommand('docReview'); }
   if (mod && e.shiftKey && e.key === 'Enter') { e.preventDefault(); saveSelection(); IN.insertColumnBreak(); }
   if (e.shiftKey && !mod && e.key === 'F3') { e.preventDefault(); saveSelection(); const sel = document.getSelection().toString(); FX.changeCase(sel === sel.toLocaleUpperCase('es') ? 'lower' : sel === sel.toLocaleLowerCase('es') ? 'title' : 'upper'); }
   if (mod && e.altKey && /^[1-3]$/.test(e.key)) { e.preventDefault(); setBlockStyle(`h${e.key}`); }
@@ -276,9 +284,98 @@ function onEditorKey(e) {
     if (b && b.tagName === 'LI') { e.preventDefault(); exec(e.shiftKey ? 'outdent' : 'indent'); return; }
     e.preventDefault(); if (e.shiftKey) return; F.insertTab(); shell.markDirty(); schedulePaginate();
   }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !selImg && !mod && deleteBreak(e.key === 'Backspace')) { e.preventDefault(); return; }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selImg) { e.preventDefault(); selImg.remove(); selectImage(null); shell.markDirty(); schedulePaginate(); }
   // Evita que el editor quede vacío sin párrafo
   if (e.key === 'Backspace' || e.key === 'Delete') setTimeout(() => { if (!editor.firstElementChild) editor.innerHTML = '<p><br></p>'; }, 0);
+}
+// Retroceso/Supr junto a un salto de página (div.pb) o de columna (span.cbk): Chrome no borra
+// los elementos no editables, así que se seleccionan y se borran con deshacer.
+function deleteBreak(back) {
+  const sel = document.getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed || !editor.contains(sel.anchorNode)) return false;
+  const r = sel.getRangeAt(0);
+  const isBreak = (n) => n && n.nodeType === 1 && (n.classList.contains('pb') || n.classList.contains('cbk'));
+  const blank = (n) => n && n.nodeType === 3 && !n.nodeValue.replace(/[\u200B\s]/g, '');
+  // nodo vecino dentro del mismo flujo (salta textos vacíos)
+  const sib = (n, dir) => { let x = dir < 0 ? n.previousSibling : n.nextSibling; while (blank(x)) x = dir < 0 ? x.previousSibling : x.nextSibling; return x; };
+  let target = null;
+  // 1) salto en línea (cbk) justo antes/después del cursor
+  const c = r.startContainer; const o = r.startOffset;
+  if (c.nodeType === 3) {
+    const txt = c.nodeValue; const edge = back ? !txt.slice(0, o).replace(/\u200B/g, '') : !txt.slice(o).replace(/\u200B/g, '');
+    if (edge && isBreak(sib(c, back ? -1 : 1))) target = sib(c, back ? -1 : 1);
+  } else if (c.nodeType === 1) {
+    const n = back ? c.childNodes[o - 1] : c.childNodes[o];
+    if (isBreak(n)) target = n; else if (blank(n) && isBreak(sib(n, back ? -1 : 1))) target = sib(n, back ? -1 : 1);
+  }
+  // 2) salto de página entre bloques: cursor al inicio (o al final) del bloque de primer nivel
+  if (!target) {
+    let top = c.nodeType === 1 ? c : c.parentNode;
+    if (top === editor) return false;
+    while (top && top.parentNode !== editor) top = top.parentNode;
+    if (!top) return false;
+    const pre = document.createRange();
+    if (back) { pre.setStart(top, 0); pre.setEnd(r.startContainer, r.startOffset); } else { pre.setStart(r.startContainer, r.startOffset); pre.setEnd(top, top.childNodes.length); }
+    const frag = pre.cloneContents();
+    const empty = !frag.textContent.replace(/[\u200B\s]/g, '') && !frag.querySelector?.('img,table,hr,.otab,.cbk,.fld');
+    if (!empty) return false;
+    const nb = sib(top, back ? -1 : 1);
+    if (isBreak(nb)) target = nb;
+  }
+  if (!target) return false;
+  const rr = document.createRange(); rr.setStartBefore(target); rr.setEndAfter(target);
+  sel.removeAllRanges(); sel.addRange(rr);
+  const n0 = editor.querySelectorAll('.pb,.cbk').length;
+  document.execCommand('delete');
+  if (editor.contains(target) && editor.querySelectorAll('.pb,.cbk').length >= n0) { const after = target.nextSibling; const parent = target.parentNode; target.remove(); const r2 = document.createRange(); if (after) r2.setStartBefore(after); else r2.selectNodeContents(parent); r2.collapse(true); sel.removeAllRanges(); sel.addRange(r2); }
+  shell.markDirty(); schedulePaginate();
+  return true;
+}
+// --- hacer clic y escribir
+function lastBlockBottom() {
+  const kids = [...editor.children].filter((k) => !k.classList.contains('pb') && k.getClientRects().length);
+  const last = kids[kids.length - 1];
+  return last ? { el: last, bottom: last.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(last).marginBottom) || 0) * state.zoom / 100 } : null;
+}
+// coloca el cursor en el punto más cercano del texto (devuelve false si el punto queda debajo del texto)
+function caretAtPoint(x, y) {
+  const lb = lastBlockBottom(); if (!lb || y > lb.bottom) return false;
+  const er = editor.getBoundingClientRect();
+  const cx = Math.max(er.left + 2, Math.min(er.right - 2, x));
+  const r = document.caretRangeFromPoint?.(cx, y);
+  if (!r || !editor.contains(r.startContainer)) return false;
+  const sel = document.getSelection(); sel.removeAllRanges(); sel.addRange(r); saveSelection();
+  return true;
+}
+function clickAndType(x, y) {
+  editor.focus();
+  if (caretAtPoint(x, y)) return;
+  const lb = lastBlockBottom(); const z = state.zoom / 100;
+  if (!lb) { placeCaretAtEnd(); return; }
+  // líneas vacías necesarias para llegar al punto (como Word)
+  const lineH = (11 * 1.15 + 8) * (96 / 72) * z;
+  const n = Math.max(1, Math.min(400, Math.round((y - lb.bottom) / lineH) + 1));
+  placeCaretAtEnd();
+  const lastEl = editor.lastElementChild;
+  const textual = lastEl && /^(P|H[1-6]|BLOCKQUOTE|DIV)$/.test(lastEl.tagName) && !lastEl.classList.contains('pb') && !lastEl.classList.contains('toc');
+  let target;
+  if (textual && !lastEl.textContent.replace(/[\u200B\s]/g, '') && !lastEl.querySelector('img') && n === 1) target = lastEl;
+  else {
+    document.execCommand('insertHTML', false, '<p><br></p>'.repeat(n));
+    target = editor.lastElementChild;
+    // si el último párrafo era un título, los nuevos son párrafos normales
+    if (target && target.tagName !== 'P') { const p = document.createElement('p'); p.innerHTML = '<br>'; editor.append(p); target = p; }
+  }
+  // alineación según dónde se hizo el doble clic
+  const er = editor.getBoundingClientRect(); const rel = (x - er.left) / Math.max(1, er.width);
+  const align = rel > 0.35 && rel < 0.65 ? 'center' : rel >= 0.8 ? 'right' : '';
+  if (target) {
+    if (align) target.style.textAlign = align; else if (target.style.textAlign) target.style.textAlign = '';
+    const r = document.createRange(); r.setStart(target, 0); r.collapse(true);
+    const sel = document.getSelection(); sel.removeAllRanges(); sel.addRange(r); saveSelection();
+  }
+  shell.markDirty(); schedulePaginate();
 }
 function moveCell(cell, dir) {
   const cells = [...cell.closest('table').querySelectorAll('td,th')].filter((c) => !c.closest('tr.tpush, tr.trep'));
@@ -1054,6 +1151,8 @@ async function onCommand(cmd, arg) {
     case 'columnBreak': return IN.insertColumnBreak();
     case 'pageBorder': return PG.pageBorderDialog();
     case 'thesaurus': saveSelection(); return HT.thesaurusDialog();
+    case 'docReview': return RV.documentReview();
+    case 'translate': return RV.translateDialog();
     case 'exportEpub': return AR.epubDialog();
     case 'exportRtf': return shell.saveAsFormat('rtf', 'Formato de texto enriquecido');
     case 'exportTxt': return AR.txtDialog();
@@ -1194,7 +1293,7 @@ const TABS = [
       ] },
       { label: 'Fuente', items: [
         { stack: [
-          { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS.map((f) => f[0]), width: '150px' } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '62px' } }, { cmd: 'grow', label: 'Aumentar tamaño', icon: 'grow', kbd: 'Ctrl+]' }, { cmd: 'shrink', label: 'Reducir tamaño', icon: 'shrink', kbd: 'Ctrl+[' }] },
+          { row: [{ cmd: 'fontName', label: 'Fuente', select: { options: FONTS.filter((f) => !SYSTEM_FONTS.includes(f[0])).map((f) => f[0]), width: '150px', after: (sl) => addFontOptions(sl, SYSTEM_FONTS) } }, { cmd: 'fontSize', label: 'Tamaño', select: { options: SIZES.map(String), width: '62px' } }, { cmd: 'grow', label: 'Aumentar tamaño', icon: 'grow', kbd: 'Ctrl+]' }, { cmd: 'shrink', label: 'Reducir tamaño', icon: 'shrink', kbd: 'Ctrl+[' }] },
           { row: [
             { cmd: 'bold', label: 'Negrita', icon: 'bold', kbd: 'Ctrl+B' }, { cmd: 'italic', label: 'Cursiva', icon: 'italic', kbd: 'Ctrl+I' }, { cmd: 'underline', label: 'Subrayado', icon: 'underline', kbd: 'Ctrl+U' },
             { cmd: 'strikeThrough', label: 'Tachado', icon: 'strike' }, { cmd: 'subscript', label: 'Subíndice', icon: 'sub' }, { cmd: 'superscript', label: 'Superíndice', icon: 'sup' },
@@ -1266,7 +1365,8 @@ const TABS = [
   },
   {
     id: 'review', label: 'Revisar', groups: [
-      { label: 'Revisión', items: [{ cmd: 'spell', label: 'Ortografía', icon: 'spell', size: 'lg' }, { cmd: 'wordCount', label: 'Contar palabras', icon: 'words', size: 'lg' }, { cmd: 'thesaurus', label: 'Sinónimos', icon: 'thesaurus', size: 'lg', kbd: 'Ctrl+F7' }] },
+      { label: 'Revisión', items: [{ cmd: 'docReview', label: 'Revisión de documento', icon: 'spellDoc', size: 'lg', kbd: 'F7' }, { cmd: 'spell', label: 'Ortografía', icon: 'spell', size: 'lg' }, { cmd: 'wordCount', label: 'Contar palabras', icon: 'words', size: 'lg' }, { cmd: 'thesaurus', label: 'Sinónimos', icon: 'thesaurus', size: 'lg', kbd: 'Ctrl+F7' }] },
+      { label: 'Idioma', items: [{ cmd: 'translate', label: 'Traducir', icon: 'translate', size: 'lg' }] },
       { label: 'Herramientas', items: [{ stack: [{ cmd: 'autocorrect', label: 'Autocorrección…', icon: 'check', showLabel: true }, { cmd: 'hyphenation', label: 'Separación silábica…', icon: 'hyphen', showLabel: true }, { cmd: 'sortParas', label: 'Ordenar párrafos…', icon: 'sortAsc', showLabel: true }] }] },
       { label: 'Comentarios', items: [{ cmd: 'comment', label: 'Nuevo comentario', icon: 'comment', size: 'lg' }, { cmd: 'showComments', label: 'Mostrar comentarios', icon: 'notes', size: 'lg' }] },
       { label: 'Seguimiento', items: [{ cmd: 'track', label: 'Control de cambios', icon: 'replace', size: 'lg' }, { cmd: 'showChanges', label: 'Panel de revisiones', icon: 'words', size: 'lg' }] },
@@ -1331,12 +1431,15 @@ shell.command = async (cmd, arg) => {
 shell.ribbon.onBeforeSelect = saveSelection;
 shell.ribbon.onRender = () => setTimeout(reflectState, 0);
 buildWorkspace(shell.workspace);
+onSystemFonts((added) => { addFontOptions(shell.ribbon.controls.get('fontName'), added); });
+
 F.initFeatures({
   renderStylesPane: () => ES.renderPane(),
-  editor, state, shell, scroller, ruler, pagesEl, schedulePaginate, paginate, insertHTMLAtCursor, restoreSelection, saveSelection, selectedBlocks, currentBlock, applySpanStyle,
+  editor, state, shell, scroller, ruler, pagesEl, schedulePaginate, paginate, insertHTMLAtCursor, restoreSelection, saveSelection, selectedBlocks, currentBlock, applySpanStyle, setPage: (o) => setPage(o),
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
 ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
+RV.init({ editor, shell, saveSelection, restoreSelection, schedulePaginate, selectedBlocks });
 HT.init({ editor, state, shell, saveSelection, restoreSelection, schedulePaginate, currentBlock, selectedBlocks });
 PG.init({ state, editor, get pagesEl() { return pagesEl; }, shell, schedulePaginate });
 AR.init({ state, editor, shell, settings: () => snapshotSettings() });
@@ -1360,4 +1463,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, IN, HT, PG, saveSelection, insertCite: (s) => F3.insertCitation(s) };
+window.__escribiente = { RV, editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, IN, HT, PG, saveSelection, insertCite: (s) => F3.insertCitation(s) };

@@ -1,5 +1,5 @@
 // Puente seguro entre la interfaz de Escribiente / Calcula Datos / Impresiona y el sistema.
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('oficina', {
   openDialog: (opts) => ipcRenderer.invoke('of:open-dialog', opts || {}),
@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld('oficina', {
   print: (opts) => ipcRenderer.invoke('of:print', opts || {}),
   pdfBytes: (opts) => ipcRenderer.invoke('of:pdf-bytes', opts || {}),
   printers: () => ipcRenderer.invoke('of:printers'),
+  systemFonts: () => ipcRenderer.invoke('of:system-fonts'),
+  translate: (o) => ipcRenderer.invoke('of:translate', o || {}),
+  spell: {
+    misspelled: (w) => { try { return webFrame.isWordMisspelled(String(w)); } catch { return false; } },
+    suggest: (w) => { try { return webFrame.getWordSuggestions(String(w)); } catch { return []; } },
+    addWord: (w) => ipcRenderer.invoke('of:add-word', w),
+  },
   recents: () => ipcRenderer.invoke('of:recents'),
   clearRecents: () => ipcRenderer.invoke('of:clear-recents'),
   confirm: (opts) => ipcRenderer.invoke('of:confirm', opts),
