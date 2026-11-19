@@ -18,7 +18,18 @@ let ctrlAlone = false;
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // formato original (lo que ya hacía Escribiente)
-export const keepHtml = (html) => sanitize(html.replace(/<!--[\s\S]*?-->/g, '')).replace(/\sclass="(?!title|subtitle)[^"]*"/g, '');
+// formato original (lo que ya hacía Escribiente). Se quitan los interlineados fijos de las páginas
+// web (en px, pt, em o %), que con otra letra o tamaño encimaban las líneas.
+export function keepHtml(html) {
+  const clean = sanitize(html.replace(/<!--[\s\S]*?-->/g, '')).replace(/\sclass="(?!title|subtitle)[^"]*"/g, '');
+  const doc = new DOMParser().parseFromString(`<body>${clean}</body>`, 'text/html');
+  doc.body.querySelectorAll('[style]').forEach((el) => {
+    const lh = el.style.lineHeight;
+    if (lh && !(/^\d*\.?\d+$/.test(lh) && Number(lh) >= 1)) el.style.removeProperty('line-height');
+    if (!el.getAttribute('style')?.trim()) el.removeAttribute('style');
+  });
+  return doc.body.innerHTML;
+}
 
 // combinar formato: conserva la estructura y el énfasis, quita letra, tamaño, colores y espaciados
 export function mergeHtml(html) {
@@ -92,7 +103,7 @@ function show() {
   if (!ctl) {
     ctl = h('div', { class: 'paste-ctl', role: 'group', 'aria-label': t('Opciones de pegado') },
       h('button', { type: 'button', class: 'pc-btn', title: t('Opciones de pegado (Ctrl)'), 'aria-haspopup': 'menu', onmousedown: (e) => e.preventDefault(), onclick: () => toggleMenu() },
-        h('span', { class: 'pc-ico', 'aria-hidden': 'true' }, icon('paste', 14)), h('span', {}, `(${t('Ctrl')})`), h('span', { class: 'pc-car', 'aria-hidden': 'true' }, '▾')),
+        h('span', { class: 'pc-ico', 'aria-hidden': 'true', html: icon('paste', 14) }), h('span', {}, `(${t('Ctrl')})`), h('span', { class: 'pc-car', 'aria-hidden': 'true' }, '▾')),
       h('div', { class: 'pc-menu', role: 'menu', hidden: true }));
     C.scroller.append(ctl);
   }

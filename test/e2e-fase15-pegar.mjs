@@ -71,7 +71,7 @@ async function drag(w, sel, dx) {
 }
 const caretIn = (w) => E(w, () => { const s = getSelection(); const n = s.anchorNode; const el = n?.nodeType === 3 ? n.parentElement : n; return { inEditor: document.getElementById('editor').contains(n), tag: el?.closest('p,h1,h2,h3,li,td')?.tagName || el?.tagName, idx: [...document.getElementById('editor').children].indexOf(el?.closest('#editor > *')) }; });
 
-const CLIP_HTML = '<p style="font-family:Courier New;font-size:20pt;color:#c00000">Hola <span style="font-weight:bold">mundo</span> <i>bonito</i></p><p style="text-align:center;font-family:Georgia">Segunda línea</p>';
+const CLIP_HTML = '<p style="font-family:Courier New;font-size:20pt;color:#c00000;line-height:12px">Hola <span style="font-weight:bold">mundo</span> <i>bonito</i></p><p style="text-align:center;font-family:Georgia">Segunda línea</p>';
 const CLIP_TEXT = 'Hola mundo bonito\nSegunda línea';
 const setClip = () => app.evaluate(({ clipboard }, [h, t]) => clipboard.write({ html: h, text: t }), [CLIP_HTML, CLIP_TEXT]);
 const ed = (w) => E(w, () => document.getElementById('editor').innerHTML);
@@ -83,7 +83,10 @@ try {
   await w.keyboard.press('Control+V'); await wait(400);
   let h = await ed(w);
   assert.match(h, /Courier New/); assert.match(h, /mundo/);
+  assert.doesNotMatch(h, /line-height: 12px/, 'sin interlineado fijo que encime las líneas');
   assert.ok(await w.isVisible('.paste-ctl'), 'aparece el botón (Ctrl)');
+  const btn = await E(w, () => { const b = document.querySelector('.paste-ctl .pc-btn'); const r = b.getBoundingClientRect(); return { text: b.textContent.trim(), svg: !!b.querySelector('svg'), w: r.width, h: r.height }; });
+  assert.ok(btn.svg && !btn.text.includes('<') && /\(Ctrl\)/.test(btn.text) && btn.w < 120 && btn.h < 40, `botón compacto con ícono ${JSON.stringify(btn)}`);
   // el botón queda junto al final de lo pegado
   const pos = await E(w, () => { const b = document.querySelector('.paste-ctl').getBoundingClientRect(); const ps = [...document.querySelectorAll('#editor p')]; const last = ps[ps.length - 1].getBoundingClientRect(); return { dy: b.top - last.bottom, dx: b.left - last.left }; });
   assert.ok(pos.dy > -30 && pos.dy < 30, `posición ${JSON.stringify(pos)}`);
