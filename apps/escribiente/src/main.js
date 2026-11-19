@@ -13,6 +13,7 @@ import * as IN from './insertar.js';
 import * as PG from './pagina.js';
 import * as HT from './herramientas.js';
 import * as RV from './revision.js';
+import * as PG2 from './pegar.js';
 import * as AR from './archivo.js';
 import { FONT_LIST, SYSTEM_FONTS, onSystemFonts, addFontOptions } from '../../shared/fuentes.js';
 import { rtfToHtml } from './rtf.js';
@@ -54,7 +55,8 @@ function buildWorkspace(ws) {
   scroller.append(ruler, pagesEl);
   ws.append(scroller, h('div', { id: 'printRoot' }));
 
-  editor.addEventListener('input', (e) => { if (e.inputType === 'insertParagraph') ES.onNewParagraph(); shell.markDirty(); schedulePaginate(); updateCounts(); });
+  editor.addEventListener('input', (e) => { PG2.onEdited(); if (e.inputType === 'insertParagraph') ES.onNewParagraph(); shell.markDirty(); schedulePaginate(); updateCounts(); });
+  editor.addEventListener('keyup', (e) => PG2.onKeyUp(e));
   editor.addEventListener('keydown', onEditorKey);
   editor.addEventListener('paste', onPaste);
   editor.addEventListener('click', (e) => {
@@ -251,8 +253,11 @@ function setIndent(delta) {
 }
 
 // ------------------------------------------------------------------ teclado y pegado
+let plainPaste = false;
 function onEditorKey(e) {
+  if (PG2.onKeyDown(e)) return;
   const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'v') { plainPaste = true; setTimeout(() => { plainPaste = false; }, 400); }
   if (mod && !e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();
     if (k === 'b') { e.preventDefault(); exec('bold'); }
@@ -387,10 +392,11 @@ function moveCell(cell, dir) {
 }
 function onPaste(e) {
   const html = e.clipboardData.getData('text/html');
-  if (html) {
+  const text = e.clipboardData.getData('text/plain');
+  if (html || (text && plainPaste)) {
     e.preventDefault();
-    const clean = sanitize(html.replace(/<!--[\s\S]*?-->/g, '')).replace(/\sclass="(?!title|subtitle)[^"]*"/g, '');
-    document.execCommand('insertHTML', false, clean);
+    PG2.paste({ html, text }, plainPaste ? 'text' : 'keep');
+    plainPaste = false;
   } else if ([...e.clipboardData.items].some((i) => i.type.startsWith('image/'))) {
     e.preventDefault();
     const f = [...e.clipboardData.items].find((i) => i.type.startsWith('image/')).getAsFile();
@@ -1288,7 +1294,7 @@ const TABS = [
   {
     id: 'home', label: 'Inicio', groups: [
       { label: 'Portapapeles', items: [
-        { cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg', title: 'Pegar (Ctrl+V)' },
+        { cmd: 'paste', label: 'Pegar', icon: 'paste', size: 'lg', title: 'Pegar (Ctrl+V)', split: () => [{ label: 'Mantener el formato original', kbd: 'Ctrl+V', run: () => shell.command('paste') }, { label: 'Combinar formato', run: () => shell.command('paste', 'merge') }, { label: 'Mantener solo texto', kbd: 'Ctrl+Mayús+V', run: () => shell.command('paste', 'text') }] },
         { stack: [{ cmd: 'cut', label: 'Cortar', icon: 'cut', title: 'Cortar (Ctrl+X)' }, { cmd: 'copy', label: 'Copiar', icon: 'copy', title: 'Copiar (Ctrl+C)' }, { cmd: 'painter', label: 'Copiar formato', icon: 'brush', title: 'Copiar formato (doble clic: varias veces)' }] },
       ] },
       { label: 'Fuente', items: [
@@ -1420,8 +1426,8 @@ shell.command = async (cmd, arg) => {
     try {
       const items = await navigator.clipboard.read();
       for (const it of items) {
-        if (it.types.includes('text/html')) { document.execCommand('insertHTML', false, sanitize(await (await it.getType('text/html')).text())); shell.markDirty(); return; }
-        if (it.types.includes('text/plain')) { document.execCommand('insertText', false, await (await it.getType('text/plain')).text()); shell.markDirty(); return; }
+        const get = async (ty) => (it.types.includes(ty) ? (await it.getType(ty)).text() : '');
+        if (it.types.includes('text/html') || it.types.includes('text/plain')) { { const html = await get('text/html'); PG2.paste({ html, text: await get('text/plain') }, html && (arg === 'text' || arg === 'merge') ? arg : 'keep'); } return; }
       }
     } catch { toast('Usa Ctrl+V para pegar.'); }
     return;
@@ -1439,6 +1445,7 @@ F.initFeatures({
   setContent: (html) => setContent(html), toDocx: (el) => htmlToDocx(el, { ...snapshotSettings(), ...shell.docProps() }),
 });
 ES.init({ editor, state, shell, selectedBlocks, currentBlock, restoreSelection, saveSelection, schedulePaginate, setBlockStyle, applySpanStyles, FONTS, reflectState, fixLists, listCmd, renderSide: () => F.renderSide(), onChange: () => fillGallery() });
+PG2.init({ editor, scroller, shell, schedulePaginate });
 RV.init({ editor, shell, saveSelection, restoreSelection, schedulePaginate, selectedBlocks });
 HT.init({ editor, state, shell, saveSelection, restoreSelection, schedulePaginate, currentBlock, selectedBlocks });
 PG.init({ state, editor, get pagesEl() { return pagesEl; }, shell, schedulePaginate });
@@ -1463,4 +1470,4 @@ schedulePaginate();
 shell.start();
 
 // Para pruebas automáticas
-window.__escribiente = { RV, editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, IN, HT, PG, saveSelection, insertCite: (s) => F3.insertCitation(s) };
+window.__escribiente = { RV, PG2, editor, state, paginate, setContent, onCommand, buildPrint, F, F3, F_X: FX, ES, TB, IN, HT, PG, saveSelection, insertCite: (s) => F3.insertCitation(s) };

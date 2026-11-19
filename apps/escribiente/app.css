@@ -290,3 +290,16 @@ body.printing .doc .fld, .m-print .fld { background: none; }
 .spellbox .sp-btns { display: flex; flex-direction: column; gap: 6px; padding-top: 22px; }
 .spellbox .sp-btns .btn { width: 100%; }
 .spellbox .sp-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: var(--ink-3); }
+
+/* opciones de pegado */
+.paste-ctl { position: absolute; z-index: 30; font-size: 12px; }
+.paste-ctl[hidden] { display: none; }
+.paste-ctl .pc-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--surface); color: var(--ink); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.15); font: inherit; }
+.paste-ctl .pc-btn:hover { background: var(--hover, #eef); }
+.paste-ctl .pc-ico { display: inline-flex; }
+.paste-ctl .pc-car { font-size: 9px; opacity: .7; }
+.paste-ctl .pc-menu { position: absolute; top: calc(100% + 4px); left: 0; min-width: 250px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.18); padding: 4px; }
+.paste-ctl .pc-menu[hidden] { display: none; }
+.paste-ctl .pc-opt { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; border: 0; background: none; color: var(--ink); padding: 6px 8px; border-radius: 4px; cursor: pointer; font: inherit; white-space: nowrap; }
+.paste-ctl .pc-opt:hover, .paste-ctl .pc-opt:focus-visible { background: var(--accent-soft, rgba(80,70,200,.12)); outline: none; }
+.paste-ctl .pc-chk { width: 12px; display: inline-block; }
